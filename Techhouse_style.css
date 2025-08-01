@@ -1,0 +1,220 @@
+/* Import Google Fonts - Montserrat for headings, Open Sans for body */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Open+Sans:wght@400;600&display=swap');
+
+/* CSS Variables for easier color management */
+:root {
+    --primary-color: #007bff; /* Vibrant Blue for accents, buttons, links */
+    --primary-dark: #0056b3; /* Darker blue for hover states */
+    --text-color: #343a40; /* Dark charcoal for body text */
+    --heading-color: #212529; /* Almost black for main headings */
+    --light-bg: #f8f9fa; /* Very light grey for overall body background */
+    --white-bg: #ffffff; /* White for content blocks */
+    --footer-bg: #212529; /* Dark grey for footer background */
+    --footer-text: #f8f9fa; /* Light text for footer */
+}
+
+/* Basic Reset & Font Setup - Makes things consistent across browsers */
+body {
+    margin: 0;
+    font-family: 'Open Sans', sans-serif; /* Applied Open Sans to the entire body */
+    line-height: 1.6;
+    background-color: var(--light-bg); /* Using our new light grey variable */
+    color: var(--text-color); /* Using our new text color variable */
+}
+
+/* Headings will use Montserrat and the heading color */
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Montserrat', sans-serif; /* Applied Montserrat to all headings */
+    color: var(--heading-color); /* Using our new heading color variable */
+    line-height: 1.2; /* Tighten up heading line height */
+}
+
+
+/* Header Styling - Making the top bar look good */
+header {
+    background: var(--white-bg); /* Using our white background variable */
+    color: var(--text-color); /* Header text color */
+    padding: 1rem 0; /* Some padding top/bottom */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* A subtle shadow for depth */
+}
+
+nav {
+    display: flex; /* Flexbox! Makes things easy to arrange */
+    justify-content: space-between; /* Pushes logo to one side, nav links to the other */
+    align-items: center; /* Vertically centers items in the nav */
+    max-width: 1200px; /* Limits the width of your content for readability */
+    margin: 0 auto; /* Centers the nav horizontally */
+    padding: 0 20px; /* Some padding on the sides */
+}
+
+/* Logo Styling - Time to shrink that magnificent beast! */
+.main-logo {
+    max-height: 80px; /* Limits its height, keeping proportions */
+    width: auto; /* Ensures it scales nicely */
+    display: block; /* Removes extra space below the image */
+}
+
+/* Navigation Links Styling */
+nav ul {
+    list-style: none; /* Removes bullet points from list */
+    margin: 0;
+    padding: 0;
+    display: flex; /* Makes the links line up horizontally */
+}
+
+nav ul li {
+    margin-left: 20px; /* Space between each nav item */
+}
+
+nav ul li a {
+    color: var(--text-color); /* Using text color for nav links */
+    text-decoration: none; /* Removes the underline */
+    font-weight: 600; /* Make nav links a bit bolder for clarity (Open Sans weight) */
+    transition: color 0.3s ease; /* Smooth color change on hover */
+}
+
+nav ul li a:hover {
+    color: var(--primary-color); /* Using primary blue on hover */
+}
+
+/* Hero Section Styling - Making the big intro section stand out! */
+#hero {
+    text-align: center; /* Centers all the text inside this section */
+    padding: 100px 20px; /* Lots of space above and below, and some side padding */
+    background: var(--white-bg); /* Using white background for hero */
+    color: var(--text-color); /* Text color for hero */
+    margin-bottom: 20px; /* Space below the hero section */
+}
+
+#hero h2 {
+    font-size: 2.8em; /* Make the main heading significantly larger */
+    margin-bottom: 20px; /* Space below the heading */
+    color: var(--heading-color); /* Using heading color for hero heading */
+}
+
+#hero p {
+    font-size: 1.2em; /* Slightly larger text for the description */
+    margin-bottom: 30px; /* Space below the paragraph */
+    max-width: 800px; /* Prevents text from stretching too wide on large screens */
+    margin-left: auto; /* Centers the paragraph itself */
+    margin-right: auto; /* Centers the paragraph itself */
+}
+
+/* Styling the "Discover Our Vision" button (now an anchor with class="button") */
+.button {
+    background-color: var(--primary-color); /* Using primary blue for button */
+    color: var(--white-bg); /* White text for contrast */
+    padding: 15px 30px; /* Lots of internal space for a clickable feel */
+    border: none; /* No border for a cleaner look */
+    border-radius: 5px; /* Slightly rounded corners */
+    font-size: 1.1em; /* Make the text inside the button a bit bigger */
+    cursor: pointer; /* Changes mouse cursor to a pointer when hovering */
+    text-decoration: none; /* Crucial: removes the default underline from anchor tags */
+    display: inline-block; /* Allows padding and other box model properties to apply correctly */
+    transition: background-color 0.3s ease; /* Smooth color change on hover */
+}
+
+.button:hover {
+    background-color: var(--primary-dark); /* Darker blue on hover */
+}
+
+/* General Section Styling - For all main sections */
+main section {
+    padding: 60px 20px; /* Padding for all main sections */
+    max-width: 1200px; /* Max width for content */
+    margin: 0 auto 20px auto; /* Centered with space below */
+    background-color: var(--white-bg); /* White background for content blocks */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* Subtle shadow for content blocks */
+    border-radius: 8px; /* Slightly rounded corners for content blocks */
+}
+
+main section h2 {
+    text-align: center; /* Center the headings for these sections */
+    font-size: 2.2em; /* Good size for section headings */
+    margin-bottom: 30px; /* Space below the heading */
+    color: var(--heading-color); /* Consistent heading color */
+}
+
+/* For general paragraphs, keep centered as a default */
+main section p {
+    text-align: center; /* Center paragraphs in these sections */
+    max-width: 800px;
+    margin: 0 auto 20px auto;
+}
+
+/* Apps Grid Styling */
+.app-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 25px;
+    margin-top: 40px;
+}
+
+.app-item {
+    background-color: var(--white-bg);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    text-align: center;
+    text-decoration: none;
+    color: var(--text-color);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.app-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+}
+
+.app-icon {
+    font-size: 3em;
+    margin-bottom: 15px;
+    display: block;
+}
+
+.app-item h3 {
+    margin: 0;
+    font-size: 1.1em;
+    color: var(--heading-color);
+}
+
+/* Specific styling for paragraphs in the About Us section */
+#about p {
+    text-align: left; /* Override general paragraph centering for long text blocks */
+    max-width: 800px;
+    margin: 0 auto 1em auto; /* Adjust margin for paragraph spacing */
+}
+
+/* NEW: Styles for the CEO photo and its container */
+.ceo-intro {
+    display: flex; /* Use flexbox for alignment of image and heading */
+    align-items: center; /* Vertically align items in the middle */
+    max-width: 800px; /* Keep consistent with paragraph width */
+    margin: 3em auto 2em auto; /* Centered with space above and below */
+    text-align: left; /* Ensure text inside aligns left */
+}
+
+.ceo-photo {
+    width: 150px; /* Fixed width for the image */
+    height: auto; /* Maintain aspect ratio */
+    border-radius: 8px; /* Slightly rounded corners for the photo */
+    margin-right: 30px; /* Space between photo and text */
+    flex-shrink: 0; /* Prevent image from shrinking */
+}
+
+.ceo-intro h3 {
+    margin: 0; /* Remove default margin from heading in flex container */
+    text-align: left; /* Align heading left within its flex item */
+    flex-grow: 1; /* Allow heading to take remaining space */
+}
+
+
+/* Footer Styling */
+footer {
+    text-align: center;
+    padding: 20px;
+    background-color: var(--footer-bg);
+    color: var(--footer-text);
+    font-size: 0.9em;
+    margin-top: 40px;
+}
