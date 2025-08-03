@@ -1,4 +1,4 @@
-/* Import Google Fonts - Montserrat for headings, Open Sans for body */
+    /* Import Google Fonts - Montserrat for headings, Open Sans for body */    
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Open+Sans:wght@400;600&display=swap');
 
 /* CSS Variables for easier color management */
@@ -217,4 +217,77 @@ footer {
     color: var(--footer-text);
     font-size: 0.9em;
     margin-top: 40px;
+}
+
+/* Blog Post List Styles */
+.blog-posts-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 30px;
+    margin-top: 40px;
+    padding: 0 20px; /* Add some padding for smaller screens */
+}
+
+.blog-post-card {
+    background-color: var(--light-bg); /* Lighter background for cards */
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    text-align: left;
+    text-decoration: none;
+    color: var(--text-color);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex; /* Use flexbox for internal alignment */
+    flex-direction: column; /* Stack content vertically */
+    justify-content: space-between; /* Push read more to bottom */
+}
+
+.blog-post-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+}
+
+.blog-post-card h3 {
+    font-size: 1.4em;
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: var(--heading-color);
+}
+
+.blog-post-card p {
+    font-size: 0.95em;
+    color: #555;
+    margin-bottom: 20px;
+    flex-grow: 1; /* Allow paragraph to take up space */
+    text-align: left; /* Ensure text inside card is left aligned */
+}
+
+.blog-post-card .read-more {
+    display: inline-block;
+    color: var(--primary-color);
+    font-weight: bold;
+    font-size: 0.9em;
+    align-self: flex-start; /* Align link to the left within the card */
+}
+
+/* Back to blog button styling (for the blog post page itself) */
+.blog-post-page .back-to-blog {
+    margin-top: 40px;
+    margin-left: 0; /* Override auto-margin to align left if desired */
+    text-align: left; /* Ensure the button is aligned with post content */
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+    .blog-posts-list {
+        grid-template-columns: 1fr; /* Stack cards vertically on small screens */
+    }
+
+    .blog-post-page {
+        padding: 20px 15px;
+    }
+
+    .blog-post-page h1 {
+        font-size: 2em;
+    }
 }
