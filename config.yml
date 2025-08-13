@@ -1,0 +1,20 @@
+backend:
+  name: github
+  repo: tinafijay/techhouse # IMPORTANT: Ensure this is your GitHub username/repository
+  branch: main # IMPORTANT: Use 'main' or 'master' depending on your default branch
+
+media_folder: "assets/uploads" # Where images uploaded via the CMS will be stored relative to the site root
+public_folder: "/assets/uploads" # The path in your live site URL
+
+collections:
+  - name: "blog" # Internal name for this content type
+    label: "Blog Posts" # Display name in the CMS interface
+    folder: "_posts" # The folder where Markdown files for blog posts will be saved
+    create: true # Allow creating new posts from the CMS
+    slug: "{{year}}-{{month}}-{{day}}-{{slug}}" # Format for generated filenames (e.g., 2025-08-13-my-first-post.md)
+    fields: # Define the fields (inputs) for a blog post in the CMS
+      - {label: "Title", name: "title", widget: "string", required: true}
+      - {label: "Publish Date", name: "date", widget: "datetime", format: "YYYY-MM-DDTHH:mm:ssZ", required: true, default: "2025-08-13T12:00:00Z"} # Use ISO 8601 for full date/time
+      - {label: "Author", name: "author", widget: "string", default: "Tinafi Akawu", required: true}
+      - {label: "Featured Image", name: "image", widget: "image", required: false}
+      - {label: "Body", name: "body", widget: "markdown", required: true}    
