@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Food Poisoning Detector</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      text-align: center;
+      background-color: #f4f7f9;
+      color: #222;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      color: #006d3a;
+      margin-bottom: 10px;
+    }
+    #camera-container {
+      position: relative;
+      display: inline-block;
+      margin-top: 20px;
+    }
+    video {
+      width: 85%;
+      max-width: 600px;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    #scan-button {
+      margin-top: 20px;
+      padding: 12px 25px;
+      background-color: #28a745;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    #scan-button:hover {
+      background-color: #218838;
+    }
+    #result {
+      margin-top: 25px;
+      padding: 15px;
+      border-radius: 10px;
+      background: #fff;
+      width: 80%;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+      font-size: 17px;
+      line-height: 1.5;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Food Poisoning Detector</h1>
+  <p>Point your camera at the food and tap <strong>Scan Food</strong> to analyze.</p>
+
+  <div id="camera-container">
+    <video id="video" autoplay playsinline></video>
+  </div>
+
+  <button id="scan-button">Scan Food</button>
+  <div id="result"></div>
+
+  <script>
+    const video = document.getElementById("video");
+    const scanButton = document.getElementById("scan-button");
+    const resultDiv = document.getElementById("result");
+
+    // Start camera viewfinder
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        resultDiv.textContent = "Error accessing camera: " + err.message;
+      }
+    }
+    startCamera();
+
+    // Vercel secure function URL (UPDATED LINK)
+    const BACKEND_URL = "https://techhouse-ashen.vercel.app/api/analyze-food";
+
+    // Capture current camera frame
+    function captureFrame() {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0);
+      return canvas.toDataURL("image/png").split(",")[1]; // base64
+    }
+
+    // Parse Gemini response to show Safe / Not Safe + reason
+    function parseGeminiResponse(data) {
+      try {
+        // Gemini returns something like data.contents[0].parts[0].text
+        const text = data.contents?.[0]?.parts?.[0]?.text || JSON.stringify(data);
+        return text;
+      } catch {
+        return JSON.stringify(data);
+      }
+    }
+
+    // Handle Scan button click
+    scanButton.addEventListener("click", async () => {
+      resultDiv.textContent = "Analyzing food sample...";
+      const imageBase64 = captureFrame();
+
+      try {
+        const response = await fetch(BACKEND_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64 })
+        });
+
+        if (!response.ok) {
+          throw new Error("Network response was not ok: " + response.status);
+        }
+
+        const data = await response.json();
+        const verdict = parseGeminiResponse(data);
+        resultDiv.textContent = "Analysis Result:\n" + verdict;
+
+      } catch (err) {
+        console.error("Error:", err);
+        resultDiv.textContent = "Error fetching analysis: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
