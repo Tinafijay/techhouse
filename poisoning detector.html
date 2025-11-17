@@ -75,6 +75,9 @@
     const scanButton = document.getElementById("scan-button");
     const resultDiv = document.getElementById("result");
 
+    const GEMINI_API_KEY = "AIzaSyCtfy-RofmWUK6-xHHaof8yEz4l45xnJ7U"; // Your working key!
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+
     // Start camera viewfinder
     async function startCamera() {
       try {
@@ -89,9 +92,6 @@
     }
     startCamera();
 
-    // Vercel secure function URL (UPDATED LINK)
-    const BACKEND_URL = "https://techhouse-ashen.vercel.app/api/analyze-food";
-
     // Capture current camera frame
     function captureFrame() {
       const canvas = document.createElement("canvas");
@@ -102,14 +102,17 @@
       return canvas.toDataURL("image/png").split(",")[1]; // base64
     }
 
-    // Parse Gemini response to show Safe / Not Safe + reason
+    // Parse Gemini response
     function parseGeminiResponse(data) {
       try {
-        // Gemini returns something like data.contents[0].parts[0].text
-        const text = data.contents?.[0]?.parts?.[0]?.text || JSON.stringify(data);
+        // Check for error from Gemini API
+        if (data.error) {
+            return "API Error: " + data.error.message;
+        }
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data);
         return text;
-      } catch {
-        return JSON.stringify(data);
+      } catch (err) {
+        return "Error parsing response: " + JSON.stringify(data);
       }
     }
 
@@ -118,15 +121,36 @@
       resultDiv.textContent = "Analyzing food sample...";
       const imageBase64 = captureFrame();
 
+      // 💥 VIBE FIX: YANKED the "config" key. It's gone!
+      const body = {
+        contents: [
+          {
+            parts: [
+              {
+                text: "Analyze this food image and determine if it shows visible signs of spoilage, mold, physical damage or contamination. Give a short verdict: 'safe' or 'not safe' and a one-sentence reason."
+              },
+              {
+                inline_data: {
+                  mime_type: "image/png",
+                  data: imageBase64
+                }
+              }
+            ]
+          }
+        ]
+        // The bad "config: { ... }" block was here. It's now deleted.
+      };
+
       try {
-        const response = await fetch(BACKEND_URL, {
+        const response = await fetch(GEMINI_API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64 })
+          body: JSON.stringify(body) 
         });
 
         if (!response.ok) {
-          throw new Error("Network response was not ok: " + response.status);
+          const errorData = await response.json();
+          throw new Error(errorData.error.message || `Network response was not ok: ${response.status}`);
         }
 
         const data = await response.json();
