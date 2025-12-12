@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>UltraShare Pro v9</title>
+<title>UltraShare Pro v10 (LAN Focused)</title>
 <meta name="theme-color" content="#2563eb">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
@@ -73,7 +73,7 @@ h2 { font-size: 14px; text-transform: uppercase; color: var(--text-light); lette
 /* NOTIFICATIONS */
 #toast-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 99; display: flex; flex-direction: column; gap: 8px; width: 90%; pointer-events: none; }
 .toast { background: rgba(0,0,0,0.9); color: white; padding: 12px 20px; border-radius: 30px; font-size: 13px; backdrop-filter: blur(4px); text-align: center; animation: slideIn 0.3s; }
-@keyframes slideIn { from{transform:translateY(-20px);opacity:0} to{transform:translateY(0);opacity:1}}
+@keyframes slideIn { from{transform:translateY(-20px);opacity:0} to{transform:translateY(0);opacity:1)}}
 
 </style>
 </head>
@@ -171,7 +171,7 @@ h2 { font-size: 14px; text-transform: uppercase; color: var(--text-light); lette
 <div id="toast-box"></div>
 
 <script>
-/* ULTRA-SHARE PRO V9 - FINAL NETWORK PUSH */
+/* ULTRA-SHARE PRO V10 - LOCAL NETWORK PRIORITY */
 
 // 1. Force HTTPS (Critical for WebRTC)
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !location.href.includes('127.0.0.1')) {
@@ -180,7 +180,7 @@ if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !loca
 
 const $ = id => document.getElementById(id);
 const myCode = Math.floor(100000 + Math.random() * 900000).toString();
-const PREFIX = 'us_v9_'; // Version 9 Prefix
+const PREFIX = 'us_v10_'; // Version 10 Prefix
 let peer, conn;
 let fileQueue = [];
 let isSending = false;
@@ -214,28 +214,23 @@ function updateStatus(state) {
 
 // 2. NETWORK INIT
 function initPeer() {
-  log('Initializing Network (V9)...');
+  log('Initializing Network (V10) - LAN Priority...');
   
-  // Using an extended list of STUN servers for maximum reliability
+  // Streamlined STUN list. ICE will prioritize Host (local) candidates first.
   peer = new Peer(PREFIX + myCode, {
     debug: 1,
     pingInterval: 5000,
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' },
-        { urls: 'stun:stun.nextcloud.com:443' },
-        // Added more common public STUN servers for v9
-        { urls: 'stun:stun.stunprotocol.org:3478' },
-        { urls: 'stun:stun.voxgratia.org:3478' },
-        { urls: 'stun:stun.services.mozilla.com:3478' }
+        { urls: 'stun:global.stun.twilio.com:3478' }
       ]
     }
   });
 
   peer.on('open', (id) => {
     $('myId').textContent = myCode;
-    log(`ID Registered: ${myCode}`, 'success');
+    log(`ID Registered: ${myCode}. Ready for local pairing.`, 'success');
     updateStatus('ready');
   });
 
@@ -256,10 +251,10 @@ function handleConnection(c) {
   conn = c;
 
   conn.on('open', () => {
-    log('Secure Connection Established!', 'success');
+    log('Connection Established! (Likely over LAN)', 'success');
     toast('Connected!');
     updateStatus('online');
-    sendData({ type: 'handshake' }); // Wake up call
+    sendData({ type: 'handshake' });
   });
 
   conn.on('data', processData);
@@ -277,16 +272,15 @@ $('btnConnect').onclick = () => {
   if(code.length !== 6) return toast('Code must be 6 digits');
   if(code === myCode) return toast('Cannot connect to yourself');
   
-  log(`Searching for ${code}...`);
+  log(`Searching for ${code}. Ensure both devices are on the SAME Wi-Fi.`);
   updateStatus('connecting');
   
   const c = peer.connect(PREFIX + code, { reliable: true });
   
-  // Timeout Failsafe (Increased to 15 seconds)
+  // Timeout Failsafe (15 seconds)
   const timer = setTimeout(() => {
     if(!c.open) {
-      // Final diagnosis for connection failure
-      log('Connection Timed Out (15s). Likely due to strict firewall (Symmetric NAT) or mobile carrier network.', 'error');
+      log('Connection Timed Out (15s). Local handshake failed. Check your WiFi.', 'error');
       c.close();
       updateStatus('ready');
     }
@@ -298,7 +292,8 @@ $('btnConnect').onclick = () => {
   });
 };
 
-// 4. DATA HANDLING
+// 4. DATA HANDLING (The rest of the code is the robust transfer/chat logic and remains the same)
+
 function sendData(data) {
   if(conn && conn.open) conn.send(data);
 }
@@ -311,7 +306,7 @@ function processData(data) {
   }
   
   // JSON
-  if(typeof data === 'string') data = JSON.parse(data); // Legacy check
+  if(typeof data === 'string') data = JSON.parse(data); 
   
   switch(data.type) {
     case 'chat':
@@ -320,14 +315,14 @@ function processData(data) {
     case 'file-meta':
       startReceiving(data);
       break;
-    case 'file-chunk': // Fallback for some browsers
+    case 'file-chunk': 
       receiveChunk(data.chunk);
       break;
   }
 }
 
 // 5. FILE TRANSFER ENGINE
-const CHUNK_SIZE = 16 * 1024; // 16KB (Safe for all browsers)
+const CHUNK_SIZE = 16 * 1024; // 16KB
 
 $('fileIn').onchange = (e) => {
   fileQueue = [...e.target.files];
@@ -357,7 +352,6 @@ $('btnSend').onclick = async () => {
     log(`Sending ${file.name}...`);
     sendData({ type: 'file-meta', name: file.name, size: file.size, mime: file.type });
     
-    // Allow UI to update
     await new Promise(r => setTimeout(r, 100));
     
     let offset = 0;
@@ -365,7 +359,7 @@ $('btnSend').onclick = async () => {
       const slice = file.slice(offset, offset + CHUNK_SIZE);
       const buff = await slice.arrayBuffer();
       
-      // Wait if buffer is full (Backpressure)
+      // Backpressure control
       if(conn.dataChannel.bufferedAmount > 16000000) {
         await new Promise(r => setTimeout(r, 50));
       }
@@ -454,7 +448,6 @@ function switchTab(id) {
   document.querySelectorAll('.main-view').forEach(e => e.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(e => e.classList.remove('active'));
   $(id).classList.add('active');
-  // Update Nav Active State
   const idx = ['tab-connect','tab-send','tab-chat','tab-receive'].indexOf(id);
   document.querySelectorAll('.nav-btn')[idx].classList.add('active');
 }
