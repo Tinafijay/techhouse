@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>UltraShare Pro v8</title>
+<title>UltraShare Pro v9</title>
 <meta name="theme-color" content="#2563eb">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
@@ -171,7 +171,7 @@ h2 { font-size: 14px; text-transform: uppercase; color: var(--text-light); lette
 <div id="toast-box"></div>
 
 <script>
-/* ULTRA-SHARE PRO V8 - NETWORK CORE */
+/* ULTRA-SHARE PRO V9 - FINAL NETWORK PUSH */
 
 // 1. Force HTTPS (Critical for WebRTC)
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !location.href.includes('127.0.0.1')) {
@@ -180,7 +180,7 @@ if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !loca
 
 const $ = id => document.getElementById(id);
 const myCode = Math.floor(100000 + Math.random() * 900000).toString();
-const PREFIX = 'us_v8_'; // Version 8 Prefix
+const PREFIX = 'us_v9_'; // Version 9 Prefix
 let peer, conn;
 let fileQueue = [];
 let isSending = false;
@@ -214,9 +214,9 @@ function updateStatus(state) {
 
 // 2. NETWORK INIT
 function initPeer() {
-  log('Initializing Network...');
+  log('Initializing Network (V9)...');
   
-  // Using multiple STUN servers for maximum reliability
+  // Using an extended list of STUN servers for maximum reliability
   peer = new Peer(PREFIX + myCode, {
     debug: 1,
     pingInterval: 5000,
@@ -224,7 +224,11 @@ function initPeer() {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:global.stun.twilio.com:3478' },
-        { urls: 'stun:stun.nextcloud.com:443' }
+        { urls: 'stun:stun.nextcloud.com:443' },
+        // Added more common public STUN servers for v9
+        { urls: 'stun:stun.stunprotocol.org:3478' },
+        { urls: 'stun:stun.voxgratia.org:3478' },
+        { urls: 'stun:stun.services.mozilla.com:3478' }
       ]
     }
   });
@@ -236,7 +240,7 @@ function initPeer() {
   });
 
   peer.on('error', (err) => {
-    log(`Error: ${err.type}`, 'error');
+    log(`Peer Error: ${err.type}`, 'error');
     if(err.type === 'peer-unavailable') log('Code not found. Is partner online?');
     updateStatus('error');
   });
@@ -278,14 +282,15 @@ $('btnConnect').onclick = () => {
   
   const c = peer.connect(PREFIX + code, { reliable: true });
   
-  // Timeout Failsafe
+  // Timeout Failsafe (Increased to 15 seconds)
   const timer = setTimeout(() => {
     if(!c.open) {
-      log('Connection Timed Out. Retrying...', 'error');
+      // Final diagnosis for connection failure
+      log('Connection Timed Out (15s). Likely due to strict firewall (Symmetric NAT) or mobile carrier network.', 'error');
       c.close();
       updateStatus('ready');
     }
-  }, 8000); // 8 seconds timeout
+  }, 15000);
 
   c.on('open', () => {
     clearTimeout(timer);
