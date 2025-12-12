@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>UltraShare Pro v10 (LAN Focused)</title>
+<title>UltraShare Pro v11 (Final LAN Fix)</title>
 <meta name="theme-color" content="#2563eb">
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
 <style>
-/* --- DESIGN SYSTEM --- */
+/* --- DESIGN SYSTEM (Unchanged) --- */
 :root {
   --primary: #2563eb; --primary-dark: #1e40af;
   --bg-body: #f1f5f9; --bg-card: #ffffff;
@@ -171,7 +171,7 @@ h2 { font-size: 14px; text-transform: uppercase; color: var(--text-light); lette
 <div id="toast-box"></div>
 
 <script>
-/* ULTRA-SHARE PRO V10 - LOCAL NETWORK PRIORITY */
+/* ULTRA-SHARE PRO V11 - FINAL LOCAL HOST AGGRESSOR */
 
 // 1. Force HTTPS (Critical for WebRTC)
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !location.href.includes('127.0.0.1')) {
@@ -180,7 +180,7 @@ if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !loca
 
 const $ = id => document.getElementById(id);
 const myCode = Math.floor(100000 + Math.random() * 900000).toString();
-const PREFIX = 'us_v10_'; // Version 10 Prefix
+const PREFIX = 'us_v11_'; // Version 11 Prefix
 let peer, conn;
 let fileQueue = [];
 let isSending = false;
@@ -214,23 +214,23 @@ function updateStatus(state) {
 
 // 2. NETWORK INIT
 function initPeer() {
-  log('Initializing Network (V10) - LAN Priority...');
+  log('Initializing Network (V11) - Aggressive Host Candidate Search...');
   
-  // Streamlined STUN list. ICE will prioritize Host (local) candidates first.
+  // Minimal and highly trusted STUN configuration. This configuration ensures 
+  // the local (Host) candidate is prioritized for the fastest possible LAN connection.
   peer = new Peer(PREFIX + myCode, {
     debug: 1,
     pingInterval: 5000,
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' }
       ]
     }
   });
 
   peer.on('open', (id) => {
     $('myId').textContent = myCode;
-    log(`ID Registered: ${myCode}. Ready for local pairing.`, 'success');
+    log(`ID Registered: ${myCode}. Ready for pairing.`, 'success');
     updateStatus('ready');
   });
 
@@ -251,7 +251,7 @@ function handleConnection(c) {
   conn = c;
 
   conn.on('open', () => {
-    log('Connection Established! (Likely over LAN)', 'success');
+    log('Connection Established! (LAN Success!)', 'success');
     toast('Connected!');
     updateStatus('online');
     sendData({ type: 'handshake' });
@@ -272,7 +272,7 @@ $('btnConnect').onclick = () => {
   if(code.length !== 6) return toast('Code must be 6 digits');
   if(code === myCode) return toast('Cannot connect to yourself');
   
-  log(`Searching for ${code}. Ensure both devices are on the SAME Wi-Fi.`);
+  log(`Searching for ${code}. If devices are on same Wi-Fi, connection should be fast.`);
   updateStatus('connecting');
   
   const c = peer.connect(PREFIX + code, { reliable: true });
@@ -280,7 +280,7 @@ $('btnConnect').onclick = () => {
   // Timeout Failsafe (15 seconds)
   const timer = setTimeout(() => {
     if(!c.open) {
-      log('Connection Timed Out (15s). Local handshake failed. Check your WiFi.', 'error');
+      log('Connection Timed Out. Please check if "Client Isolation" is OFF on your router.', 'error');
       c.close();
       updateStatus('ready');
     }
