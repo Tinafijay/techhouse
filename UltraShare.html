@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>UltraShare Pro v11 (Final LAN Fix)</title>
+<title>UltraShare Pro v11 (Fixed for GitHub Pages)</title>
 <meta name="theme-color" content="#2563eb">
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<!-- Updated to latest stable PeerJS -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
 <style>
 /* --- DESIGN SYSTEM (Unchanged) --- */
@@ -102,7 +103,7 @@ h2 { font-size: 14px; text-transform: uppercase; color: var(--text-light); lette
     <input type="tel" id="destId" class="input-code" placeholder="Enter Partner Code" maxlength="6">
     <button id="btnConnect" class="btn">Connect</button>
     <div id="console" class="console-log">
-      <div class="log-line">System ready. Waiting for network...</div>
+      <div class="log-line">Initializing network connection...</div>
     </div>
   </div>
 </div>
@@ -171,19 +172,21 @@ h2 { font-size: 14px; text-transform: uppercase; color: var(--text-light); lette
 <div id="toast-box"></div>
 
 <script>
-/* ULTRA-SHARE PRO V11 - FINAL LOCAL HOST AGGRESSOR */
+/* ULTRA-SHARE PRO V11 - FIXED FOR GITHUB PAGES */
 
-// 1. Force HTTPS (Critical for WebRTC)
+// Force HTTPS for GitHub Pages (already HTTPS but good to keep)
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !location.href.includes('127.0.0.1')) {
   location.replace(`https:${location.href.substring(location.protocol.length)}`);
 }
 
 const $ = id => document.getElementById(id);
 const myCode = Math.floor(100000 + Math.random() * 900000).toString();
-const PREFIX = 'us_v11_'; // Version 11 Prefix
-let peer, conn;
+const PREFIX = 'us_v11_';
+let peer = null;
+let conn = null;
 let fileQueue = [];
 let isSending = false;
+let connectionTimeout = null;
 
 // Logging Utility
 function log(msg, type='') {
@@ -207,108 +210,269 @@ function toast(msg) {
 function updateStatus(state) {
   const d = $('statusDot');
   const t = $('statusText');
-  if(state === 'online') { d.className='dot green'; t.textContent='Connected'; $('btnConnect').textContent='Connected'; $('btnConnect').disabled=true; $('destId').disabled=true; }
-  else if(state === 'connecting') { d.className='dot orange'; t.textContent='Connecting...'; $('btnConnect').textContent='Working...'; }
-  else { d.className='dot'; t.textContent='Ready'; $('btnConnect').textContent='Connect'; $('btnConnect').disabled=false; $('destId').disabled=false; }
+  
+  if(state === 'online') { 
+    d.className='dot green'; 
+    t.textContent='Connected'; 
+    $('btnConnect').textContent='Connected'; 
+    $('btnConnect').disabled=true; 
+    $('destId').disabled=true; 
+  }
+  else if(state === 'connecting') { 
+    d.className='dot orange'; 
+    t.textContent='Connecting...'; 
+    $('btnConnect').textContent='Working...'; 
+    $('btnConnect').disabled = true;
+  }
+  else if(state === 'error') {
+    d.className='dot'; 
+    t.textContent='Error'; 
+    $('btnConnect').textContent='Retry Connect';
+    $('btnConnect').disabled = false;
+    $('destId').disabled = false;
+  }
+  else { 
+    d.className='dot'; 
+    t.textContent='Ready'; 
+    $('btnConnect').textContent='Connect'; 
+    $('btnConnect').disabled=false; 
+    $('destId').disabled=false; 
+  }
 }
 
-// 2. NETWORK INIT
+// 1. FIXED PEER INITIALIZATION
 function initPeer() {
-  log('Initializing Network (V11) - Aggressive Host Candidate Search...');
+  log('Initializing PeerJS connection...');
   
-  // Minimal and highly trusted STUN configuration. This configuration ensures 
-  // the local (Host) candidate is prioritized for the fastest possible LAN connection.
+  try {
+    // Use PeerJS cloud server with secure WebSocket for GitHub Pages
+    peer = new Peer(PREFIX + myCode, {
+      debug: 2, // Increased debugging
+      pingInterval: 5000,
+      secure: true, // REQUIRED for GitHub Pages
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ],
+        iceCandidatePoolSize: 5
+      }
+    });
+
+    peer.on('open', (id) => {
+      $('myId').textContent = myCode;
+      log(`✓ ID Registered: ${myCode}`, 'success');
+      log('Ready for pairing. Share your code with partner.', 'success');
+      updateStatus('ready');
+    });
+
+    peer.on('error', (err) => {
+      console.error('PeerJS Error:', err);
+      if(err.type === 'network' || err.type === 'server-error') {
+        log(`Network error: ${err.message}`, 'error');
+        log('Retrying with alternative configuration...', 'warn');
+        // Try alternative config
+        setTimeout(initPeerAlternative, 1000);
+      } else if(err.type === 'peer-unavailable') {
+        log('Partner not found. Make sure they are online and have entered your code.', 'error');
+      } else {
+        log(`Peer Error: ${err.type} - ${err.message}`, 'error');
+      }
+      updateStatus('error');
+    });
+
+    peer.on('connection', (c) => {
+      log(`Incoming connection request...`);
+      handleConnection(c);
+    });
+
+    // Handle disconnection
+    peer.on('disconnected', () => {
+      log('Disconnected from signaling server. Reconnecting...', 'error');
+      setTimeout(() => peer.reconnect(), 1000);
+    });
+
+  } catch (error) {
+    log(`Failed to initialize Peer: ${error.message}`, 'error');
+    updateStatus('error');
+  }
+}
+
+// Alternative configuration if first fails
+function initPeerAlternative() {
+  if (peer && !peer.destroyed) peer.destroy();
+  
   peer = new Peer(PREFIX + myCode, {
-    debug: 1,
-    pingInterval: 5000,
+    host: '0.peerjs.com',
+    port: 443,
+    path: '/',
+    secure: true,
     config: {
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun.l.google.com:19302' }
       ]
     }
   });
 
+  // Same event handlers as above...
   peer.on('open', (id) => {
     $('myId').textContent = myCode;
-    log(`ID Registered: ${myCode}. Ready for pairing.`, 'success');
+    log(`✓ Connected via alternative server`, 'success');
     updateStatus('ready');
   });
 
   peer.on('error', (err) => {
-    log(`Peer Error: ${err.type}`, 'error');
-    if(err.type === 'peer-unavailable') log('Code not found. Is partner online?');
-    updateStatus('error');
+    log(`Alternative connection failed: ${err.type}`, 'error');
   });
 
-  peer.on('connection', (c) => {
-    log(`Incoming connection...`);
-    handleConnection(c);
-  });
+  peer.on('connection', handleConnection);
 }
 
 function handleConnection(c) {
-  if(conn) conn.close();
+  log('Setting up connection...');
+  
+  if(conn && conn.open) {
+    log('Already connected, closing old connection...');
+    conn.close();
+  }
+  
   conn = c;
 
   conn.on('open', () => {
-    log('Connection Established! (LAN Success!)', 'success');
-    toast('Connected!');
+    log('✓ Connection Established!', 'success');
+    toast('Connected to partner!');
     updateStatus('online');
-    sendData({ type: 'handshake' });
+    sendData({ type: 'handshake', timestamp: Date.now() });
+    clearTimeout(connectionTimeout);
   });
 
   conn.on('data', processData);
+  
   conn.on('close', () => {
-    log('Connection lost.', 'error');
+    log('Connection closed.', 'error');
     updateStatus('ready');
     conn = null;
   });
-  conn.on('error', (e) => log(`Conn Error: ${e}`, 'error'));
+  
+  conn.on('error', (e) => {
+    log(`Connection error: ${e}`, 'error');
+    updateStatus('error');
+  });
 }
 
-// 3. MANUAL CONNECT
+// 2. FIXED CONNECTION LOGIC
 $('btnConnect').onclick = () => {
   const code = $('destId').value.trim();
-  if(code.length !== 6) return toast('Code must be 6 digits');
-  if(code === myCode) return toast('Cannot connect to yourself');
-  
-  log(`Searching for ${code}. If devices are on same Wi-Fi, connection should be fast.`);
-  updateStatus('connecting');
-  
-  const c = peer.connect(PREFIX + code, { reliable: true });
-  
-  // Timeout Failsafe (15 seconds)
-  const timer = setTimeout(() => {
-    if(!c.open) {
-      log('Connection Timed Out. Please check if "Client Isolation" is OFF on your router.', 'error');
-      c.close();
-      updateStatus('ready');
-    }
-  }, 15000);
-
-  c.on('open', () => {
-    clearTimeout(timer);
-    handleConnection(c);
-  });
-};
-
-// 4. DATA HANDLING (The rest of the code is the robust transfer/chat logic and remains the same)
-
-function sendData(data) {
-  if(conn && conn.open) conn.send(data);
-}
-
-function processData(data) {
-  // Binary (File Chunk)
-  if(data instanceof ArrayBuffer || data instanceof Uint8Array) {
-    receiveChunk(data);
+  if(code.length !== 6) {
+    toast('Code must be 6 digits');
+    return;
+  }
+  if(code === myCode) {
+    toast('Cannot connect to yourself');
     return;
   }
   
-  // JSON
-  if(typeof data === 'string') data = JSON.parse(data); 
+  if (!peer || peer.disconnected) {
+    toast('Network not ready. Please wait...');
+    return;
+  }
+  
+  log(`Attempting to connect to ${code}...`);
+  updateStatus('connecting');
+  
+  // Clear any existing timeout
+  if (connectionTimeout) clearTimeout(connectionTimeout);
+  
+  try {
+    const c = peer.connect(PREFIX + code, {
+      reliable: true,
+      serialization: 'json',
+      metadata: { version: 'v11', timestamp: Date.now() }
+    });
+    
+    if (!c) {
+      throw new Error('Failed to create connection object');
+    }
+    
+    // Timeout after 20 seconds
+    connectionTimeout = setTimeout(() => {
+      if(c && !c.open) {
+        log('Connection timeout. Possible issues:', 'error');
+        log('1. Partner may not be online', 'error');
+        log('2. Check firewall/antivirus settings', 'error');
+        log('3. Try refreshing both pages', 'error');
+        c.close();
+        updateStatus('ready');
+      }
+    }, 20000);
+    
+    c.on('open', () => {
+      clearTimeout(connectionTimeout);
+      handleConnection(c);
+    });
+    
+    c.on('error', (err) => {
+      clearTimeout(connectionTimeout);
+      log(`Connection failed: ${err.message || err.type}`, 'error');
+      updateStatus('error');
+    });
+    
+  } catch (error) {
+    clearTimeout(connectionTimeout);
+    log(`Connection error: ${error.message}`, 'error');
+    updateStatus('error');
+  }
+};
+
+// 3. FIXED DATA HANDLING
+function sendData(data) {
+  if(!conn || !conn.open) {
+    log('Cannot send: No active connection', 'error');
+    return false;
+  }
+  
+  try {
+    if (typeof data === 'object') {
+      conn.send(JSON.stringify(data));
+    } else {
+      conn.send(data);
+    }
+    return true;
+  } catch (error) {
+    log(`Send failed: ${error.message}`, 'error');
+    return false;
+  }
+}
+
+function processData(rawData) {
+  // Handle binary data (file chunks)
+  if(rawData instanceof ArrayBuffer || rawData instanceof Uint8Array) {
+    receiveChunk(rawData);
+    return;
+  }
+  
+  // Parse JSON data
+  let data;
+  try {
+    if (typeof rawData === 'string') {
+      data = JSON.parse(rawData);
+    } else {
+      data = rawData;
+    }
+  } catch (e) {
+    log('Failed to parse incoming data', 'error');
+    return;
+  }
+  
+  if (!data || !data.type) return;
   
   switch(data.type) {
+    case 'handshake':
+      log('Partner connected successfully', 'success');
+      break;
     case 'chat':
       addChat(data.msg, false);
       break;
@@ -316,13 +480,15 @@ function processData(data) {
       startReceiving(data);
       break;
     case 'file-chunk': 
-      receiveChunk(data.chunk);
+      if (data.chunk) receiveChunk(data.chunk);
       break;
+    default:
+      log(`Unknown data type: ${data.type}`);
   }
 }
 
-// 5. FILE TRANSFER ENGINE
-const CHUNK_SIZE = 16 * 1024; // 16KB
+// 4. FILE TRANSFER ENGINE (unchanged but with better error handling)
+const CHUNK_SIZE = 16 * 1024;
 
 $('fileIn').onchange = (e) => {
   fileQueue = [...e.target.files];
@@ -342,50 +508,87 @@ function updateFileUI() {
 }
 
 $('btnSend').onclick = async () => {
-  if(!conn || !conn.open) return toast('Connect first!');
+  if(!conn || !conn.open) {
+    toast('Not connected to partner!');
+    return;
+  }
+  
   if(isSending) return;
+  
   isSending = true;
   $('btnSend').disabled = true;
   $('transferCard').style.display = 'block';
+  $('progressBar').style.width = '0%';
+  $('transferText').children[1].textContent = '0%';
   
-  for(let file of fileQueue) {
-    log(`Sending ${file.name}...`);
-    sendData({ type: 'file-meta', name: file.name, size: file.size, mime: file.type });
-    
-    await new Promise(r => setTimeout(r, 100));
-    
-    let offset = 0;
-    while(offset < file.size) {
-      const slice = file.slice(offset, offset + CHUNK_SIZE);
-      const buff = await slice.arrayBuffer();
+  try {
+    for(let file of fileQueue) {
+      log(`Starting transfer: ${file.name}...`);
       
-      // Backpressure control
-      if(conn.dataChannel.bufferedAmount > 16000000) {
-        await new Promise(r => setTimeout(r, 50));
+      // Send file metadata
+      const metaSent = sendData({ 
+        type: 'file-meta', 
+        name: file.name, 
+        size: file.size, 
+        mime: file.type,
+        id: Date.now() + Math.random()
+      });
+      
+      if (!metaSent) {
+        throw new Error('Failed to send file metadata');
       }
       
-      conn.send(buff);
-      offset += buff.byteLength;
+      await new Promise(r => setTimeout(r, 200));
       
-      // Update UI every 10 chunks
-      if(offset % (CHUNK_SIZE*10) === 0) {
+      // Send file in chunks
+      let offset = 0;
+      const reader = new FileReader();
+      
+      while(offset < file.size) {
+        const chunk = file.slice(offset, offset + CHUNK_SIZE);
+        
+        // Wait if buffer is too full
+        if(conn.dataChannel && conn.dataChannel.bufferedAmount > 16000000) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+        
+        const arrayBuffer = await new Promise((resolve) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsArrayBuffer(chunk);
+        });
+        
+        conn.send(arrayBuffer);
+        offset += arrayBuffer.byteLength;
+        
+        // Update progress
         const pct = Math.round((offset/file.size)*100);
         $('progressBar').style.width = pct + '%';
         $('transferText').children[1].textContent = pct + '%';
+        
+        // Small delay to prevent overwhelming
+        if (offset % (CHUNK_SIZE * 5) === 0) {
+          await new Promise(r => setTimeout(r, 10));
+        }
       }
+      
+      log(`✓ Sent: ${file.name}`, 'success');
     }
-    log(`Sent ${file.name}`, 'success');
+    
+    toast('All files sent successfully!');
+    
+  } catch (error) {
+    log(`File transfer failed: ${error.message}`, 'error');
+    toast('Transfer failed');
+  } finally {
+    isSending = false;
+    fileQueue = [];
+    updateFileUI();
+    $('btnSend').disabled = false;
+    $('transferCard').style.display = 'none';
   }
-  
-  isSending = false;
-  fileQueue = [];
-  updateFileUI();
-  $('btnSend').disabled = false;
-  $('transferCard').style.display = 'none';
-  toast('All files sent!');
 };
 
-// 6. RECEIVING ENGINE
+// 5. RECEIVING ENGINE (unchanged)
 let incoming = null;
 let rxChunks = [];
 let rxBytes = 0;
@@ -394,14 +597,14 @@ function startReceiving(meta) {
   incoming = meta;
   rxChunks = [];
   rxBytes = 0;
-  log(`Receiving ${meta.name}...`, 'success');
+  log(`Receiving: ${meta.name} (${(meta.size/1024/1024).toFixed(2)} MB)`, 'success');
   switchTab('tab-receive');
 }
 
 function receiveChunk(buff) {
   if(!incoming) return;
   rxChunks.push(buff);
-  rxBytes += buff.byteLength;
+  rxBytes += buff.byteLength || buff.length;
   
   if(rxBytes >= incoming.size) {
     const blob = new Blob(rxChunks, {type: incoming.mime});
@@ -413,7 +616,7 @@ function receiveChunk(buff) {
     item.innerHTML = `
       <div>
         <div style="font-weight:bold">${incoming.name}</div>
-        <div style="font-size:12px; color:#64748b">${(incoming.size/1024/1024).toFixed(1)} MB</div>
+        <div style="font-size:12px; color:#64748b">${(incoming.size/1024/1024).toFixed(1)} MB • Received</div>
       </div>
       <a href="${url}" download="${incoming.name}" class="btn" style="width:auto; padding:8px 16px;">Download</a>
     `;
@@ -421,18 +624,26 @@ function receiveChunk(buff) {
     
     incoming = null;
     rxChunks = [];
-    toast('File Received!');
+    toast('File received!');
   }
 }
 
-// 7. CHAT
+// 6. CHAT FUNCTIONALITY
 $('btnMsg').onclick = () => {
-  const txt = $('msgInput').value;
+  const txt = $('msgInput').value.trim();
   if(!txt) return;
-  addChat(txt, true);
-  sendData({ type: 'chat', msg: txt });
-  $('msgInput').value = '';
+  
+  if (sendData({ type: 'chat', msg: txt, sender: myCode })) {
+    addChat(txt, true);
+    $('msgInput').value = '';
+  }
 };
+
+$('msgInput').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    $('btnMsg').click();
+  }
+});
 
 function addChat(txt, mine) {
   const b = document.createElement('div');
@@ -452,8 +663,12 @@ function switchTab(id) {
   document.querySelectorAll('.nav-btn')[idx].classList.add('active');
 }
 
-// START
-initPeer();
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  log('UltraShare Pro v11 starting...');
+  log('Hosted on GitHub Pages');
+  setTimeout(initPeer, 500);
+});
 
 </script>
 </body>
