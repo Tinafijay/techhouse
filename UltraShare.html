@@ -3,32 +3,208 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>UltraShare Pro v11 (Connection Fix)</title>
+<title>UltraShare Pro - Direct File Transfer</title>
 <meta name="theme-color" content="#2563eb">
 <!-- Updated PeerJS with fallback -->
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
 <style>
-/* [Keep all the same CSS styles - they're fine] */
+/* --- DESIGN SYSTEM --- */
+:root {
+  --primary: #2563eb; --primary-dark: #1e40af;
+  --bg-body: #f1f5f9; --bg-card: #ffffff;
+  --text-main: #0f172a; --text-light: #64748b;
+  --success: #10b981; --error: #ef4444; --warn: #f59e0b;
+  --font: 'Inter', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg-body: #0f172a; --bg-card: #1e293b; --text-main: #f8fafc; --text-light: #94a3b8; }
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; font-family: var(--font); background: var(--bg-body); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; }
+
+/* LAYOUT */
+.app-header { padding: 16px 20px; background: var(--bg-card); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; }
+.logo { font-weight: 800; font-size: 20px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.status-pill { font-size: 11px; padding: 4px 10px; border-radius: 20px; background: var(--bg-body); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-light); transition: 0.3s; }
+.dot.green { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.dot.orange { background: var(--warn); animation: pulse 1s infinite; }
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+.main-view { flex: 1; overflow-y: auto; padding: 20px; max-width: 600px; margin: 0 auto; width: 100%; display: none; }
+.main-view.active { display: block; animation: fadeUp 0.3s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: 0; } }
+
+/* COMPONENTS */
+.card { background: var(--bg-card); border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+h2 { font-size: 14px; text-transform: uppercase; color: var(--text-light); letter-spacing: 1px; margin: 0 0 12px 0; }
+
+.code-display { font-size: 32px; font-weight: 900; color: var(--primary); letter-spacing: 4px; text-align: center; margin: 10px 0; font-family: monospace; }
+.input-code { width: 100%; font-size: 20px; padding: 14px; text-align: center; border-radius: 12px; border: 2px solid var(--bg-body); background: var(--bg-body); color: var(--text-main); font-family: monospace; letter-spacing: 2px; outline: none; transition: 0.2s; }
+.input-code:focus { border-color: var(--primary); background: var(--bg-card); }
+
+.btn { width: 100%; padding: 16px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: 0.2s; background: var(--primary); color: white; margin-top: 10px; }
+.btn:disabled { opacity: 0.7; cursor: not-allowed; }
+.btn:active { transform: scale(0.98); }
+
+/* LOGGER */
+.console-log { font-family: monospace; font-size: 11px; color: var(--text-light); background: var(--bg-body); padding: 10px; border-radius: 8px; max-height: 100px; overflow-y: auto; margin-top: 10px; border: 1px solid rgba(0,0,0,0.05); }
+.log-line { margin-bottom: 4px; border-bottom: 1px solid rgba(0,0,0,0.03); padding-bottom: 2px; }
+.log-line.error { color: var(--error); }
+.log-line.success { color: var(--success); }
+
+/* FILE & CHAT */
+.file-drop { border: 2px dashed #cbd5e1; padding: 30px; text-align: center; border-radius: 16px; cursor: pointer; }
+.file-list { margin-top: 16px; }
+.file-item { display: flex; align-items: center; padding: 12px; background: var(--bg-body); border-radius: 8px; margin-bottom: 8px; gap: 10px; }
+.chat-box { height: 300px; display: flex; flex-direction: column; }
+.messages { flex: 1; overflow-y: auto; padding: 10px; background: var(--bg-body); border-radius: 12px; margin-bottom: 10px; }
+.bubble { padding: 8px 12px; border-radius: 12px; max-width: 80%; margin-bottom: 8px; font-size: 14px; word-break: break-word; }
+.bubble.mine { background: var(--primary); color: white; align-self: flex-end; margin-left: auto; }
+.bubble.theirs { background: var(--bg-card); border: 1px solid #e2e8f0; align-self: flex-start; }
+
+/* NAV */
+.nav { position: fixed; bottom: 0; width: 100%; background: var(--bg-card); border-top: 1px solid rgba(0,0,0,0.05); display: flex; padding-bottom: env(safe-area-inset-bottom); height: 70px; }
+.nav-btn { flex: 1; border: none; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-light); font-size: 10px; font-weight: 600; }
+.nav-btn.active { color: var(--primary); }
+.nav-btn svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* NOTIFICATIONS */
+#toast-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 99; display: flex; flex-direction: column; gap: 8px; width: 90%; pointer-events: none; }
+.toast { background: rgba(0,0,0,0.9); color: white; padding: 12px 20px; border-radius: 30px; font-size: 13px; backdrop-filter: blur(4px); text-align: center; animation: slideIn 0.3s; }
+@keyframes slideIn { from{transform:translateY(-20px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+/* LOADING OVERLAY */
+#loadingOverlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-body); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+.loader { width: 48px; height: 48px; border: 5px solid var(--bg-card); border-bottom-color: var(--primary); border-radius: 50%; animation: rotation 1s linear infinite; margin-bottom: 20px; }
+@keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 
-<!-- [Keep all the same HTML structure - it's fine] -->
+<!-- Loading Overlay -->
+<div id="loadingOverlay">
+  <div class="loader"></div>
+  <div style="color: var(--text-light); font-size: 14px;">Loading UltraShare...</div>
+</div>
+
+<div class="app-header">
+  <div class="logo">
+    <svg width="24" height="24" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+    UltraShare <span style="font-size:10px; opacity:0.6; margin-top:4px;">PRO</span>
+  </div>
+  <div class="status-pill">
+    <div id="statusDot" class="dot"></div>
+    <span id="statusText">Loading...</span>
+  </div>
+</div>
+
+<div id="tab-connect" class="main-view active">
+  <div class="card" style="text-align: center;">
+    <h2>Your Code</h2>
+    <div id="myId" class="code-display">000000</div>
+    <div style="font-size: 12px; color: var(--text-light);">Share this 6-digit code with your partner</div>
+  </div>
+
+  <div class="card">
+    <h2>Connect to Partner</h2>
+    <input type="tel" id="destId" class="input-code" placeholder="Enter Partner Code" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+    <button id="btnConnect" class="btn">Connect</button>
+    <div id="console" class="console-log">
+      <div class="log-line">Initializing connection...</div>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h2>Instructions</h2>
+    <div style="font-size: 12px; line-height: 1.6;">
+      1. <strong>Share your code</strong> with partner<br>
+      2. <strong>Enter their code</strong> above<br>
+      3. <strong>Wait for connection</strong> (can take 10-30s)<br>
+      4. <strong>Send files</strong> or chat once connected
+    </div>
+  </div>
+</div>
+
+<div id="tab-send" class="main-view">
+  <div class="card">
+    <div class="file-drop" onclick="document.getElementById('fileIn').click()">
+      <div style="font-size:32px; margin-bottom:10px;">📂</div>
+      <strong>Tap to select files</strong>
+      <div style="font-size:12px; color:var(--text-light); margin-top:8px;">Max 1GB total</div>
+    </div>
+    <input type="file" id="fileIn" multiple style="display:none">
+    
+    <div id="fileQueue" class="file-list"></div>
+    <button id="btnSend" class="btn" style="display:none;">Send Files</button>
+  </div>
+  
+  <div id="transferCard" class="card" style="display:none;">
+    <h2>Transfer Progress</h2>
+    <div style="height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden;">
+      <div id="progressBar" style="width:0%; height:100%; background:var(--primary); transition: width 0.1s;"></div>
+    </div>
+    <div id="transferText" style="font-size:12px; color:var(--text-light); margin-top:8px; display:flex; justify-content:space-between;">
+      <span>Sending...</span><span>0%</span>
+    </div>
+  </div>
+</div>
+
+<div id="tab-chat" class="main-view">
+  <div class="card chat-box">
+    <div id="msgList" class="messages">
+      <div style="text-align:center; padding:20px; color:var(--text-light); font-size:12px;">
+        End-to-end encrypted chat.<br>Links open automatically.
+      </div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <input id="msgInput" class="input-code" style="font-size:16px; text-align:left; padding:10px;" placeholder="Type message..." autocomplete="off">
+      <button id="btnMsg" class="btn" style="width:auto; margin:0;">Send</button>
+    </div>
+  </div>
+</div>
+
+<div id="tab-receive" class="main-view">
+  <div class="card">
+    <h2>Received Files</h2>
+    <div id="receiveList">
+      <div style="text-align:center; padding:20px; color:#cbd5e1;">No files received yet</div>
+    </div>
+  </div>
+</div>
+
+<nav class="nav">
+  <button class="nav-btn active" onclick="switchTab('tab-connect')">
+    <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Connect
+  </button>
+  <button class="nav-btn" onclick="switchTab('tab-send')">
+    <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Send
+  </button>
+  <button class="nav-btn" onclick="switchTab('tab-chat')">
+    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat
+  </button>
+  <button class="nav-btn" onclick="switchTab('tab-receive')">
+    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Receive
+  </button>
+</nav>
 
 <div id="toast-box"></div>
 
 <script>
-/* ULTRA-SHARE PRO V11 - CONNECTION FIX */
+/* ULTRA-SHARE PRO - GITHUB PAGES EDITION */
 
-// Force HTTPS
-if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !location.href.includes('127.0.0.1')) {
-  location.replace(`https:${location.href.substring(location.protocol.length)}`);
-}
+// Hide loading overlay when page is ready
+window.addEventListener('load', function() {
+  setTimeout(() => {
+    document.getElementById('loadingOverlay').style.display = 'none';
+  }, 500);
+});
 
 const $ = id => document.getElementById(id);
 const myCode = Math.floor(100000 + Math.random() * 900000).toString();
-const PREFIX = 'us_v11_';
+const PREFIX = 'us_gh_'; // GitHub specific prefix
 let peer = null;
 let conn = null;
 let fileQueue = [];
@@ -43,7 +219,7 @@ function log(msg, type='') {
   const c = $('console');
   c.appendChild(line);
   c.scrollTop = c.scrollHeight;
-  console.log(`[UltraShare] ${msg}`); // Also log to console for debugging
+  console.log(`[UltraShare] ${msg}`);
   if(type === 'error') toast(msg);
 }
 
@@ -59,56 +235,45 @@ function updateStatus(state, msg = '') {
   const d = $('statusDot');
   const t = $('statusText');
   
-  if(state === 'online') { 
-    d.className='dot green'; 
-    t.textContent = msg || 'Connected'; 
-    $('btnConnect').textContent='Connected'; 
-    $('btnConnect').disabled=true; 
-    $('destId').disabled=true; 
-  }
-  else if(state === 'connecting') { 
-    d.className='dot orange'; 
-    t.textContent = msg || 'Connecting...'; 
-    $('btnConnect').textContent='Working...'; 
+  const statusMap = {
+    'online': { color: 'green', text: msg || 'Connected' },
+    'connecting': { color: 'orange', text: msg || 'Connecting...' },
+    'error': { color: '', text: msg || 'Error' },
+    'ready': { color: '', text: msg || 'Ready' }
+  };
+  
+  const status = statusMap[state] || statusMap.ready;
+  
+  d.className = 'dot ' + (status.color ? status.color : '');
+  t.textContent = status.text;
+  
+  if(state === 'online') {
+    $('btnConnect').textContent = 'Connected';
     $('btnConnect').disabled = true;
-  }
-  else if(state === 'error') {
-    d.className='dot'; 
-    t.textContent = msg || 'Error'; 
-    $('btnConnect').textContent='Retry Connect';
+    $('destId').disabled = true;
+  } else if(state === 'connecting') {
+    $('btnConnect').textContent = 'Connecting...';
+    $('btnConnect').disabled = true;
+  } else {
+    $('btnConnect').textContent = 'Connect';
     $('btnConnect').disabled = false;
     $('destId').disabled = false;
   }
-  else { 
-    d.className='dot'; 
-    t.textContent = msg || 'Ready'; 
-    $('btnConnect').textContent='Connect'; 
-    $('btnConnect').disabled=false; 
-    $('destId').disabled=false; 
-  }
 }
 
-// 1. FIXED PEER INITIALIZATION WITH BETTER CONFIG
+// 1. INITIALIZE PEER WITH GITHUB PAGES CONFIG
 function initPeer() {
-  log('Initializing PeerJS...');
+  log('Starting UltraShare on GitHub Pages...');
+  updateStatus('connecting', 'Starting...');
   
   try {
-    // Use multiple PeerJS servers for reliability
-    const servers = [
-      { host: '0.peerjs.com', port: 443, path: '/', secure: true },
-      { host: '1.peerjs.com', port: 443, path: '/', secure: true },
-      { host: '2.peerjs.com', port: 443, path: '/', secure: true }
-    ];
-    
-    const server = servers[Math.floor(Math.random() * servers.length)];
-    log(`Using server: ${server.host}`);
-    
-    peer = new Peer(PREFIX + myCode, {
-      debug: 3, // Maximum debugging
+    // Use peerjs cloud with GitHub Pages compatible config
+    const serverConfig = {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
       secure: true,
-      host: server.host,
-      port: server.port,
-      path: server.path,
+      debug: 3,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -116,7 +281,7 @@ function initPeer() {
           { urls: 'stun:stun2.l.google.com:19302' },
           { urls: 'stun:stun3.l.google.com:19302' },
           { urls: 'stun:stun4.l.google.com:19302' },
-          // TURN servers for difficult networks (public but may help)
+          // Public TURN servers (may help with strict NAT)
           { 
             urls: 'turn:openrelay.metered.ca:80',
             username: 'openrelayproject',
@@ -126,94 +291,111 @@ function initPeer() {
             urls: 'turn:openrelay.metered.ca:443',
             username: 'openrelayproject',
             credential: 'openrelayproject'
+          },
+          { 
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
           }
         ],
         iceCandidatePoolSize: 10,
-        iceTransportPolicy: 'all',
-        rtcpMuxPolicy: 'require'
-      },
-      iceTransportPolicy: 'all'
-    });
-
+        iceTransportPolicy: 'all'
+      }
+    };
+    
+    peer = new Peer(PREFIX + myCode, serverConfig);
+    
+    // Store for debugging
+    window.debugPeer = peer;
+    
     peer.on('open', (id) => {
       $('myId').textContent = myCode;
       log(`✓ Your ID: ${myCode}`, 'success');
       log('Share this code with your partner');
+      log('Waiting for connection...');
       updateStatus('ready', 'Ready');
+      
+      // Auto-copy code to clipboard on mobile for easier sharing
+      if(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        setTimeout(() => {
+          navigator.clipboard.writeText(myCode).then(() => {
+            toast('Code copied to clipboard!');
+          }).catch(() => { /* Ignore clipboard errors */ });
+        }, 1000);
+      }
     });
-
+    
     peer.on('error', (err) => {
       console.error('PeerJS Error:', err);
       
-      // Specific error handling
-      if(err.type === 'network') {
-        log('Network error. Check your internet connection.', 'error');
-      } else if(err.type === 'server-error') {
-        log('Signaling server error. Trying alternative server...', 'error');
-        setTimeout(initPeer, 1000);
-      } else if(err.type === 'peer-unavailable') {
-        log('Partner not found. Make sure they entered your code correctly.', 'error');
-      } else if(err.type === 'disconnected') {
-        log('Lost connection to signaling server. Reconnecting...', 'error');
+      // User-friendly error messages
+      const errorMessages = {
+        'network': 'Check your internet connection',
+        'server-error': 'Server issue, retrying...',
+        'peer-unavailable': 'Partner not found or offline',
+        'disconnected': 'Reconnecting...',
+        'socket-error': 'Connection error, refreshing...',
+        'socket-closed': 'Connection closed, retrying...'
+      };
+      
+      const userMsg = errorMessages[err.type] || `Error: ${err.type}`;
+      log(userMsg, 'error');
+      
+      if(err.type === 'server-error' || err.type === 'socket-error') {
         setTimeout(() => {
           if(peer && !peer.destroyed) {
             peer.reconnect();
-          } else {
-            initPeer();
           }
-        }, 1000);
-      } else {
-        log(`Error: ${err.type} - ${err.message}`, 'error');
+        }, 2000);
       }
       
-      updateStatus('error', 'Error - Retry');
+      updateStatus('error', userMsg);
     });
-
-    // CRITICAL FIX: Handle incoming connections properly
+    
+    // Handle incoming connections
     peer.on('connection', (incomingConn) => {
-      log(`Incoming connection detected from ${incomingConn.peer}`);
+      log(`📞 Incoming connection from partner...`);
       
-      // Close any existing connection
+      // Close existing connection if any
       if(conn && conn.open) {
-        log('Closing existing connection for new one...');
+        log('Replacing existing connection...');
         conn.close();
       }
       
       conn = incomingConn;
       setupConnectionHandlers(conn);
       
-      // For incoming connections, they should be immediately open
-      // but we need to verify
-      if(conn.open) {
-        onConnectionSuccess();
-      } else {
-        // Some connections need a moment
-        setTimeout(() => {
-          if(conn && conn.open) {
-            onConnectionSuccess();
-          } else {
-            log('Incoming connection failed to open', 'error');
-          }
-        }, 500);
-      }
+      // For incoming connections, they should open immediately
+      // but we'll verify
+      setTimeout(() => {
+        if(conn && conn.open) {
+          onConnectionSuccess();
+        } else {
+          log('Waiting for connection to open...');
+        }
+      }, 100);
     });
-
+    
     peer.on('disconnected', () => {
       log('Disconnected from server. Reconnecting...', 'error');
-      updateStatus('error', 'Reconnecting...');
-      setTimeout(() => peer.reconnect(), 2000);
+      updateStatus('connecting', 'Reconnecting...');
+      setTimeout(() => {
+        if(peer && !peer.destroyed) {
+          peer.reconnect();
+        }
+      }, 1000);
     });
-
+    
     peer.on('close', () => {
-      log('Peer closed. Reinitializing...', 'error');
+      log('Connection closed. Restarting...', 'error');
       updateStatus('error', 'Restarting...');
       setTimeout(initPeer, 3000);
     });
-
+    
   } catch (error) {
     log(`Failed to initialize: ${error.message}`, 'error');
-    updateStatus('error', 'Init Failed');
-    setTimeout(initPeer, 2000);
+    updateStatus('error', 'Initialization failed');
+    setTimeout(initPeer, 3000);
   }
 }
 
@@ -230,40 +412,43 @@ function setupConnectionHandlers(connection) {
   });
   
   connection.on('close', () => {
-    log('Connection closed by partner', 'error');
+    log('Partner disconnected', 'error');
     updateStatus('ready', 'Disconnected');
     conn = null;
+    toast('Partner disconnected');
   });
   
   connection.on('error', (err) => {
     log(`Connection error: ${err.message || err.type}`, 'error');
-    updateStatus('error', 'Connection Failed');
+    updateStatus('error', 'Connection failed');
   });
 }
 
-// 3. CONNECTION SUCCESS HANDLER
+// 3. CONNECTION SUCCESS
 function onConnectionSuccess() {
   if(!conn || !conn.open) return;
   
   clearTimeout(connectionTimeout);
-  log('✓ Connection established successfully!', 'success');
+  log('✅ Connection established!', 'success');
   log('You can now send files and chat');
   toast('Connected! Ready to share.');
   updateStatus('online', 'Connected');
   
-  // Send handshake to confirm
+  // Send handshake
   setTimeout(() => {
     sendData({ 
       type: 'handshake', 
       code: myCode,
       timestamp: Date.now(),
-      message: 'Hello from UltraShare!' 
+      message: 'Connected via UltraShare'
     });
-  }, 100);
+  }, 200);
 }
 
-// 4. IMPROVED CONNECT FUNCTION
-$('btnConnect').onclick = () => {
+// 4. CONNECT BUTTON
+$('btnConnect').onclick = connectToPartner;
+
+function connectToPartner() {
   const code = $('destId').value.trim().replace(/\D/g, '');
   
   if(code.length !== 6) {
@@ -282,25 +467,23 @@ $('btnConnect').onclick = () => {
     return;
   }
   
-  log(`Connecting to ${code}...`);
+  log(`🔗 Connecting to ${code}...`);
   updateStatus('connecting', `Connecting to ${code}...`);
   
   // Clear previous timeout
   if (connectionTimeout) clearTimeout(connectionTimeout);
   
   try {
-    // Create connection with timeout
     const fullPeerId = PREFIX + code;
-    log(`Attempting to connect to: ${fullPeerId}`);
     
+    // Create connection with metadata
     const c = peer.connect(fullPeerId, {
       reliable: true,
       serialization: 'json',
       metadata: { 
-        version: 'v11', 
+        version: 'github-pages',
         myCode: myCode,
-        timestamp: Date.now(),
-        userAgent: navigator.userAgent 
+        timestamp: Date.now()
       }
     });
     
@@ -311,14 +494,14 @@ $('btnConnect').onclick = () => {
     conn = c;
     setupConnectionHandlers(conn);
     
-    // Set connection timeout
+    // Set timeout
     connectionTimeout = setTimeout(() => {
       if(conn && !conn.open) {
-        log('Connection timeout after 25 seconds', 'error');
-        log('Possible issues:', 'error');
-        log('1. Partner might not be online', 'error');
-        log('2. Check if both devices are on same network', 'error');
-        log('3. Try refreshing both pages', 'error');
+        log('❌ Connection timeout (25s)', 'error');
+        log('Possible solutions:', 'error');
+        log('• Make sure partner is online', 'error');
+        log('• Both devices should use same Wi-Fi', 'error');
+        log('• Refresh both pages and try again', 'error');
         
         if(conn) conn.close();
         updateStatus('error', 'Timeout');
@@ -332,9 +515,16 @@ $('btnConnect').onclick = () => {
     updateStatus('error', 'Failed');
     conn = null;
   }
-};
+}
 
-// 5. SEND DATA WITH VALIDATION
+// Auto-connect when code is entered and Enter is pressed
+$('destId').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    connectToPartner();
+  }
+});
+
+// 5. SEND DATA
 function sendData(data) {
   if(!conn || !conn.open) {
     log('Cannot send: No active connection', 'error');
@@ -360,15 +550,15 @@ function sendData(data) {
 
 // 6. PROCESS INCOMING DATA
 function processData(rawData) {
-  console.log('Received data:', typeof rawData, rawData);
+  console.log('Received:', typeof rawData);
   
-  // Binary data (file chunks)
+  // Binary data
   if(rawData instanceof ArrayBuffer || rawData instanceof Uint8Array) {
     receiveChunk(rawData);
     return;
   }
   
-  // String data (JSON)
+  // JSON data
   let data;
   try {
     if (typeof rawData === 'string') {
@@ -377,7 +567,6 @@ function processData(rawData) {
       data = rawData;
     }
   } catch (e) {
-    log('Failed to parse data', 'error');
     return;
   }
   
@@ -385,10 +574,7 @@ function processData(rawData) {
   
   switch(data.type) {
     case 'handshake':
-      log(`Partner connected: ${data.code || 'Unknown'}`, 'success');
-      if(data.message) {
-        log(`Message: ${data.message}`);
-      }
+      log(`🤝 Partner connected: ${data.code || 'Unknown'}`, 'success');
       break;
       
     case 'chat':
@@ -401,40 +587,59 @@ function processData(rawData) {
       startReceiving(data);
       break;
       
-    case 'file-chunk': 
-      if (data.chunk) {
-        receiveChunk(data.chunk);
-      }
-      break;
-      
     default:
-      log(`Unknown data type: ${data.type}`);
+      console.log('Unknown data type:', data.type);
   }
 }
 
-// 7. FILE TRANSFER ENGINE (unchanged but with error handling)
-const CHUNK_SIZE = 16 * 1024;
+// 7. FILE TRANSFER
+const CHUNK_SIZE = 64 * 1024; // 64KB chunks for better performance
 
 $('fileIn').onchange = (e) => {
-  fileQueue = [...e.target.files];
+  const files = Array.from(e.target.files);
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  
+  if(totalSize > 1024 * 1024 * 1024) { // 1GB limit
+    toast('Total size exceeds 1GB limit');
+    return;
+  }
+  
+  fileQueue = files;
   updateFileUI();
 };
 
 function updateFileUI() {
   const q = $('fileQueue');
   q.innerHTML = '';
-  fileQueue.forEach(f => {
+  
+  fileQueue.forEach((f, i) => {
     const d = document.createElement('div');
     d.className = 'file-item';
-    d.innerHTML = `<span>📄 ${f.name}</span> <small>${(f.size/1024/1024).toFixed(1)} MB</small>`;
+    d.innerHTML = `
+      <span>📄 ${f.name}</span>
+      <small>${formatFileSize(f.size)}</small>
+      <button onclick="removeFile(${i})" style="margin-left:auto; background:none; border:none; color:var(--error); cursor:pointer;">×</button>
+    `;
     q.appendChild(d);
   });
+  
   $('btnSend').style.display = fileQueue.length ? 'block' : 'none';
+}
+
+function removeFile(index) {
+  fileQueue.splice(index, 1);
+  updateFileUI();
+}
+
+function formatFileSize(bytes) {
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 $('btnSend').onclick = async () => {
   if(!conn || !conn.open) {
-    toast('Not connected to partner!');
+    toast('Not connected!');
     switchTab('tab-connect');
     return;
   }
@@ -448,62 +653,60 @@ $('btnSend').onclick = async () => {
   $('transferText').children[1].textContent = '0%';
   
   try {
+    let totalFiles = fileQueue.length;
+    let completedFiles = 0;
+    
     for(let file of fileQueue) {
-      log(`Starting transfer: ${file.name}...`);
+      log(`Starting: ${file.name} (${formatFileSize(file.size)})`);
       
-      // Send file metadata
-      const metaSent = sendData({ 
+      // Send metadata
+      sendData({ 
         type: 'file-meta', 
         name: file.name, 
         size: file.size, 
         mime: file.type,
-        id: Date.now() + Math.random()
+        id: Date.now()
       });
       
-      if (!metaSent) {
-        throw new Error('Failed to send file metadata');
-      }
-      
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 300));
       
       // Send file in chunks
       let offset = 0;
-      const reader = new FileReader();
+      const chunkCount = Math.ceil(file.size / CHUNK_SIZE);
       
       while(offset < file.size) {
-        const chunk = file.slice(offset, offset + CHUNK_SIZE);
+        const chunk = file.slice(offset, Math.min(offset + CHUNK_SIZE, file.size));
+        const arrayBuffer = await chunk.arrayBuffer();
         
-        // Wait if buffer is too full
-        if(conn.dataChannel && conn.dataChannel.bufferedAmount > 16000000) {
-          await new Promise(r => setTimeout(r, 100));
+        // Flow control
+        if(conn.dataChannel && conn.dataChannel.bufferedAmount > 1024 * 1024 * 5) { // 5MB buffer
+          await new Promise(r => setTimeout(r, 50));
         }
-        
-        const arrayBuffer = await new Promise((resolve) => {
-          reader.onload = (e) => resolve(e.target.result);
-          reader.readAsArrayBuffer(chunk);
-        });
         
         conn.send(arrayBuffer);
         offset += arrayBuffer.byteLength;
         
         // Update progress
-        const pct = Math.round((offset/file.size)*100);
-        $('progressBar').style.width = pct + '%';
-        $('transferText').children[1].textContent = pct + '%';
+        const fileProgress = Math.round((offset / file.size) * 100);
+        const totalProgress = Math.round(((completedFiles + (offset / file.size)) / totalFiles) * 100);
+        $('progressBar').style.width = totalProgress + '%';
+        $('transferText').children[1].textContent = totalProgress + '%';
         
-        // Small delay to prevent overwhelming
-        if (offset % (CHUNK_SIZE * 5) === 0) {
-          await new Promise(r => setTimeout(r, 10));
+        // Small delay for UI updates
+        if(offset % (CHUNK_SIZE * 10) === 0) {
+          await new Promise(r => setTimeout(r, 1));
         }
       }
       
-      log(`✓ Sent: ${file.name}`, 'success');
+      completedFiles++;
+      log(`✅ Sent: ${file.name}`, 'success');
     }
     
     toast('All files sent successfully!');
+    log('Transfer complete', 'success');
     
   } catch (error) {
-    log(`File transfer failed: ${error.message}`, 'error');
+    log(`Transfer failed: ${error.message}`, 'error');
     toast('Transfer failed');
   } finally {
     isSending = false;
@@ -514,7 +717,7 @@ $('btnSend').onclick = async () => {
   }
 };
 
-// 8. RECEIVING ENGINE
+// 8. RECEIVING FILES
 let incoming = null;
 let rxChunks = [];
 let rxBytes = 0;
@@ -523,7 +726,7 @@ function startReceiving(meta) {
   incoming = meta;
   rxChunks = [];
   rxBytes = 0;
-  log(`Receiving: ${meta.name} (${(meta.size/1024/1024).toFixed(2)} MB)`, 'success');
+  log(`📥 Receiving: ${meta.name} (${formatFileSize(meta.size)})`, 'success');
   switchTab('tab-receive');
 }
 
@@ -542,11 +745,16 @@ function receiveChunk(buff) {
     item.innerHTML = `
       <div>
         <div style="font-weight:bold">${incoming.name}</div>
-        <div style="font-size:12px; color:#64748b">${(incoming.size/1024/1024).toFixed(1)} MB • Received</div>
+        <div style="font-size:12px; color:#64748b">${formatFileSize(incoming.size)} • Received</div>
       </div>
       <a href="${url}" download="${incoming.name}" class="btn" style="width:auto; padding:8px 16px;">Download</a>
     `;
     $('receiveList').prepend(item);
+    
+    // Cleanup
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 60000);
     
     incoming = null;
     rxChunks = [];
@@ -554,22 +762,21 @@ function receiveChunk(buff) {
   }
 }
 
-// 9. CHAT FUNCTIONALITY
-$('btnMsg').onclick = () => {
+// 9. CHAT
+$('btnMsg').onclick = sendMessage;
+$('msgInput').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') sendMessage();
+});
+
+function sendMessage() {
   const txt = $('msgInput').value.trim();
   if(!txt) return;
   
-  if (sendData({ type: 'chat', msg: txt, sender: myCode, time: new Date().toLocaleTimeString() })) {
+  if (sendData({ type: 'chat', msg: txt, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) })) {
     addChat(txt, true);
     $('msgInput').value = '';
   }
-};
-
-$('msgInput').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    $('btnMsg').click();
-  }
-});
+}
 
 function addChat(txt, mine) {
   const b = document.createElement('div');
@@ -591,59 +798,30 @@ function switchTab(id) {
   }
 }
 
-// 11. DIAGNOSTICS
-function runDiagnostics() {
-  console.group('UltraShare Diagnostics');
-  console.log('My Code:', myCode);
-  console.log('Peer:', peer ? 'Initialized' : 'Not initialized');
-  console.log('Connection:', conn ? (conn.open ? 'Open' : 'Closed') : 'None');
-  console.log('User Agent:', navigator.userAgent);
-  console.log('WebRTC Support:', 'RTCPeerConnection' in window);
-  console.log('DataChannel Support:', 'RTCDataChannel' in window);
-  console.groupEnd();
-}
-
-// INITIALIZE
+// 11. INITIALIZE
 document.addEventListener('DOMContentLoaded', () => {
-  log('UltraShare Pro v11 starting...');
-  log('Hosted on GitHub Pages');
+  // Start initialization
+  setTimeout(initPeer, 1000);
   
-  // Run diagnostics
-  runDiagnostics();
-  
-  // Initialize after a short delay
-  setTimeout(() => {
-    initPeer();
-    
-    // Auto-refresh if stuck for too long
-    setTimeout(() => {
-      if(!peer || peer.disconnected) {
-        log('Taking too long to initialize. Refreshing...', 'error');
-        toast('Refreshing page...');
-        setTimeout(() => location.reload(), 1000);
-      }
-    }, 10000);
-  }, 500);
+  // Debug info
+  console.log('UltraShare Pro - GitHub Pages Edition');
+  console.log('URL:', window.location.href);
+  console.log('User Agent:', navigator.userAgent);
 });
 
-// Handle page visibility changes
+// Handle page visibility
 document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'visible') {
     if(peer && (peer.disconnected || !peer.open)) {
-      log('Page became visible, reconnecting...');
       peer.reconnect();
     }
   }
 });
 
-// Handle beforeunload
+// Cleanup
 window.addEventListener('beforeunload', () => {
-  if(conn && conn.open) {
-    conn.close();
-  }
-  if(peer && !peer.destroyed) {
-    peer.destroy();
-  }
+  if(conn && conn.open) conn.close();
+  if(peer && !peer.destroyed) peer.destroy();
 });
 
 </script>
