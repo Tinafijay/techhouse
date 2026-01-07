@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>This Week's Tech Buzz! - Tech House Blog</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --header-bg: #ffffff;
+            --primary-color: #0066cc;
+            --footer-bg: #1a1a1a;
+            --transition: all 0.3s ease;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #0f172a;
+            --text-color: #f1f5f9;
+            --header-bg: #1e293b;
+            --primary-color: #38bdf8;
+            --footer-bg: #020617;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: var(--transition);
+            line-height: 1.8;
+        }
+
+        header {
+            background: var(--header-bg);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky; top: 0; z-index: 1000;
+        }
+
+        nav {
+            max-width: 1200px; margin: 0 auto;
+            display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;
+        }
+
+        .nav-right { display: flex; align-items: center; gap: 25px; }
+        .logo img { height: 50px; }
+        nav ul { display: flex; list-style: none; gap: 25px; }
+        nav a { text-decoration: none; color: var(--text-color); font-weight: 600; }
+
+        #theme-toggle {
+            background: var(--primary-color); color: white; border: none;
+            padding: 8px 15px; border-radius: 20px; cursor: pointer; font-weight: bold;
+        }
+
+        .blog-post-page { max-width: 800px; margin: 60px auto; padding: 0 20px; }
+        h1 { font-size: 2.8rem; line-height: 1.2; margin-bottom: 10px; }
+        .post-meta { font-style: italic; color: #64748b; margin-bottom: 40px; border-bottom: 1px solid rgba(128,128,128,0.2); padding-bottom: 20px; }
+        h2 { margin-top: 40px; color: var(--primary-color); }
+        ul { margin: 20px 0; padding-left: 20px; }
+        li { margin-bottom: 15px; }
+
+        .back-btn {
+            display: inline-block;
+            margin-top: 50px;
+            padding: 10px 20px;
+            background: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        footer { background: var(--footer-bg); color: white; text-align: center; padding: 40px 20px; margin-top: 80px; }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo"><a href="index.html"><img src="Tech House logo.jpg" alt="Logo"></a></div>
+            <div class="nav-right">
+                <ul>
+                    <li><a href="index.html#home">Home</a></li>
+                    <li><a href="index.html#apps">Apps</a></li>
+                    <li><a href="index.html#about">About</a></li>
+                    <li><a href="blog.html">Blog</a></li>
+                    <li><a href="index.html#contact">Contact</a></li>
+                </ul>
+                <button id="theme-toggle">Switch Theme</button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="blog-post-page">
+        <h1>This Week's Tech Buzz: AI, Phones, and Surprising Shifts!</h1>
+        <p class="post-meta">Published on: August 1, 2025 by Tinafi Akawu</p>
+        
+        <p>Hey Tech Housers! Your weekly dose of what's sizzling in the tech world is here. This week has been a whirlwind, with major leaps in AI, some cool new phone reveals, and a few surprises that got us scratching our heads. Let’s dive in!</p>
+
+        <h2>AI Just Got Waaay Smarter</h2>
+        <p>Okay, so "AI" has been the buzzword for a while, but this week felt different. We're seeing a shift from AI just helping us to AI actually doing things for us. OpenAI apparently launched a "ChatGPT Agent" mode. Imagine your chatbot not just answering questions, but literally plugging into apps and tackling multi-step goals.</p>
+        <p>Amazon Web Services (AWS) also jumped in, introducing "agentic AI" tools for businesses. These AI agents can automate complex tasks without constant human supervision. It's like having a super-smart digital teammate.</p>
+
+        <h2>New Phones Dropping: Pixel 10 and Foldables</h2>
+        <p>Google officially confirmed the <strong>Pixel 10 series</strong> is dropping globally on August 20th. They're not holding back, with four models including a foldable Pixel 10 Pro Fold. Beyond Google, Vivo is launching the V60, and Oppo has new K13 Turbo models.</p>
+
+        <h2>Random Tech Tidbits</h2>
+        <ul>
+            <li><strong>AI vs. Human Jobs:</strong> Microsoft is exploring efficiency gains, leading to talks about the evolving job market.</li>
+            <li><strong>Qantas Data Breach:</strong> A reminder that security is a top priority for everyone.</li>
+            <li><strong>Transparent CD?!</strong> Lorde's new design is so experimental some stereos can't even read it!</li>
+        </ul>
+
+        <p>That's your rundown! What tech news got you buzzing? Let us know!</p>
+        
+        <a href="blog.html" class="back-btn">← Back to Blog Overview</a>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Tech House. All rights reserved.</p>
+    </footer>
+
+    <script>
+        const toggleBtn = document.getElementById('theme-toggle');
+        const body = document.body;
+        toggleBtn.addEventListener('click', () => {
+            if (body.getAttribute('data-theme') === 'dark') { body.removeAttribute('data-theme'); }
+            else { body.setAttribute('data-theme', 'dark'); }
+        });
+    </script>
+</body>
+</html>

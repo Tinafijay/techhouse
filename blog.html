@@ -4,72 +4,137 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Our Blog - Tech House Insights</title>
-    <link rel="stylesheet" href="Techhouse_style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Specific styles for the main blog listing page */
-        .blog-listing-page main {
-            padding-top: 40px; /* Adjust padding at the top */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --card-bg: #f9f9fb;
+            --header-bg: #ffffff;
+            --primary-color: #0066cc;
+            --footer-bg: #1a1a1a;
+            --transition: all 0.3s ease;
         }
-        .blog-listing-page #all-posts {
-            margin-top: 0; /* Adjust margin if hero/intro is not present */
+
+        [data-theme="dark"] {
+            --bg-color: #0f172a;
+            --text-color: #f1f5f9;
+            --card-bg: #1e293b;
+            --header-bg: #1e293b;
+            --primary-color: #38bdf8;
+            --footer-bg: #020617;
         }
-        .blog-listing-page h1 {
-            text-align: center;
-            font-size: 2.8em;
-            margin-bottom: 20px;
-            color: var(--heading-color);
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: var(--transition);
+            line-height: 1.6;
         }
-        .blog-listing-page p.intro-text {
-            text-align: center;
-            max-width: 800px;
-            margin: 0 auto 50px auto;
-            font-size: 1.1em;
+
+        header {
+            background: var(--header-bg);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
-        /* Ensure content within cards is aligned left */
-        .blog-post-card p {
-            text-align: left;
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
         }
+
+        .nav-right { display: flex; align-items: center; gap: 25px; }
+        .logo img { height: 50px; }
+        nav ul { display: flex; list-style: none; gap: 25px; }
+        nav a { text-decoration: none; color: var(--text-color); font-weight: 600; }
+
+        #theme-toggle {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        main { padding: 60px 20px; max-width: 1000px; margin: 0 auto; min-height: 80vh; }
+        h1 { font-size: 3rem; text-align: center; margin-bottom: 10px; }
+        .intro-text { text-align: center; margin-bottom: 50px; color: #64748b; }
+
+        .blog-posts-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .blog-post-card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 15px;
+            text-decoration: none;
+            color: var(--text-color);
+            border: 1px solid rgba(128,128,128,0.1);
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .blog-post-card:hover { transform: translateY(-5px); border-color: var(--primary-color); }
+        .blog-post-card h3 { margin-bottom: 15px; font-size: 1.4rem; color: var(--primary-color); }
+        .read-more { margin-top: auto; font-weight: bold; color: var(--primary-color); padding-top: 15px; }
+
+        footer { background: var(--footer-bg); color: white; text-align: center; padding: 40px 20px; margin-top: 50px; }
     </style>
 </head>
-<body class="blog-listing-page">
-
+<body>
     <header>
         <nav>
-            <div class="logo">
-                <a href="index.html">
-                    <img src="Tech House logo.jpg" alt="Tech House Company Logo" class="main-logo">
-                </a>
+            <div class="logo"><a href="index.html"><img src="Tech House logo.jpg" alt="Logo"></a></div>
+            <div class="nav-right">
+                <ul>
+                    <li><a href="index.html#home">Home</a></li>
+                    <li><a href="index.html#apps">Apps</a></li>
+                    <li><a href="index.html#about">About</a></li>
+                    <li><a href="blog.html">Blog</a></li>
+                    <li><a href="index.html#contact">Contact</a></li>
+                </ul>
+                <button id="theme-toggle">Switch Theme</button>
             </div>
-            <ul>
-                <li><a href="index.html#home">Home</a></li>
-                <li><a href="index.html#apps">Apps</a></li>
-                <li><a href="index.html#about">About Us</a></li>
-                <li><a href="blog.html">Blog</a></li> <li><a href="index.html#contact">Contact</a></li>
-            </ul>
         </nav>
     </header>
 
     <main>
-        <section id="all-posts">
-            <h1>All Our Blog Posts</h1>
-            <p class="intro-text">Dive into our latest insights, tech trends, and thought leadership from the Tech House team.</p>
+        <h1>Tech House Blog</h1>
+        <p class="intro-text">Dive into our latest insights, tech trends, and thought leadership.</p>
 
-            <div class="blog-posts-list">
-                <a href="tech-news-highlights-this-week.html" class="blog-post-card">
-                    <h3>This Week's Tech Buzz: AI, Phones, and Surprising Shifts!</h3>
-                    <p>A casual look at major AI leaps, new smartphone reveals, and a few quirky tech surprises from the week.</p>
-                    <span class="read-more">Read More →</span>
-                </a>
-
-                </div>
-        </section>
+        <div class="blog-posts-list">
+            <a href="tech-news-highlights-this-week.html" class="blog-post-card">
+                <h3>This Week's Tech Buzz: AI, Phones, and Surprising Shifts!</h3>
+                <p>A casual look at major AI leaps, new smartphone reveals, and a few quirky tech surprises from the week.</p>
+                <span class="read-more">Read Full Article →</span>
+            </a>
+        </div>
     </main>
 
     <footer>
-        <p>&copy; 2025 Tech House. All rights reserved.</p>
+        <p>&copy; 2026 Tech House. All rights reserved.</p>
     </footer>
 
-    <script src="script.js"></script>
-
+    <script>
+        const toggleBtn = document.getElementById('theme-toggle');
+        const body = document.body;
+        toggleBtn.addEventListener('click', () => {
+            if (body.getAttribute('data-theme') === 'dark') { body.removeAttribute('data-theme'); }
+            else { body.setAttribute('data-theme', 'dark'); }
+        });
+    </script>
 </body>
 </html>

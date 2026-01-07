@@ -4,105 +4,256 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech House - Innovate. Create. Elevate.</title>
-    <link rel="stylesheet" href="Techhouse_style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- THEME VARIABLES --- */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --card-bg: #f9f9fb;
+            --header-bg: #ffffff;
+            --primary-color: #0066cc;
+            --footer-bg: #1a1a1a;
+            --transition: all 0.3s ease;
+        }
+
+        /* Dark Mode Colors */
+        [data-theme="dark"] {
+            --bg-color: #0f172a;
+            --text-color: #f1f5f9;
+            --card-bg: #1e293b;
+            --header-bg: #1e293b;
+            --primary-color: #38bdf8;
+            --footer-bg: #020617;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.8;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: var(--transition);
+        }
+
+        /* --- NAVIGATION --- */
+        header {
+            background: var(--header-bg);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            transition: var(--transition);
+        }
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 25px;
+        }
+
+        .logo img { height: 50px; }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 25px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        /* THEME TOGGLE BUTTON */
+        #theme-toggle {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: bold;
+            transition: var(--transition);
+        }
+
+        /* --- SECTIONS --- */
+        section { padding: 80px 20px; max-width: 1000px; margin: 0 auto; }
+        
+        #hero {
+            background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('hero-bg.jpg') center/cover;
+            background-color: #2c3e50;
+            height: 50vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            max-width: 100%;
+        }
+
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+            margin-top: 40px;
+        }
+
+        .app-item {
+            background: var(--card-bg);
+            padding: 30px;
+            text-align: center;
+            border-radius: 12px;
+            text-decoration: none;
+            color: var(--text-color);
+            border: 1px solid rgba(128,128,128,0.1);
+            transition: var(--transition);
+        }
+
+        .app-item:hover { transform: translateY(-5px); border-color: var(--primary-color); }
+
+        .ceo-photo {
+            width: 250px;
+            height: 250px;
+            border-radius: 15px;
+            object-fit: cover;
+            margin-bottom: 15px;
+            border: 5px solid var(--primary-color);
+        }
+
+        #about-extra { display: none; margin-top: 20px; }
+
+        .read-more-btn {
+            background: none;
+            border: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 8px 20px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+            margin: 20px auto;
+            display: block;
+        }
+
+        footer {
+            background: var(--footer-bg);
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        @media (max-width: 768px) { nav ul { display: none; } }
+    </style>
 </head>
 <body>
 
     <header>
         <nav>
             <div class="logo">
-                <a href="#home">
-                    <img src="Tech House logo.jpg" alt="Tech House Company Logo" class="main-logo">
-                </a>
+                <img src="Tech House logo.jpg" alt="Tech House Logo">
             </div>
-            <ul>
-                <li><a href="#home">Home</a></li>
-                <li><a href="#apps">Apps</a></li>
-                <li><a href="#about">About Us</a></li>
-                <li><a href="blog.html">Blog</a></li> 
-                <li><a href="#contact">Contact</a></li>
-            </ul>
+            <div class="nav-right">
+                <ul>
+                    <li><a href="#home">Home</a></li>
+                    <li><a href="#apps">Apps</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                </ul>
+                <button id="theme-toggle">Switch Theme</button>
+            </div>
         </nav>
     </header>
 
-    <main>
+    <main id="home">
         <section id="hero">
-            <h2>Welcome to Tech House</h2>
-            <p>Your hub for innovation and cutting-edge tech.</p>
-            <a href="#about" class="button">Discover Our Vision</a>
+            <h1>Welcome to Tech House</h1>
+            <p>Innovate. Create. Elevate.</p>
         </section>
 
         <section id="apps">
             <h2>Our Applications</h2>
-            <p>Explore the innovative tools and services we offer.</p>
             <div class="app-grid">
-                <a href="poisoning detector.html" class="app-item">
-                    <div class="app-icon">🍎</div>
-                    <h3>Food Poisoning Detector</h3>
-                </a>
-
-                <a href="UltraShare.html" class="app-item">
-                    <div class="app-icon">🚀</div>
-                    <h3>UltraShare Pro</h3>
-                </a>
-
-                <a href="javascript:void(0);" class="app-item" onclick="showComingSoon('T Vision')">
-                    <div class="app-icon">⭐</div>
-                    <h3>T Vision</h3>
-                </a>
-
-                <a href="javascript:void(0);" class="app-item" onclick="showComingSoon('Music Producer')">
-                    <div class="app-icon">🎶</div>
-                    <h3>Music Producer</h3>
-                </a>
+                <a href="poisoning detector.html" class="app-item"><h3>🍎 Food Poisoning Detector</h3></a>
+                <a href="UltraShare.html" class="app-item"><h3>🚀 UltraShare Pro</h3></a>
+                <div class="app-item" onclick="alert('Coming Soon!')" style="cursor:pointer"><h3>⭐ T Vision</h3></div>
+                <div class="app-item" onclick="alert('Coming Soon!')" style="cursor:pointer"><h3>🎶 Music Producer</h3></div>
             </div>
         </section>
 
         <section id="about">
-            <h2>About Tech House: Innovate. Solve. Elevate.</h2>
-            <p>At Tech House, we're driven by a simple yet powerful mission: to make technology accessible, intuitive, and genuinely helpful for everyone. We believe in harnessing the power of innovation to solve real-world problems and elevate everyday experiences. Whether you're navigating new digital landscapes or looking for smart solutions, Tech House is your dedicated partner in the ever-evolving world of technology.</p>
-
-            <div class="ceo-intro">
-                <img src="tinafi jay.jpg" alt="Portrait of Tinafi Akawu, CEO of Tech House" class="ceo-photo">
+            <h2>About Tech House</h2>
+            <p>At Tech House, we're driven by a simple yet powerful mission: to make technology accessible, intuitive, and genuinely helpful for everyone.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <img src="tinafi jay.jpg" alt="CEO Tinafi Akawu" class="ceo-photo">
                 <h3>Meet Our CEO: Tinafi Akawu</h3>
             </div>
-            <p>Behind Tech House is Tinafi Akawu, a fifteen-year-old artist and tech enthusiast whose fascination with technology began at a very young age. Tinafi's curiosity sparked from everyday interactions, often wondering how seemingly complex devices, like smartphones, functioned across distances. This early intrigue led to hands-on exploration, navigating mobile devices to play videos and use the camera, and even finding creative ways to overcome challenges by relying on others to read options for more complex tasks.</p>
 
-            <p>This passion deepened during primary school, where computer studies became a favorite subject, introducing foundational coding knowledge and understanding the intricate dance between software and hardware. A pivotal moment arrived with the discovery of text-to-speech screen readers, which revolutionized mobile navigation and opened up a world of possibilities for independent research, communication, and exploration. Complementing this, speech-to-text further enhanced the gadget experience, enabling seamless voice-to-text input.</p>
+            <p>Behind Tech House is Tinafi Akawu, a fifteen-year-old artist and tech enthusiast whose fascination with technology began at a very young age...</p>
 
-            <p>Recognizing the universal need for technological understanding, Tinafi founded Tech House in 2023. What began as a dedicated WhatsApp group quickly expanded its reach to prominent social media platforms like YouTube and Facebook, serving as a hub for regular video content on various tech topics.</p>
-
-            <p>Tinafi's driving force is a desire to reshape the world through better and more accessible technology. This vision is actively taking shape through ambitious app development projects: **T Vision**, an AI-powered application designed to significantly ease navigation for visually impaired individuals; and **Music Producer**, another AI-driven initiative aimed at automating the entire music production process – a direct fusion of Tinafi’s artistic background with cutting-edge tech.</p>
-
-            <p>Ultimately, Tinafi is a young, multifaceted innovator, passionately committed to learning, creating, and ensuring technology truly serves and empowers everyone.</p>
-        </section>
-
-        <section id="blog">
-            <h2>Latest From Our Blog</h2>
-            <p>Check out our most recent post! For all articles, visit our <a href="blog.html">full blog page</a>.</p>
-
-            <div class="blog-posts-list">
-                <a href="tech-news-highlights-this-week.html" class="blog-post-card">
-                    <h3>This Week's Tech Buzz: AI, Phones, and Surprising Shifts!</h3>
-                    <p>A casual look at major AI leaps, new smartphone reveals, and a few quirky tech surprises from the week.</p>
-                    <span class="read-more">Read More →</span>
-                </a>
+            <div id="about-extra">
+                <p>Recognizing the universal need for technological understanding, Tinafi founded Tech House in 2023. What began as a dedicated WhatsApp group quickly expanded its reach to prominent social media platforms like YouTube and Facebook.</p>
+                <p>Tinafi's driving force is a desire to reshape the world through better and more accessible technology. This vision is actively taking shape through ambitious app development projects like T Vision and Music Producer.</p>
             </div>
-            <p style="margin-top: 30px;"><a href="blog.html" class="button">View All Blog Posts</a></p> 
+            <button class="read-more-btn" onclick="toggleAbout()" id="readBtn">Read More</button>
         </section>
 
         <section id="contact">
-            <h2>Get In Touch</h2>
-            <p>Have questions? Need some tech guidance? Reach out to us!</p>
-            <p>Call or WhatsApp us directly at: <a href="tel:+2348057813535">08057813535</a></p>
+            <div style="background: var(--card-bg); padding: 40px; border-radius: 15px; text-align: center;">
+                <h2>Get In Touch</h2>
+                <p>Call or WhatsApp: <a href="tel:+2348057813535" style="color: var(--primary-color); font-weight: bold;">08057813535</a></p>
+            </div>
         </section>
     </main>
 
     <footer>
-        <p>&copy; 2025 Tech House. All rights reserved.</p>
+        <p>&copy; 2026 Tech House. All rights reserved.</p>
     </footer>
 
-    <script src="script.js"></script>
+    <script>
+        // --- THEME SWITCHER LOGIC ---
+        const toggleBtn = document.getElementById('theme-toggle');
+        const body = document.body;
 
+        toggleBtn.addEventListener('click', () => {
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                toggleBtn.innerText = "Switch to Dark";
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                toggleBtn.innerText = "Switch to Light";
+            }
+        });
+
+        // --- READ MORE LOGIC ---
+        function toggleAbout() {
+            const extra = document.getElementById('about-extra');
+            const btn = document.getElementById('readBtn');
+            if (extra.style.display === 'block') {
+                extra.style.display = 'none';
+                btn.innerText = 'Read More';
+            } else {
+                extra.style.display = 'block';
+                btn.innerText = 'Read Less';
+            }
+        }
+    </script>
 </body>
 </html>
