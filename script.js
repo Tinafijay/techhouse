@@ -1,20 +1,20 @@
-// Smooth scrolling for anchor links
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-        e.preventDefault(); // Stop the default jump behavior
+// ADD THIS TO YOUR script.js
+const toggleBtn = document.getElementById('theme-toggle');
 
-        const targetId = this.getAttribute('href'); // Get the ID from the link (e.g., "#about")
-        const targetElement = document.querySelector(targetId); // Find the element with that ID
-
-        if (targetElement) {
-            targetElement.scrollIntoView({
-                behavior: 'smooth' // This is the magic for smooth scrolling!
-            });
-        }
-    });
-});
-
-// NEW: Function to show "Coming Soon!" message for specific apps
-function showComingSoon(appName) {
-    alert(`${appName} is coming soon! Keep an eye out!`);
+// Check if the user already picked a vibe before
+if (localStorage.getItem('theme') === 'dark') {
+    document.body.setAttribute('data-theme', 'dark');
+    if(toggleBtn) toggleBtn.innerText = "Switch to Light";
 }
+
+toggleBtn.addEventListener('click', () => {
+    if (document.body.getAttribute('data-theme') === 'dark') {
+        document.body.removeAttribute('data-theme');
+        localStorage.setItem('theme', 'light');
+        toggleBtn.innerText = "Switch to Dark";
+    } else {
+        document.body.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+        toggleBtn.innerText = "Switch to Light";
+    }
+});
