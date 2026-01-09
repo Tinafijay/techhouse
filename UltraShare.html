@@ -2,102 +2,147 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
     <title>UltraShare Pro - Tech House</title>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
         :root { --primary: #007bff; --bg: #f8fafc; --card: #ffffff; --text: #0f172a; }
         [data-theme="dark"] { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; }
-        
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; transition: 0.3s; }
-        .container { max-width: 500px; margin: auto; background: var(--card); padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        .id-badge { background: #e2e8f0; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 1.2rem; margin: 10px 0; color: var(--primary); }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #e2e8f0; border-radius: 10px; box-sizing: border-box; font-size: 1rem; }
-        button { width: 100%; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .file-section { border: 2px dashed var(--primary); padding: 20px; border-radius: 15px; margin-top: 20px; }
-        #status { font-weight: bold; margin-bottom: 15px; color: #64748b; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 20px; transition: 0.3s; }
+        .container { max-width: 450px; margin: auto; background: var(--card); padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .status-box { padding: 10px; border-radius: 10px; margin-bottom: 20px; font-weight: bold; font-size: 0.9rem; background: #eee; }
+        .id-label { font-size: 0.8rem; opacity: 0.7; margin-bottom: 5px; }
+        .id-val { font-size: 2rem; font-weight: 800; color: var(--primary); letter-spacing: 3px; margin-bottom: 20px; }
+        input { width: 100%; padding: 15px; margin: 10px 0; border: 2px solid #ddd; border-radius: 12px; font-size: 1.1rem; box-sizing: border-box; }
+        button { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; }
+        .file-area { margin-top: 25px; border: 2px dashed #007bff; padding: 20px; border-radius: 15px; background: rgba(0,123,255,0.05); }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1 style="text-align:center">🚀 UltraShare Pro</h1>
-    <div id="status">📡 System: Initializing...</div>
+    <h1 style="text-align:center; margin-top:0;">🚀 UltraShare</h1>
+    
+    <div id="status" class="status-box">System: Starting...</div>
 
-    <div style="text-align:center">
-        <small>Your 6-Digit Share Code:</small>
-        <div id="my-id" class="id-badge">------</div>
+    <div style="text-align:center;">
+        <div class="id-label">YOUR 6-DIGIT CODE</div>
+        <div id="my-id" class="id-val">------</div>
     </div>
 
-    <input type="number" id="peer-id-input" placeholder="Enter Partner's 6-Digit Code">
-    <button id="connect-btn">🔗 Connect to Partner</button>
+    <input type="number" id="peer-id-input" placeholder="Enter Partner's Code" pattern="\d*">
+    <button id="connect-btn">🔗 CONNECT DEVICES</button>
 
-    <div class="file-section">
-        <h3>📤 Share Files</h3>
+    <div class="file-area">
         <input type="file" id="file-input">
-        <button id="send-btn">Send to Partner</button>
-        <p id="transfer-info" style="font-size: 0.8rem; margin-top: 10px;"></p>
+        <button id="send-btn" style="background:#28a745; margin-top:10px;">📤 SEND FILE</button>
     </div>
+    
+    <div id="logs" style="font-size:0.7rem; color:#888; margin-top:15px; text-align:left; max-height:60px; overflow-y:auto;"></div>
 </div>
 
 <script>
-    // Sync Dark Mode with Tech House
+    const log = (msg) => {
+        const div = document.getElementById('logs');
+        div.innerHTML += `<div>> ${msg}</div>`;
+        console.log(msg);
+    };
+
+    // Dark Mode Sync
     if (localStorage.getItem('theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
 
     let peer;
     let conn;
-    
-    // Generate a random 6-digit number
     const shortId = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // PeerJS setup with the 6-digit ID
-    peer = new Peer('TH-' + shortId); 
 
-    peer.on('open', (id) => {
-        document.getElementById('my-id').innerText = shortId;
-        document.getElementById('status').innerText = "📡 System: Ready to share";
-    });
+    try {
+        // We use a specific ID prefix to avoid conflicts
+        peer = new Peer('TECHHOUSE-' + shortId);
 
-    // Handle Incoming
-    peer.on('connection', (incoming) => {
-        conn = incoming;
-        setupEvents();
-    });
+        peer.on('open', (id) => {
+            document.getElementById('my-id').innerText = shortId;
+            document.getElementById('status').innerText = "ONLINE: SHARE YOUR CODE";
+            document.getElementById('status').style.background = "#d4edda";
+            log("Peer Server Connected");
+        });
 
-    // Connect logic
+        peer.on('error', (err) => {
+            document.getElementById('status').innerText = "ERROR: " + err.type;
+            document.getElementById('status').style.background = "#f8d7da";
+            log("Error: " + err.type);
+        });
+
+        // Handle Incoming
+        peer.on('connection', (incoming) => {
+            log("Incoming request...");
+            conn = incoming;
+            setupEvents();
+        });
+    } catch (e) {
+        log("Init crash: " + e.message);
+    }
+
     document.getElementById('connect-btn').onclick = () => {
-        const targetId = document.getElementById('peer-id-input').value;
-        if (targetId.length !== 6) return alert("Please enter a 6-digit code!");
-        conn = peer.connect('TH-' + targetId);
+        const target = document.getElementById('peer-id-input').value;
+        if (target.length !== 6) {
+            alert("Please enter a 6-digit code!");
+            return;
+        }
+        
+        document.getElementById('status').innerText = "CONNECTING...";
+        log("Attempting to link to " + target);
+        
+        // Connecting to the partner
+        conn = peer.connect('TECHHOUSE-' + target, {
+            reliable: true
+        });
+        
         setupEvents();
     };
 
     function setupEvents() {
+        if (!conn) return;
+
         conn.on('open', () => {
-            document.getElementById('status').innerText = "✅ Connected to Partner!";
-            document.getElementById('status').style.color = "#10b981";
+            document.getElementById('status').innerText = "✅ CONNECTED!";
+            document.getElementById('status').style.background = "#28a745";
+            document.getElementById('status').style.color = "white";
+            log("Handshake successful!");
         });
 
         conn.on('data', (data) => {
             if (data.file) {
+                log("Receiving: " + data.name);
                 const blob = new Blob([data.file], { type: data.mime });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = data.name;
+                document.body.appendChild(a);
                 a.click();
-                document.getElementById('transfer-info').innerText = "✅ Received: " + data.name;
+                document.body.removeChild(a);
             }
+        });
+
+        conn.on('close', () => {
+            document.getElementById('status').innerText = "DISCONNECTED";
+            log("Connection closed");
         });
     }
 
-    // Send logic optimized for mobile Chrome
     document.getElementById('send-btn').onclick = () => {
         const file = document.getElementById('file-input').files[0];
-        if (!file || !conn || !conn.open) return alert("Select a file and ensure you are connected!");
+        
+        if (!conn || !conn.open) {
+            alert("NOT CONNECTED! Please link devices first.");
+            return;
+        }
+        if (!file) {
+            alert("SELECT A FILE FIRST!");
+            return;
+        }
 
-        document.getElementById('transfer-info').innerText = "⏳ Sending " + file.name + "...";
-
+        log("Sending " + file.name);
         const reader = new FileReader();
         reader.onload = (e) => {
             conn.send({
@@ -105,10 +150,17 @@
                 name: file.name,
                 mime: file.type
             });
-            document.getElementById('transfer-info').innerText = "✅ Sent successfully!";
+            log("Sent!");
+            alert("File sent successfully!");
         };
         reader.readAsArrayBuffer(file);
     };
+
+    // Keepalive for iOS 16
+    setInterval(() => {
+        if (conn && conn.open) conn.send({ type: 'keepalive' });
+    }, 3000);
+
 </script>
 </body>
 </html>
