@@ -2,142 +2,270 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Food Poisoning Detector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Tech House | Poisoning Detector</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    body {
-      font-family: "Segoe UI", sans-serif;
-      text-align: center;
-      background-color: #f4f7f9;
-      color: #222;
-      margin: 0;
-      padding: 20px;
-    }
-    h1 {
-      color: #006d3a;
-      margin-bottom: 10px;
-    }
-    #camera-container {
-      position: relative;
-      display: inline-block;
-      margin-top: 20px;
-    }
-    video {
-      width: 85%;
-      max-width: 600px;
-      border-radius: 15px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    }
-    #scan-button {
-      margin-top: 20px;
-      padding: 12px 25px;
-      background-color: #28a745;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      transition: 0.3s;
-    }
-    #scan-button:hover {
-      background-color: #218838;
-    }
-    #result {
-      margin-top: 25px;
-      padding: 15px;
-      border-radius: 10px;
-      background: #fff;
-      width: 80%;
-      max-width: 600px;
-      margin-left: auto;
-      margin-right: auto;
-      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
-      font-size: 17px;
-      line-height: 1.5;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
+    :root { --primary: #28a745; --bg: #f4f7f9; --card: #ffffff; --text: #222; --border: #cbd5e1; --inactive: #64748b; }
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: "Segoe UI", sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+    .app-container { display: flex; flex-direction: column; height: 100vh; }
+    .tab-pane { display: none; height: 100%; overflow-y: auto; padding-bottom: 110px; box-sizing: border-box; }
+    .tab-pane.active { display: block; }
+    .viewport { width: 90%; max-width: 500px; aspect-ratio: 1; margin: 15px auto; background: #000; border-radius: 20px; overflow: hidden; border: 4px solid var(--primary); position: relative; }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    .main-btn { width: 85%; padding: 18px; background: var(--primary); color: #fff; border: none; border-radius: 12px; font-size: 1.2rem; font-weight: 800; display: block; margin: 10px auto; cursor: pointer; }
+    .tab-bar { height: 85px; background: var(--card); border-top: 1px solid var(--border); display: flex; position: fixed; bottom: 0; width: 100%; z-index: 100; }
+    .tab-btn { flex: 1; background: none; border: none; color: var(--inactive); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .tab-btn.active { color: var(--primary); font-weight: bold; }
+    .card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin: 15px; position: relative; }
+    .options-menu { display: none; position: absolute; right: 10px; top: 40px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 10; width: 130px; }
+    .options-menu button { display: block; width: 100%; padding: 12px; text-align: left; background: none; border: none; color: var(--text); cursor: pointer; border-bottom: 1px solid var(--border); }
+    #tour-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 20px; }
+    .btn-row { display: flex; gap: 10px; width: 90%; justify-content: center; }
   </style>
 </head>
 <body>
-  <h1>Food Poisoning Detector</h1>
-  <p>Point your camera at the food and tap <strong>Scan Food</strong> to analyze.</p>
 
-  <div id="camera-container">
-    <video id="video" autoplay playsinline></video>
+  <div id="tour-overlay" role="dialog" aria-modal="true">
+    <h1 id="tour-title">Tech House Tour</h1>
+    <p id="tour-desc" style="font-size: 1.3rem; margin: 20px 0; min-height: 80px;">Welcome to your poisoning detector.</p>
+    <div class="btn-row">
+       <button class="main-btn" style="width:120px; background:#007bff;" onclick="startAutoSlideshow()">Play All</button>
+       <button class="main-btn" style="width:100px;" onclick="manualTourNext()">Next</button>
+       <button class="main-btn" style="width:100px; background:#666;" onclick="stopTour()">Skip</button>
+    </div>
   </div>
 
-  <button id="scan-button">Scan Food</button>
-  <div id="result"></div>
+  <div class="app-container">
+    <div class="tab-content" style="flex:1;">
+      
+      <div id="panel-scan" class="tab-pane active">
+        <div style="padding: 20px; text-align: center;">
+          <h2 style="color:var(--primary)">Food Analysis</h2>
+          <div class="viewport"><video id="cam-feed" playsinline></video></div>
+          <button id="scan-btn" class="main-btn" onclick="processScan()" aria-label="Analyze food sample button">ANALYZE SAMPLE</button>
+          <button class="main-btn" style="background:#444; width:50%; padding:10px;" onclick="toggleFlash()">Flashlight</button>
+          <div id="status-text" role="status" style="padding:10px; font-weight:bold;">Ready</div>
+        </div>
+      </div>
+
+      <div id="panel-history" class="tab-pane">
+        <div style="padding: 20px;">
+          <div style="display:flex; justify-content:space-between;">
+            <h2>Recent Reports</h2>
+            <button onclick="downloadAll()" style="color:var(--primary); background:none; border:none; font-weight:bold;">Export All</button>
+          </div>
+          <div id="history-list"></div>
+          <button onclick="clearAll()" style="color:red; background:none; border:none; width:100%; padding:20px;">Wipe All History</button>
+        </div>
+      </div>
+
+      <div id="panel-settings" class="tab-pane">
+        <div style="padding: 20px;">
+          <h2>Settings</h2>
+          <div class="card">
+            <label>Gemini API Key</label>
+            <input type="password" id="api-key" style="width:100%; padding:10px; margin-top:5px;">
+            <button onclick="saveConfig()" class="main-btn" style="font-size:1rem;">Save & Test Voice</button>
+          </div>
+          <button onclick="startTour()" class="main-btn" style="background:#444;">Replay Guided Tour</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('panel-scan', this)"><span>🛡️</span><br>DETECT</button>
+      <button class="tab-btn" onclick="switchTab('panel-history', this)"><span>📜</span><br>HISTORY</button>
+      <button class="tab-btn" onclick="switchTab('panel-settings', this)"><span>⚙️</span><br>SETTINGS</button>
+    </nav>
+  </div>
 
   <script>
-    const video = document.getElementById("video");
-    const scanButton = document.getElementById("scan-button");
-    const resultDiv = document.getElementById("result");
+    let camStream = null, tourIndex = 0, isAuto = false, flashOn = false;
+    let currentAddr = "Fetching address...";
 
-    // Start camera viewfinder
-    async function startCamera() {
+    const tourSteps = [
+      { title: "The Detector", desc: "This is the primary screen. Use the Analyze Food Sample button to detect spoilage.", panel: "panel-scan" },
+      { title: "Safety History", desc: "Your reports are saved here with your street address and time for reporting.", panel: "panel-history" },
+      { title: "App Settings", desc: "You can update your API key here or restart this tour anytime.", panel: "panel-settings" }
+    ];
+
+    window.onload = () => {
+      document.getElementById('api-key').value = localStorage.getItem('th_key') || "";
+      initCam();
+      loadHistory();
+      updateLocation();
+      if(!localStorage.getItem('th_first')) startTour();
+    };
+
+    async function initCam() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        document.getElementById('cam-feed').srcObject = camStream;
+        document.getElementById('cam-feed').play();
+      } catch (e) { console.error("Cam access denied"); }
+    }
+
+    function toggleFlash() {
+      const track = camStream.getVideoTracks()[0];
+      flashOn = !flashOn;
+      track.applyConstraints({ advanced: [{ torch: flashOn }] });
+    }
+
+    function updateLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async p => {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${p.coords.latitude}&lon=${p.coords.longitude}`);
+            const data = await res.json();
+            currentAddr = data.display_name || "Unknown Address";
+          } catch(e) { currentAddr = "GPS Coordinates Saved"; }
         });
-        video.srcObject = stream;
-      } catch (err) {
-        resultDiv.textContent = "Error accessing camera: " + err.message;
-      }
-    }
-    startCamera();
-
-    // Vercel secure function URL (UPDATED LINK)
-    const BACKEND_URL = "https://techhouse-ashen.vercel.app/api/analyze-food";
-
-    // Capture current camera frame
-    function captureFrame() {
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0);
-      return canvas.toDataURL("image/png").split(",")[1]; // base64
-    }
-
-    // Parse Gemini response to show Safe / Not Safe + reason
-    function parseGeminiResponse(data) {
-      try {
-        // Gemini returns something like data.contents[0].parts[0].text
-        const text = data.contents?.[0]?.parts?.[0]?.text || JSON.stringify(data);
-        return text;
-      } catch {
-        return JSON.stringify(data);
       }
     }
 
-    // Handle Scan button click
-    scanButton.addEventListener("click", async () => {
-      resultDiv.textContent = "Analyzing food sample...";
-      const imageBase64 = captureFrame();
-
+    async function speak(text, callback) {
+      const key = localStorage.getItem('th_key');
+      if(!key) { 
+        const u = new SpeechSynthesisUtterance(text);
+        u.onend = callback; window.speechSynthesis.speak(u);
+        return;
+      }
       try {
-        const response = await fetch(BACKEND_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64 })
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } })
         });
+        const data = await res.json();
+        const base64 = data.candidates[0].content.parts[0].inlineData.data;
+        const audio = new Audio(URL.createObjectURL(createWav(base64)));
+        if(callback) audio.onended = callback;
+        audio.play();
+      } catch (e) { if(callback) callback(); }
+    }
 
-        if (!response.ok) {
-          throw new Error("Network response was not ok: " + response.status);
-        }
+    function createWav(b64) {
+      const s = atob(b64); const b = new ArrayBuffer(44 + s.length); const v = new DataView(b);
+      const w = (o, str) => { for(let i=0; i<str.length; i++) v.setUint8(o+i, str.charCodeAt(i)); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + s.length, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 24000, true); v.setUint32(28, 48000, true);
+      v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, s.length, true);
+      for(let i=0; i<s.length; i++) v.setUint8(44+i, s.charCodeAt(i));
+      return new Blob([b], { type: 'audio/wav' });
+    }
 
-        const data = await response.json();
-        const verdict = parseGeminiResponse(data);
-        resultDiv.textContent = "Analysis Result:\n" + verdict;
+    function startTour() {
+      tourIndex = 0; isAuto = false;
+      document.getElementById('tour-overlay').style.display = 'flex';
+      updateTourUI();
+    }
 
-      } catch (err) {
-        console.error("Error:", err);
-        resultDiv.textContent = "Error fetching analysis: " + err.message;
-      }
-    });
+    function startAutoSlideshow() {
+      isAuto = true;
+      runAutoStep();
+    }
+
+    function runAutoStep() {
+      if(!isAuto || tourIndex >= tourSteps.length) { stopTour(); return; }
+      updateTourUI();
+      const step = tourSteps[tourIndex];
+      speak(step.title + ". " + step.desc, () => {
+        setTimeout(() => { tourIndex++; runAutoStep(); }, 1500);
+      });
+    }
+
+    function manualTourNext() {
+      isAuto = false;
+      tourIndex++;
+      if(tourIndex >= tourSteps.length) stopTour(); else updateTourUI();
+    }
+
+    function updateTourUI() {
+      const step = tourSteps[tourIndex];
+      document.getElementById('tour-title').innerText = step.title;
+      document.getElementById('tour-desc').innerText = step.desc;
+      switchTab(step.panel, document.querySelectorAll('.tab-btn')[tourIndex]);
+    }
+
+    function stopTour() {
+      document.getElementById('tour-overlay').style.display = 'none';
+      localStorage.setItem('th_first', 'done');
+      switchTab('panel-scan', document.querySelectorAll('.tab-btn')[0]);
+    }
+
+    async function processScan() {
+      const key = localStorage.getItem('th_key');
+      if(!key) { speak("Add API key first."); return; }
+      document.getElementById('status-text').innerText = "Analyzing...";
+      
+      const cvs = document.createElement("canvas");
+      const video = document.getElementById('cam-feed');
+      cvs.width = video.videoWidth; cvs.height = video.videoHeight;
+      cvs.getContext("2d").drawImage(video, 0, 0);
+      const b64 = cvs.toDataURL("image/jpeg").split(",")[1];
+
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: "Analyze food safety. 1 sentence verdict." }, { inline_data: { mime_type: "image/jpeg", data: b64 } }] }] })
+        });
+        const data = await res.json();
+        const txt = data.candidates[0].content.parts[0].text;
+        document.getElementById('status-text').innerText = txt;
+        speak(txt);
+        saveHist(txt);
+      } catch (e) { speak("Scan failed."); }
+    }
+
+    function saveHist(txt) {
+      const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
+      h.unshift({ txt, addr: currentAddr, date: new Date().toLocaleString() });
+      localStorage.setItem('th_hist', JSON.stringify(h.slice(0, 20)));
+      loadHistory();
+      updateLocation(); // Refresh for next time
+    }
+
+    function loadHistory() {
+      const list = document.getElementById('history-list');
+      const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
+      list.innerHTML = h.map((item, idx) => `
+        <div class="card">
+          <div style="display:flex; justify-content:space-between;">
+            <div style="flex:1"><strong>${item.txt}</strong><br><small>${item.date}</small><br><small style="color:var(--primary)">${item.addr}</small></div>
+            <button onclick="toggleMenu(${idx})" style="background:none; border:none; font-size:1.5rem;">⋮</button>
+            <div id="menu-${idx}" class="options-menu">
+               <button onclick="copyItem(${idx})">Copy</button>
+               <button onclick="deleteItem(${idx})" style="color:red">Delete</button>
+            </div>
+          </div>
+        </div>`).join('') || "<p style='text-align:center'>No scans yet.</p>";
+    }
+
+    function toggleMenu(idx) {
+      const m = document.getElementById(`menu-${idx}`);
+      m.style.display = m.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function deleteItem(idx) {
+      const h = JSON.parse(localStorage.getItem('th_hist'));
+      h.splice(idx, 1);
+      localStorage.setItem('th_hist', JSON.stringify(h));
+      loadHistory();
+    }
+
+    function clearAll() { if(confirm("Clear all?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
+
+    function switchTab(id, el) {
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      if(el) el.classList.add('active');
+    }
+
+    function saveConfig() {
+      localStorage.setItem('th_key', document.getElementById('api-key').value.trim());
+      speak("Connection test. Your Google speech engine is now active.");
+    }
   </script>
 </body>
 </html>
