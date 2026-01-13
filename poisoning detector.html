@@ -13,7 +13,7 @@
 
     <div id="tour-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; text-align:center; padding:30px;">
         <h1 id="tour-title" style="color:var(--primary); margin-bottom:10px;">Welcome, Detective</h1>
-        <p id="tour-desc" style="font-size:1.1rem; line-height:1.5; margin-bottom:30px;">Choose how you'd like to explore the Tech House interface.</p>
+        <p id="tour-desc" style="font-size:1.1rem; line-height:1.5; margin-bottom:30px;"></p>
         
         <div id="tour-controls" style="width:100%; max-width:300px;">
             <button class="main-btn" onclick="startTour(true)">PLAY AUDIO TOUR</button>
@@ -46,11 +46,17 @@
                 <div style="padding: 20px;">
                     <h2 style="color:var(--primary)">Settings</h2>
                     <div class="card">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><span>Vista Chime</span><input type="checkbox" id="sound-toggle" checked></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><span>Haptics</span><input type="checkbox" id="vibe-toggle" checked></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                            <span>Vista Chime</span>
+                            <input type="checkbox" id="sound-toggle" checked onchange="updateToggles()">
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                            <span>Haptic Feedback</span>
+                            <input type="checkbox" id="haptic-toggle" checked onchange="updateToggles()">
+                        </div>
                         <hr>
                         <label>Interface Theme</label>
-                        <select class="input-field" onchange="updateTheme(this.value)">
+                        <select id="theme-select" class="input-field" onchange="updateTheme(this.value)">
                             <option value="light">Tech House Light</option>
                             <option value="dark">Tech House Dark</option>
                         </select>

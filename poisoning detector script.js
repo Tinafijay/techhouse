@@ -5,29 +5,26 @@ let tourStep = 0;
 let isAutoplay = false;
 
 const tourSteps = [
-    { tab: 'panel-scan', title: "1. Precision Scanner", desc: "This is your main hub. Align any food sample in the viewport and tap Analyze. Our Gemini 3.0 Flash brain will check for toxins." },
-    { tab: 'panel-history', title: "2. Secure Records", desc: "Every scan is saved here with a GPS coordinate. From here, you can generate PDF reports or share findings with authorities." },
-    { tab: 'panel-settings', title: "3. System Setup", desc: "In settings, you can paste your API key, toggle the Windows Vista chime, and switch to our Midnight Tech House theme." }
+    { tab: 'panel-scan', title: "1. Precision Scanner", desc: "Align any food sample in the viewport and tap Analyze. Our Gemini 3.0 Flash brain will detect toxins instantly." },
+    { tab: 'panel-history', title: "2. Secure Records", desc: "Every scan is saved with GPS coordinates. You can generate PDF reports or share findings from here." },
+    { tab: 'panel-settings', title: "3. System Setup", desc: "Paste your API key, toggle the Vista chime, or enable haptic feedback for a tactile experience." }
 ];
 
 window.onload = () => {
-    // Restore Saved Data
     document.getElementById('api-key').value = localStorage.getItem('th_key') || "";
-    document.getElementById('sound-toggle').checked = localStorage.getItem('th_sound') !== 'false';
-    document.getElementById('vibe-toggle').checked = localStorage.getItem('th_vibe') !== 'false';
+    document.getElementById('sound-toggle').checked = localStorage.getItem('th_h_sound') !== 'false';
+    document.getElementById('haptic-toggle').checked = localStorage.getItem('th_haptic') !== 'false';
     updateTheme(localStorage.getItem('th_theme') || 'light');
 
     initCam();
     loadHistory();
     startGPS();
 
-    // Trigger Tour for first-timers
     if (!localStorage.getItem('tour_done')) {
         setTimeout(() => { document.getElementById('tour-overlay').style.display = 'flex'; }, 1000);
     }
 };
 
-// --- THE INTUITIVE TOUR ENGINE ---
 function startTour(auto = false) {
     isAutoplay = auto;
     tourStep = 0;
@@ -38,16 +35,12 @@ function runTourStep() {
     const step = tourSteps[tourStep];
     const btn = document.getElementById('tour-next-btn');
     
-    // Switch the UI tab to match the explanation
     switchTab(step.tab, document.getElementById('nav-' + step.tab.split('-')[1]));
-    
     document.getElementById('tour-title').innerText = step.title;
     document.getElementById('tour-desc').innerText = step.desc;
     
-    // Change button text on last step
     btn.innerText = (tourStep === tourSteps.length - 1) ? "FINISH & START" : "NEXT STEP";
 
-    // Speech Engine
     window.speechSynthesis.cancel();
     const msg = new SpeechSynthesisUtterance(step.desc);
     msg.rate = 0.95;
@@ -77,21 +70,19 @@ function closeTour() {
     window.speechSynthesis.cancel();
     document.getElementById('tour-overlay').style.display = 'none';
     localStorage.setItem('tour_done', 'true');
-    // Snap back to Scanner Home
     switchTab('panel-scan', document.getElementById('nav-scan'));
 }
 
-// --- CORE LOGIC (GEMINI & VISTA SOUND) ---
 async function processScan() {
     const key = localStorage.getItem('th_key');
     if(!key) return alert("Please enter API Key in Settings!");
 
     const chime = document.getElementById('vista-chime');
-    chime.load(); // Prime audio engine
+    chime.load(); 
     if(navigator.vibrate) navigator.vibrate(50);
 
     const status = document.getElementById('status-text');
-    status.innerText = "Gemini 3.0 Flash Analyzing...";
+    status.innerText = "Analyzing...";
 
     try {
         const video = document.getElementById('cam-feed');
@@ -104,7 +95,7 @@ async function processScan() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ contents: [{ parts: [
-                { text: "Food safety: Detect visible poisoning/spoilage. 1-sentence verdict." },
+                { text: "Detect food poisoning/toxins. One sentence verdict." },
                 { inline_data: { mime_type: "image/jpeg", data: b64 } }
             ]}]})
         });
@@ -115,11 +106,14 @@ async function processScan() {
         if(document.getElementById('sound-toggle').checked) {
             chime.currentTime = 0; chime.play().catch(() => {});
         }
+        if(document.getElementById('haptic-toggle').checked && navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]);
+        }
         
         status.innerText = verdict;
         speak(verdict);
         saveReport(verdict);
-    } catch (e) { status.innerText = "Connection Error."; }
+    } catch (e) { status.innerText = "Scan Failed."; }
 }
 
 function startGPS() {
@@ -155,7 +149,7 @@ function loadHistory() {
                 <option value="pdf">Save PDF</option>
                 <option value="delete">Delete</option>
             </select>
-        </div>`).join('') || "<p style='text-align:center'>History Empty.</p>";
+        </div>`).join('') || "<p style='text-align:center'>No scans yet.</p>";
 }
 
 function handleAction(el, i) {
@@ -184,6 +178,12 @@ function switchTab(id, el) {
 function updateTheme(val) {
     document.body.setAttribute('data-theme', val);
     localStorage.setItem('th_theme', val);
+    if(document.getElementById('theme-select')) document.getElementById('theme-select').value = val;
+}
+
+function updateToggles() {
+    localStorage.setItem('th_h_sound', document.getElementById('sound-toggle').checked);
+    localStorage.setItem('th_haptic', document.getElementById('haptic-toggle').checked);
 }
 
 function saveKey() {
