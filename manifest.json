@@ -1,0 +1,16 @@
+
+{
+  "name": "Tech House Poisoning Detector",
+  "short_name": "TH Detector",
+  "start_url": "poisoning detector.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#006d3a",
+  "icons": [
+    {
+      "src": "Tech House logo.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
