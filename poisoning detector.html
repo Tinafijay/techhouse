@@ -4,13 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Tech House | Poisoning Detector</title>
-    
     <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="TH Detector">
     <link rel="apple-touch-icon" href="Tech House logo.jpg">
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="poisoning detector styles.css">
 </head>
@@ -18,25 +14,27 @@
 
     <audio id="vista-chime" src="vista_startup.mp3" preload="auto"></audio>
 
-    <div id="tour-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.96); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; text-align:center; padding:30px;">
-        <img src="Tech House logo.jpg" style="width:80px; border-radius:12px; margin-bottom:20px;">
-        <h1 id="tour-title" style="color:var(--primary); margin-bottom:10px;">Welcome, Detective</h1>
-        <p id="tour-desc" style="font-size:1.1rem; line-height:1.5; margin-bottom:30px;"></p>
-        <div style="width:100%; max-width:300px;">
-            <button class="main-btn" onclick="startTour(true)">PLAY AUDIO TOUR</button>
-            <button id="tour-next-btn" class="secondary-btn" style="width:100%; color:white; border-color:white; margin-top:10px;" onclick="manualNext()">MANUAL NEXT</button>
-            <button class="secondary-btn" style="width:100%; border:none; margin-top:20px; font-size:0.8rem; opacity:0.6;" onclick="closeTour()">SKIP TOUR</button>
+    <div id="tour-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.98); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; color:white; text-align:center; padding:30px;">
+        <img src="Tech House logo.jpg" style="width:70px; border-radius:10px; margin-bottom:15px;">
+        <h1 id="tour-title" style="color:var(--primary);"></h1>
+        <p id="tour-desc" style="font-size:1.1rem; margin-bottom:25px;"></p>
+        
+        <div id="tour-controls" style="width:100%; max-width:300px;">
+            <button id="tour-primary-btn" class="main-btn" onclick="nextTourStep()">NEXT</button>
+            <button id="tour-audio-btn" class="secondary-btn" style="width:100%; color:white; border-color:white; margin-top:10px;" onclick="startTour(true)">PLAY AUDIO TOUR</button>
+            <button class="secondary-btn" style="width:100%; border:none; margin-top:15px; font-size:0.8rem; opacity:0.6;" onclick="closeTour()">SKIP</button>
         </div>
     </div>
 
     <div class="app-container">
-        <div class="tab-content" style="flex:1;">
+        <div class="tab-content" style="flex:1; position:relative;">
+            
             <div id="panel-scan" class="tab-pane active">
                 <div style="padding: 20px; text-align: center;">
                     <h2 style="color:var(--primary)">Scanner</h2>
                     <div class="viewport"><video id="cam-feed" autoplay playsinline muted></video></div>
                     <button class="main-btn" onclick="processScan()">ANALYZE SAMPLE</button>
-                    <div id="status-text" style="font-weight:bold; padding:10px;">System Online</div>
+                    <div id="status-text" style="font-weight:bold; padding:10px;">Ready</div>
                 </div>
             </div>
 
@@ -52,7 +50,8 @@
                 <div style="padding: 20px;">
                     <h2 style="color:var(--primary)">Settings</h2>
                     <div class="card">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><span>Vista Chime</span><input type="checkbox" id="sound-toggle" checked onchange="updateToggles()"></div>
+                        <button id="pwa-install-btn" class="main-btn" style="background:#3b82f6; margin-bottom:20px; display:none;">INSTALL APP</button>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Vista Chime</span><input type="checkbox" id="sound-toggle" checked onchange="updateToggles()"></div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><span>Haptic Feedback</span><input type="checkbox" id="haptic-toggle" checked onchange="updateToggles()"></div>
                         <hr>
                         <label>Interface Theme</label>
@@ -61,8 +60,9 @@
                             <option value="dark">Tech House Dark</option>
                             <option value="midnight">Midnight Pro</option>
                         </select>
-                        <label>API Key</label>
-                        <input type="password" id="api-key" class="input-field" placeholder="Paste Gemini Key">
+                        <label>Gemini API Key</label>
+                        <p style="font-size:0.75rem; opacity:0.7; margin:0;">Get one in 60s at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary)">Google AI Studio</a></p>
+                        <input type="password" id="api-key" class="input-field" placeholder="Paste Key Here">
                         <button class="main-btn" onclick="saveKey()">Save Config</button>
                     </div>
                 </div>
@@ -77,10 +77,5 @@
     </div>
 
     <script src="poisoning detector script.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(err => console.log(err));
-        }
-    </script>
 </body>
 </html>
