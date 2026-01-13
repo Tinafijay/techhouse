@@ -6,48 +6,53 @@
   <title>Tech House | Poisoning Detector</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    /* Tech House Brand Vibes */
     :root { --primary: #006d3a; --bg: #f4f7f9; --card: #ffffff; --text: #222; --border: #cbd5e1; }
     [data-theme="dark"] { --primary: #006d3a; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --border: #333; }
-    [data-theme="midnight"] { --primary: #0a84ff; --bg: #010101; --card: #161b22; --text: #f0f6fc; --border: #30363d; }
-    [data-theme="rose"] { --primary: #ff375f; --bg: #fff0f3; --card: #ffffff; --text: #1d1d1f; --border: #ffccd5; }
-
-    body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; transition: 0.4s; }
+    [data-theme="midnight"] { --primary: #3b82f6; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155; }
+    
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: "Segoe UI", sans-serif; background: var(--bg); color: var(--text); overflow: hidden; transition: 0.3s; }
     .app-container { display: flex; flex-direction: column; height: 100vh; }
-
-    /* The Smooth Slide Animation */
-    .tab-pane { 
-      display: none; height: 100%; overflow-y: auto; padding-bottom: 110px; box-sizing: border-box;
-      animation: slideUp 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); 
-    }
-    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-    .tab-pane.active { display: block; }
-
-    .viewport { width: 90%; max-width: 500px; aspect-ratio: 1; margin: 15px auto; background: #000; border-radius: 24px; overflow: hidden; border: 4px solid var(--primary); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
+    
+    /* Animation for Tab Switching */
+    .tab-pane { display: none; height: 100%; overflow-y: auto; padding-bottom: 110px; box-sizing: border-box; }
+    .tab-pane.active { display: block; animation: slideIn 0.3s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+    
+    /* Camera Viewport */
+    .viewport { width: 90%; max-width: 500px; aspect-ratio: 1; margin: 15px auto; background: #000; border-radius: 24px; overflow: hidden; border: 4px solid var(--primary); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
     video { width: 100%; height: 100%; object-fit: cover; }
+    
+    /* Buttons */
+    .main-btn { width: 85%; padding: 18px; background: var(--primary); color: #fff; border: none; border-radius: 16px; font-size: 1rem; font-weight: bold; display: block; margin: 10px auto; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .main-btn:active { transform: scale(0.96); opacity: 0.9; }
+    .secondary-btn { padding: 10px 20px; background: transparent; color: var(--primary); border: 2px solid var(--primary); border-radius: 10px; font-weight: bold; cursor: pointer; }
 
-    .main-btn { width: 85%; padding: 18px; background: var(--primary); color: #fff; border: none; border-radius: 16px; font-size: 1rem; font-weight: bold; display: block; margin: 10px auto; cursor: pointer; transition: 0.2s; text-align: center; }
-    .main-btn:active { transform: scale(0.95); }
+    /* Navigation */
+    .tab-bar { height: 85px; background: var(--card); border-top: 1px solid var(--border); display: flex; position: fixed; bottom: 0; width: 100%; z-index: 1000; }
+    .tab-btn { flex: 1; background: none; border: none; color: #888; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.75rem; transition: 0.2s; }
+    .tab-btn.active { color: var(--primary); font-weight: bold; transform: translateY(-2px); }
+    .tab-btn span { font-size: 1.5rem; margin-bottom: 4px; }
 
-    .tab-bar { height: 85px; background: var(--card); border-top: 1px solid var(--border); display: flex; position: fixed; bottom: 0; width: 100%; z-index: 100; }
-    .tab-btn { flex: 1; background: none; border: none; color: #888; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.7rem; }
-    .tab-btn.active { color: var(--primary); transform: translateY(-3px); transition: 0.3s; }
-    .tab-btn span { font-size: 1.4rem; margin-bottom: 4px; }
+    /* Cards & Inputs */
+    .card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 16px; margin: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .input-field { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-sizing: border-box; font-size: 1rem; }
+    .action-select { width: 100%; background: var(--bg); color: var(--primary); border: 1px solid var(--primary); padding: 12px; border-radius: 10px; margin-top: 10px; font-weight: bold; cursor: pointer; }
 
-    .card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 16px; margin: 15px; }
-    .input-field { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1rem; }
-
-    .switch { position: relative; display: inline-block; width: 46px; height: 24px; }
+    /* Settings Toggles */
+    .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .switch { position: relative; width: 48px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
     .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
     input:checked + .slider { background-color: var(--primary); }
-    input:checked + .slider:before { transform: translateX(22px); }
-
-    .action-select { width: 100%; background: var(--bg); color: var(--primary); border: 1px solid var(--primary); padding: 8px; border-radius: 8px; margin-top: 10px; font-weight: bold; }
+    input:checked + .slider:before { transform: translateX(24px); }
+    
+    /* Loading Spinner */
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-right: 10px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
-<body>
+<body data-theme="light">
 
   <audio id="vista-chime" src="vista_startup.mp3" preload="auto"></audio>
 
@@ -58,7 +63,7 @@
         <div style="padding: 20px; text-align: center;">
           <h2 style="color:var(--primary)">Precision Scanner</h2>
           <div class="viewport"><video id="cam-feed" autoplay playsinline muted></video></div>
-          <button class="main-btn" id="scan-trigger" onclick="processScan()">ANALYZE SAMPLE</button>
+          <button id="scan-btn" class="main-btn" onclick="processScan()">ANALYZE SAMPLE</button>
           <div id="status-text" style="padding:15px; font-weight:bold; opacity:0.8;">Awaiting visual data...</div>
         </div>
       </div>
@@ -66,9 +71,9 @@
       <div id="panel-history" class="tab-pane">
         <div style="padding: 20px;">
           <h2 style="color:var(--primary)">History Reports</h2>
-          <div style="display:flex; gap:10px; margin-bottom:15px;">
-            <button class="main-btn" style="flex:3; margin:0;" onclick="generateFullReportPDF()">Export PDF</button>
-            <button class="main-btn" style="flex:1; margin:0; background:#9b1c1c;" onclick="clearAll()">Wipe</button>
+          <div style="display:flex; gap:10px; margin-bottom:20px;">
+            <button class="secondary-btn" style="flex:3;" onclick="downloadFullPDF()">Export All (PDF)</button>
+            <button class="secondary-btn" style="flex:1; border-color:red; color:red;" onclick="clearHistory()">Wipe</button>
           </div>
           <div id="history-list"></div>
         </div>
@@ -78,38 +83,31 @@
         <div style="padding: 20px;">
           <h2 style="color:var(--primary)">Settings</h2>
           <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-              <span>Vista Startup Sound</span>
-              <label class="switch">
-                <input type="checkbox" id="sound-toggle" checked onchange="saveCheckboxes()">
-                <span class="slider"></span>
-              </label>
+            <div class="row">
+              <span>System Audio Feedback</span>
+              <label class="switch"><input type="checkbox" id="sound-toggle" checked onchange="updateToggles()"><span class="slider"></span></label>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <div class="row">
               <span>Haptic Vibe</span>
-              <label class="switch">
-                <input type="checkbox" id="vibrate-toggle" checked onchange="saveCheckboxes()">
-                <span class="slider"></span>
-              </label>
+              <label class="switch"><input type="checkbox" id="vibe-toggle" checked onchange="updateToggles()"><span class="slider"></span></label>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-              <span>Location Tracking</span>
-              <label class="switch">
-                <input type="checkbox" id="location-toggle" checked onchange="toggleLocation()">
-                <span class="slider"></span>
-              </label>
+            <div class="row">
+              <span>Track Location</span>
+              <label class="switch"><input type="checkbox" id="loc-toggle" checked onchange="toggleGPS()"><span class="slider"></span></label>
             </div>
+            
             <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
-            <label>Theme</label>
-            <select id="theme-select" class="input-field" onchange="updateTheme()">
+            
+            <label>Interface Theme</label>
+            <select id="theme-select" class="input-field" onchange="updateTheme(this.value)">
               <option value="light">Tech House Light</option>
               <option value="dark">Tech House Dark</option>
               <option value="midnight">Midnight Pro</option>
-              <option value="rose">Rose Gold</option>
             </select>
+
             <label>Gemini API Key</label>
-            <input type="password" id="api-key" class="input-field" placeholder="Enter key here">
-            <button class="main-btn" onclick="saveSettings()">Save Configuration</button>
+            <input type="password" id="api-key" class="input-field" placeholder="Paste key here">
+            <button class="main-btn" onclick="saveKey()">SAVE CONFIGURATION</button>
           </div>
         </div>
       </div>
@@ -124,44 +122,35 @@
 
   <script>
     const { jsPDF } = window.jspdf;
-    let camStream = null, lastCoords = { lat: 0, lng: 0 };
+    let camStream = null, lastCoords = { lat: "Unknown", lng: "Unknown" };
 
     window.onload = () => {
+      // Restore Settings
       document.getElementById('api-key').value = localStorage.getItem('th_key') || "";
-      document.getElementById('theme-select').value = localStorage.getItem('th_theme') || 'light';
       document.getElementById('sound-toggle').checked = localStorage.getItem('th_sound') !== 'false';
-      document.getElementById('vibrate-toggle').checked = localStorage.getItem('th_vibrate') !== 'false';
+      document.getElementById('vibe-toggle').checked = localStorage.getItem('th_vibe') !== 'false';
       const locOn = localStorage.getItem('th_loc') !== 'false';
-      document.getElementById('location-toggle').checked = locOn;
+      document.getElementById('loc-toggle').checked = locOn;
       
-      updateTheme();
-      initCam(); 
+      const savedTheme = localStorage.getItem('th_theme') || 'light';
+      document.getElementById('theme-select').value = savedTheme;
+      updateTheme(savedTheme);
+
+      initCam();
       loadHistory();
-      if(locOn) startGps();
+      if(locOn) startGPS();
     };
 
-    function saveCheckboxes() {
-      localStorage.setItem('th_sound', document.getElementById('sound-toggle').checked);
-      localStorage.setItem('th_vibrate', document.getElementById('vibrate-toggle').checked);
-    }
-
-    function toggleLocation() {
-      const isOn = document.getElementById('location-toggle').checked;
-      localStorage.setItem('th_loc', isOn);
-      if(isOn) startGps();
-      else lastCoords = { lat: 0, lng: 0 };
-    }
-
-    function startGps() {
+    function startGPS() {
       navigator.geolocation.watchPosition(p => {
-        lastCoords = { lat: p.coords.latitude, lng: p.coords.longitude };
+        lastCoords = { lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5) };
       }, null, { enableHighAccuracy: true });
     }
 
-    function updateTheme() {
-      const t = document.getElementById('theme-select').value;
-      document.documentElement.setAttribute('data-theme', t);
-      localStorage.setItem('th_theme', t);
+    function toggleGPS() {
+      const isOn = document.getElementById('loc-toggle').checked;
+      localStorage.setItem('th_loc', isOn);
+      if(isOn) startGPS(); else lastCoords = { lat: "Unknown", lng: "Unknown" };
     }
 
     async function initCam() {
@@ -169,75 +158,73 @@
         if (camStream) camStream.getTracks().forEach(t => t.stop());
         camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         document.getElementById('cam-feed').srcObject = camStream;
-      } catch (e) {
-        document.getElementById('status-text').innerText = "Camera error: Enable permissions.";
-      }
+      } catch (e) { document.getElementById('status-text').innerText = "Camera Access Required."; }
     }
 
     async function processScan() {
       const key = localStorage.getItem('th_key');
-      if(!key) { alert("Add your Gemini API key in Settings first!"); return; }
+      if(!key) return alert("Please enter your API Key in Settings!");
+
+      // UNLOCK SOUND & VIBE (Browser Requirement)
+      const chime = document.getElementById('vista-chime');
+      chime.load(); // Prime the audio
+      if(navigator.vibrate) navigator.vibrate(50);
+
+      const btn = document.getElementById('scan-btn');
+      const status = document.getElementById('status-text');
+      const originalText = btn.innerText;
       
-      const statusText = document.getElementById('status-text');
-      statusText.innerText = "Processing visual data...";
-      
+      btn.innerHTML = `<span class="spinner"></span> ANALYZING...`;
+      btn.disabled = true;
+      status.innerText = "Processing visual data...";
+
       try {
         const video = document.getElementById('cam-feed');
         const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0);
-        const base64Image = canvas.toDataURL("image/jpeg").split(",")[1];
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        const b64 = canvas.toDataURL("image/jpeg").split(",")[1];
 
-        // Ensure we are using the correct endpoint and payload structure
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-        
-        const response = await fetch(apiUrl, {
+        // API CALL TO GEMINI 3.0 FLASH PREVIEW
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: "Food safety screening: Is there visible spoilage, toxins, or contamination? 1-sentence verdict." },
-                { inline_data: { mime_type: "image/jpeg", data: base64Image } }
-              ]
-            }]
-          })
+          body: JSON.stringify({ contents: [{ parts: [
+            { text: "Food safety scan: Identify visible toxins or spoilage. Output 1-sentence concise verdict." },
+            { inline_data: { mime_type: "image/jpeg", data: b64 } }
+          ]}]})
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("Gemini Error:", errorData);
-          throw new Error("API Refusal");
-        }
-
-        const data = await response.json();
+        const data = await res.json();
+        if(data.error) throw new Error(data.error.message);
+        
         const verdict = data.candidates[0].content.parts[0].text;
 
-        // Vibe Triggers: Sound & Vibrate
-        if (document.getElementById('vibrate-toggle').checked && navigator.vibrate) navigator.vibrate(200);
-        if (document.getElementById('sound-toggle').checked) {
-          const chime = document.getElementById('vista-chime');
-          chime.currentTime = 0;
-          chime.play().catch(() => console.log("Sound interaction needed"));
+        // Sound & Haptic Trigger
+        if(document.getElementById('sound-toggle').checked) {
+          chime.currentTime = 0; chime.play().catch(() => {});
+        }
+        if(document.getElementById('vibe-toggle').checked && navigator.vibrate) {
+          navigator.vibrate([100, 50, 100]);
         }
 
-        statusText.innerText = verdict;
+        status.innerText = verdict;
         speak(verdict);
         saveReport(verdict);
-      } catch (err) {
-        console.error(err);
-        statusText.innerText = "Scan Failed. Check key/connection.";
+      } catch (e) {
+        status.innerText = "Scan Failed: Check connection/key.";
+        console.error(e);
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
       }
     }
 
     function saveReport(txt) {
       const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
-      const locOn = document.getElementById('location-toggle').checked;
       h.unshift({ 
         id: Date.now(), txt, date: new Date().toLocaleString(),
-        lat: locOn ? lastCoords.lat : null, lng: locOn ? lastCoords.lng : null
+        lat: lastCoords.lat, lng: lastCoords.lng 
       });
       localStorage.setItem('th_hist', JSON.stringify(h.slice(0, 50)));
       loadHistory();
@@ -248,73 +235,80 @@
       const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
       list.innerHTML = h.map((item, i) => `
         <div class="card">
-          <small style="opacity:0.6">${item.date}</small>
+          <small style="opacity:0.6">${item.date} | 📍 ${item.lat}, ${item.lng}</small>
           <p><strong>${item.txt}</strong></p>
           <select class="action-select" onchange="handleAction(this, ${i})">
-            <option value="">Actions...</option>
-            <option value="share">Share Report</option>
+            <option value="">Choose Action...</option>
+            <option value="share">Share to Socials</option>
             <option value="pdf">Download PDF</option>
-            ${item.lat ? '<option value="map">View Map</option>' : ''}
-            <option value="delete">Delete</option>
+            <option value="map">View Location</option>
+            <option value="delete">Delete Report</option>
           </select>
-        </div>`).join('') || "<p style='text-align:center'>History is clear.</p>";
+        </div>`).join('') || "<p style='text-align:center'>No history available.</p>";
     }
 
     function handleAction(el, i) {
       const h = JSON.parse(localStorage.getItem('th_hist'));
       const item = h[i];
-      if(el.value === 'share') {
-        if(navigator.share) navigator.share({ title: 'Safety Alert', text: item.txt });
+      if(el.value === 'share' && navigator.share) {
+        navigator.share({ title: 'Safety Alert', text: `${item.txt}\nLocation: ${item.lat}, ${item.lng}` });
       } else if(el.value === 'pdf') {
         const doc = new jsPDF();
-        doc.text("Tech House Safety Report", 20, 20);
-        doc.text(`Result: ${item.txt}`, 20, 40, { maxWidth: 160 });
-        doc.save(`Report_${item.id}.pdf`);
-      } else if(el.value === 'map') {
+        doc.setFont("helvetica", "bold"); doc.text("TECH HOUSE SAFETY REPORT", 20, 20);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        doc.text(`Generated: ${item.date}`, 20, 30);
+        doc.text(`Coordinates: ${item.lat}, ${item.lng}`, 20, 37);
+        doc.line(20, 42, 190, 42);
+        doc.setFontSize(12); doc.text("Diagnostic Result:", 20, 52);
+        doc.text(doc.splitTextToSize(item.txt, 170), 20, 60);
+        doc.save(`TechHouse_Report_${item.id}.pdf`);
+      } else if(el.value === 'map' && item.lat !== "Unknown") {
         window.open(`https://www.google.com/maps?q=${item.lat},${item.lng}`, '_blank');
       } else if(el.value === 'delete') {
-        h.splice(i, 1);
-        localStorage.setItem('th_hist', JSON.stringify(h));
-        loadHistory();
+        h.splice(i, 1); localStorage.setItem('th_hist', JSON.stringify(h)); loadHistory();
       }
       el.value = "";
     }
 
-    function generateFullReportPDF() {
+    function downloadFullPDF() {
       const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
-      if(!h.length) return alert("Nothing to export!");
+      if(!h.length) return alert("No results to export!");
       const doc = new jsPDF();
-      doc.text("Full Safety History", 20, 20);
-      let y = 30;
+      doc.text("Tech House - Full Scan History", 20, 20);
+      let y = 35;
       h.forEach(item => {
-        if(y > 280) { doc.addPage(); y = 20; }
-        doc.setFontSize(10);
-        doc.text(`${item.date}: ${item.txt}`, 20, y, { maxWidth: 170 });
-        y += 12;
+        if(y > 270) { doc.addPage(); y = 20; }
+        doc.setFontSize(10); doc.text(`${item.date} [${item.lat}, ${item.lng}]`, 20, y);
+        y += 7; doc.setFontSize(11);
+        const lines = doc.splitTextToSize(item.txt, 170);
+        doc.text(lines, 20, y); y += (lines.length * 6) + 10;
       });
-      doc.save("TechHouse_History.pdf");
+      doc.save("TechHouse_History_Export.pdf");
     }
 
     function switchTab(id, el) {
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
-      el.classList.add('active');
+      document.getElementById(id).classList.add('active'); el.classList.add('active');
     }
 
-    function saveSettings() {
+    function updateTheme(val) {
+      document.body.setAttribute('data-theme', val);
+      localStorage.setItem('th_theme', val);
+    }
+
+    function updateToggles() {
+      localStorage.setItem('th_sound', document.getElementById('sound-toggle').checked);
+      localStorage.setItem('th_vibe', document.getElementById('vibe-toggle').checked);
+    }
+
+    function saveKey() {
       localStorage.setItem('th_key', document.getElementById('api-key').value.trim());
-      alert("Settings saved!");
+      alert("Configuration Saved!");
     }
 
-    function speak(t) { 
-      window.speechSynthesis.cancel(); 
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); 
-    }
-    
-    function clearAll() { 
-      if(confirm("Wipe everything?")) { localStorage.removeItem('th_hist'); loadHistory(); } 
-    }
+    function speak(t) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
+    function clearHistory() { if(confirm("Wipe all results?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
   </script>
 </body>
 </html>
