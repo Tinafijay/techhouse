@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tech House Memory-Safe Trimmer</title>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.10.1/dist/ffmpeg.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #121212; color: #fff; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .container { border: 1px solid #333; padding: 20px; border-radius: 8px; background: #1e1e1e; }
+        .status-area { background: #000; color: #0f0; padding: 15px; font-family: monospace; border: 1px solid #444; margin-bottom: 20px; height: 50px; overflow: hidden; }
+        button { padding: 15px; width: 100%; font-size: 1.2rem; font-weight: bold; cursor: pointer; background: #2e7d32; color: white; border: none; border-radius: 4px; margin-top: 10px; }
+        button:disabled { background: #555; cursor: wait; }
+        video { width: 100%; background: black; margin-top: 10px; max-height: 50vh; }
+        .sr-only { position: absolute; left: -9999px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Tech House Memory-Safe Trimmer</h1>
+    <div id="aria-announce" class="sr-only" aria-live="assertive"></div>
+    
+    <div id="status-log" class="status-area">System Idle.</div>
+
+    <input type="file" id="uploader" accept="video/*" aria-label="Select Video">
+    
+    <video id="player" controls></video>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
+        <div style="background:#333; padding:10px;">Start (S): <span id="start-time">0:00</span></div>
+        <div style="background:#333; padding:10px;">End (E): <span id="end-time">0:00</span></div>
+    </div>
+
+    <button id="export-btn" disabled>EXPORT VIDEO (Press X)</button>
+</div>
+
+<script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+
+    const statusLog = document.getElementById('status-log');
+    const uploader = document.getElementById('uploader');
+    const player = document.getElementById('player');
+    const exportBtn = document.getElementById('export-btn');
+    const startDisplay = document.getElementById('start-time');
+    const endDisplay = document.getElementById('end-time');
+    const announcer = document.getElementById('aria-announce');
+
+    let startTime = -1;
+    let endTime = -1;
+    let videoFile = null;
+
+    // --- Audio Feedback ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function beep(f=440, d=0.1) {
+        const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination);
+        o.start(); g.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime+d);
+        o.stop(audioCtx.currentTime+d);
+    }
+
+    function log(msg, speak=false) {
+        statusLog.innerText = msg;
+        if(speak) {
+            announcer.innerText = "";
+            setTimeout(() => announcer.innerText = msg, 50);
+        }
+    }
+
+    function fmt(s) {
+        const m = Math.floor(s/60);
+        const sec = Math.floor(s%60);
+        return `${m}m ${sec}s`;
+    }
+
+    (async () => {
+        try {
+            log("Loading Engine...", true);
+            await ffmpeg.load();
+            log("Engine Ready. Please Upload.", true);
+        } catch(e) {
+            log("Engine Fail. Refresh or check server.", true);
+        }
+    })();
+
+    uploader.onchange = (e) => {
+        videoFile = e.target.files[0];
+        if(!videoFile) return;
+        player.src = URL.createObjectURL(videoFile);
+        exportBtn.disabled = false;
+        log(`Loaded ${videoFile.name}. Press S for Start, E for End.`, true);
+        beep(600);
+    };
+
+    window.addEventListener('keydown', (e) => {
+        const k = e.key.toLowerCase();
+        if (k === ' ' || e.code === 'Space') {
+            e.preventDefault();
+            player.paused ? player.play() : player.pause();
+        }
+        if (k === 'arrowright') {
+            e.preventDefault();
+            player.currentTime += (e.shiftKey ? 1 : 10);
+            log(fmt(player.currentTime));
+        }
+        if (k === 'arrowleft') {
+            e.preventDefault();
+            player.currentTime -= (e.shiftKey ? 1 : 10);
+            log(fmt(player.currentTime));
+        }
+        if (k === 's') {
+            startTime = player.currentTime;
+            startDisplay.innerText = fmt(startTime);
+            log("Start Set: " + fmt(startTime), true);
+            beep(800);
+        }
+        if (k === 'e') {
+            endTime = player.currentTime;
+            endDisplay.innerText = fmt(endTime);
+            log("End Set: " + fmt(endTime), true);
+            beep(800);
+        }
+        if (k === 'x') {
+            if(!exportBtn.disabled) runSmartExport();
+        }
+    });
+
+    async function runSmartExport() {
+        if(startTime < 0 || endTime < 0 || endTime <= startTime) {
+            return log("Check your start/end points.", true);
+        }
+        
+        exportBtn.disabled = true;
+        log("Mounting file from disk...", true);
+        beep(400, 0.3);
+
+        try {
+            // MAGIC FIX: WORKERFS
+            // Instead of writing to memory, we MOUNT the file system.
+            // This reads the file directly from your disk as needed.
+            ffmpeg.FS('mount', 'WORKERFS', { files: [videoFile] }, '/data');
+
+            log("Processing... Please wait.", true);
+
+            // Command uses input from the mounted folder '/data'
+            // We force a fast copy.
+            await ffmpeg.run(
+                '-ss', startTime.toString(),
+                '-to', endTime.toString(),
+                '-i', '/data/' + videoFile.name, 
+                '-c', 'copy',
+                'output.mp4'
+            );
+
+            log("Saving...", true);
+            const data = ffmpeg.FS('readFile', 'output.mp4');
+            const url = URL.createObjectURL(new Blob([data.buffer], {type: 'video/mp4'}));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `trimmed_${videoFile.name}`;
+            a.click();
+
+            // Cleanup
+            ffmpeg.FS('unmount', '/data');
+            ffmpeg.FS('unlink', 'output.mp4');
+            
+            log("Done! File downloaded.", true);
+            beep(1000, 0.5);
+            exportBtn.disabled = false;
+
+        } catch(err) {
+            console.error(err);
+            log("Error: " + err.message, true);
+            // Attempt Unmount in case of fail
+            try { ffmpeg.FS('unmount', '/data'); } catch(e){}
+            exportBtn.disabled = false;
+        }
+    }
+
+    exportBtn.onclick = runSmartExport;
+
+</script>
+</body>
+</html>
