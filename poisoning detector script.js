@@ -1,48 +1,97 @@
 const { jsPDF } = window.jspdf;
-let camStream = null, flashOn = false, lastCoords = { lat: "Unknown", lng: "Unknown" }, tourStep = 0;
+let camStream = null;
+let lastCoords = { lat: "Unknown", lng: "Unknown" };
+let tourStep = 0;
+let isAutoplay = false;
 
 const tourSteps = [
-    { tab: 'panel-scan', title: "Scanner", desc: "Scan food samples. Results appear here." },
-    { tab: 'panel-settings', title: "API Setup", desc: "Enter your Gemini 3.0 key here." },
-    { tab: 'panel-history', title: "Records", desc: "View GPS locations and export PDFs." }
+    { tab: 'panel-scan', title: "1. Precision Scanner", desc: "This is your main hub. Align any food sample in the viewport and tap Analyze. Our Gemini 3.0 Flash brain will check for toxins." },
+    { tab: 'panel-history', title: "2. Secure Records", desc: "Every scan is saved here with a GPS coordinate. From here, you can generate PDF reports or share findings with authorities." },
+    { tab: 'panel-settings', title: "3. System Setup", desc: "In settings, you can paste your API key, toggle the Windows Vista chime, and switch to our Midnight Tech House theme." }
 ];
 
 window.onload = () => {
+    // Restore Saved Data
     document.getElementById('api-key').value = localStorage.getItem('th_key') || "";
     document.getElementById('sound-toggle').checked = localStorage.getItem('th_sound') !== 'false';
     document.getElementById('vibe-toggle').checked = localStorage.getItem('th_vibe') !== 'false';
-    const savedTheme = localStorage.getItem('th_theme') || 'light';
-    updateTheme(savedTheme);
+    updateTheme(localStorage.getItem('th_theme') || 'light');
+
     initCam();
     loadHistory();
     startGPS();
-    if(!localStorage.getItem('tour_done')) startTour();
+
+    // Trigger Tour for first-timers
+    if (!localStorage.getItem('tour_done')) {
+        setTimeout(() => { document.getElementById('tour-overlay').style.display = 'flex'; }, 1000);
+    }
 };
 
-function startGPS() {
-    navigator.geolocation.watchPosition(p => {
-        lastCoords = { lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5) };
-    }, null, { enableHighAccuracy: true });
+// --- THE INTUITIVE TOUR ENGINE ---
+function startTour(auto = false) {
+    isAutoplay = auto;
+    tourStep = 0;
+    runTourStep();
 }
 
-async function initCam() {
-    try {
-        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        document.getElementById('cam-feed').srcObject = camStream;
-    } catch (e) { document.getElementById('status-text').innerText = "Cam Access Required."; }
+function runTourStep() {
+    const step = tourSteps[tourStep];
+    const btn = document.getElementById('tour-next-btn');
+    
+    // Switch the UI tab to match the explanation
+    switchTab(step.tab, document.getElementById('nav-' + step.tab.split('-')[1]));
+    
+    document.getElementById('tour-title').innerText = step.title;
+    document.getElementById('tour-desc').innerText = step.desc;
+    
+    // Change button text on last step
+    btn.innerText = (tourStep === tourSteps.length - 1) ? "FINISH & START" : "NEXT STEP";
+
+    // Speech Engine
+    window.speechSynthesis.cancel();
+    const msg = new SpeechSynthesisUtterance(step.desc);
+    msg.rate = 0.95;
+
+    if (isAutoplay) {
+        msg.onend = () => {
+            if (tourStep < tourSteps.length - 1) {
+                setTimeout(() => { tourStep++; runTourStep(); }, 1200);
+            } else {
+                setTimeout(closeTour, 1500);
+            }
+        };
+    }
+    window.speechSynthesis.speak(msg);
 }
 
+function manualNext() {
+    if (tourStep < tourSteps.length - 1) {
+        tourStep++;
+        runTourStep();
+    } else {
+        closeTour();
+    }
+}
+
+function closeTour() {
+    window.speechSynthesis.cancel();
+    document.getElementById('tour-overlay').style.display = 'none';
+    localStorage.setItem('tour_done', 'true');
+    // Snap back to Scanner Home
+    switchTab('panel-scan', document.getElementById('nav-scan'));
+}
+
+// --- CORE LOGIC (GEMINI & VISTA SOUND) ---
 async function processScan() {
     const key = localStorage.getItem('th_key');
-    if(!key) return alert("Add API key in Settings!");
+    if(!key) return alert("Please enter API Key in Settings!");
 
-    // UNLOCK AUDIO/VIBE
     const chime = document.getElementById('vista-chime');
-    chime.load();
+    chime.load(); // Prime audio engine
     if(navigator.vibrate) navigator.vibrate(50);
 
     const status = document.getElementById('status-text');
-    status.innerText = "Analyzing with Gemini 3.0...";
+    status.innerText = "Gemini 3.0 Flash Analyzing...";
 
     try {
         const video = document.getElementById('cam-feed');
@@ -55,7 +104,7 @@ async function processScan() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ contents: [{ parts: [
-                { text: "Food safety scan: Detect visible toxins/spoilage. 1-sentence concise verdict." },
+                { text: "Food safety: Detect visible poisoning/spoilage. 1-sentence verdict." },
                 { inline_data: { mime_type: "image/jpeg", data: b64 } }
             ]}]})
         });
@@ -66,12 +115,24 @@ async function processScan() {
         if(document.getElementById('sound-toggle').checked) {
             chime.currentTime = 0; chime.play().catch(() => {});
         }
-        if(document.getElementById('vibe-toggle').checked && navigator.vibrate) navigator.vibrate(100);
-
+        
         status.innerText = verdict;
         speak(verdict);
         saveReport(verdict);
-    } catch (e) { status.innerText = "Scan Failed."; }
+    } catch (e) { status.innerText = "Connection Error."; }
+}
+
+function startGPS() {
+    navigator.geolocation.watchPosition(p => {
+        lastCoords = { lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5) };
+    }, null, { enableHighAccuracy: true });
+}
+
+async function initCam() {
+    try {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        document.getElementById('cam-feed').srcObject = camStream;
+    } catch (e) { document.getElementById('status-text').innerText = "Cam Error."; }
 }
 
 function saveReport(txt) {
@@ -88,49 +149,29 @@ function loadHistory() {
         <div class="card">
             <small>${item.date} | 📍 ${item.lat}, ${item.lng}</small>
             <p><strong>${item.txt}</strong></p>
-            <select class="input-field" style="color:var(--primary); font-weight:bold;" onchange="handleAction(this, ${i})">
-                <option value="">Options...</option>
-                <option value="share">Share Report</option>
-                <option value="pdf">Download PDF</option>
-                <option value="map">View Map</option>
+            <select class="input-field" style="color:var(--primary); font-weight:bold" onchange="handleAction(this, ${i})">
+                <option value="">Actions...</option>
+                <option value="share">Share</option>
+                <option value="pdf">Save PDF</option>
                 <option value="delete">Delete</option>
             </select>
-        </div>`).join('') || "<p style='text-align:center'>No scans yet.</p>";
+        </div>`).join('') || "<p style='text-align:center'>History Empty.</p>";
 }
 
 function handleAction(el, i) {
     const h = JSON.parse(localStorage.getItem('th_hist'));
     const item = h[i];
-    const mapUrl = `http://google.com/maps?q=${item.lat},${item.lng}`;
-
     if(el.value === 'share' && navigator.share) {
-        navigator.share({ title: 'Safety Report', text: `${item.txt} Loc: ${mapUrl}` });
+        navigator.share({ title: 'Safety Report', text: item.txt });
     } else if(el.value === 'pdf') {
         const doc = new jsPDF();
-        doc.text("TECH HOUSE SAFETY REPORT", 20, 20);
-        doc.text(`Date: ${item.date}`, 20, 30);
-        doc.text(`Location: ${item.lat}, ${item.lng}`, 20, 37);
-        doc.text(doc.splitTextToSize(item.txt, 170), 20, 50);
+        doc.text("SAFETY REPORT", 20, 20);
+        doc.text(`Result: ${item.txt}`, 20, 40, {maxWidth: 170});
         doc.save(`Report_${item.id}.pdf`);
-    } else if(el.value === 'map') {
-        window.open(mapUrl, '_blank');
     } else if(el.value === 'delete') {
         h.splice(i, 1); localStorage.setItem('th_hist', JSON.stringify(h)); loadHistory();
     }
     el.value = "";
-}
-
-function downloadFullPDF() {
-    const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
-    const doc = new jsPDF();
-    doc.text("Tech House - Full History", 20, 20);
-    let y = 35;
-    h.forEach(item => {
-        if(y > 270) { doc.addPage(); y = 20; }
-        doc.text(`${item.date} [${item.lat}, ${item.lng}]: ${item.txt}`, 20, y, { maxWidth: 170 });
-        y += 15;
-    });
-    doc.save("Full_History.pdf");
 }
 
 function switchTab(id, el) {
@@ -143,23 +184,12 @@ function switchTab(id, el) {
 function updateTheme(val) {
     document.body.setAttribute('data-theme', val);
     localStorage.setItem('th_theme', val);
-    const select = document.getElementById('theme-select');
-    if(select) select.value = val;
 }
 
 function saveKey() {
     localStorage.setItem('th_key', document.getElementById('api-key').value.trim());
-    speak("Configuration Saved.");
+    alert("Saved!");
 }
 
-function startTour() { tourStep = 0; document.getElementById('tour-overlay').style.display = 'flex'; updateTour(); }
-function nextTourStep() { tourStep++; if(tourStep < tourSteps.length) updateTour(); else closeTour(); }
-function updateTour() {
-    const s = tourSteps[tourStep];
-    document.getElementById('tour-title').innerText = s.title;
-    document.getElementById('tour-desc').innerText = s.desc;
-    switchTab(s.tab, document.getElementById('nav-' + s.tab.split('-')[1]));
-}
-function closeTour() { document.getElementById('tour-overlay').style.display = 'none'; localStorage.setItem('tour_done', 'true'); }
 function speak(t) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
 function clearHistory() { if(confirm("Wipe all?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
