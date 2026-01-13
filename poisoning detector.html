@@ -6,7 +6,7 @@
   <title>Tech House | Poisoning Detector</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    /* Tech House Vibes */
+    /* Tech House Brand Vibes */
     :root { --primary: #006d3a; --bg: #f4f7f9; --card: #ffffff; --text: #222; --border: #cbd5e1; }
     [data-theme="dark"] { --primary: #006d3a; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --border: #333; }
     [data-theme="midnight"] { --primary: #0a84ff; --bg: #010101; --card: #161b22; --text: #f0f6fc; --border: #30363d; }
@@ -15,7 +15,7 @@
     body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; transition: 0.4s; }
     .app-container { display: flex; flex-direction: column; height: 100vh; }
 
-    /* Smooth Transitions */
+    /* The Smooth Slide Animation */
     .tab-pane { 
       display: none; height: 100%; overflow-y: auto; padding-bottom: 110px; box-sizing: border-box;
       animation: slideUp 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); 
@@ -34,11 +34,8 @@
     .tab-btn.active { color: var(--primary); transform: translateY(-3px); transition: 0.3s; }
     .tab-btn span { font-size: 1.4rem; margin-bottom: 4px; }
 
-    .card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 16px; margin: 15px; position: relative; }
+    .card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 16px; margin: 15px; }
     .input-field { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1rem; }
-
-    /* Action Dropdown */
-    .action-select { width: 100%; background: var(--bg); color: var(--primary); border: 1px solid var(--primary); padding: 8px; border-radius: 8px; margin-top: 10px; font-weight: bold; cursor: pointer; }
 
     .switch { position: relative; display: inline-block; width: 46px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
@@ -46,6 +43,8 @@
     .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
     input:checked + .slider { background-color: var(--primary); }
     input:checked + .slider:before { transform: translateX(22px); }
+
+    .action-select { width: 100%; background: var(--bg); color: var(--primary); border: 1px solid var(--primary); padding: 8px; border-radius: 8px; margin-top: 10px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -58,9 +57,9 @@
       <div id="panel-scan" class="tab-pane active">
         <div style="padding: 20px; text-align: center;">
           <h2 style="color:var(--primary)">Precision Scanner</h2>
-          <div class="viewport"><video id="cam-feed" playsinline></video></div>
-          <button class="main-btn" onclick="processScan()">ANALYZE SAMPLE</button>
-          <div id="status-text" style="padding:15px; font-weight:bold; opacity: 0.7;">Ready...</div>
+          <div class="viewport"><video id="cam-feed" autoplay playsinline muted></video></div>
+          <button class="main-btn" id="scan-trigger" onclick="processScan()">ANALYZE SAMPLE</button>
+          <div id="status-text" style="padding:15px; font-weight:bold; opacity:0.8;">Awaiting visual data...</div>
         </div>
       </div>
 
@@ -68,7 +67,7 @@
         <div style="padding: 20px;">
           <h2 style="color:var(--primary)">History Reports</h2>
           <div style="display:flex; gap:10px; margin-bottom:15px;">
-            <button class="main-btn" style="flex:3; margin:0;" onclick="generateFullReportPDF()">Export History (PDF)</button>
+            <button class="main-btn" style="flex:3; margin:0;" onclick="generateFullReportPDF()">Export PDF</button>
             <button class="main-btn" style="flex:1; margin:0; background:#9b1c1c;" onclick="clearAll()">Wipe</button>
           </div>
           <div id="history-list"></div>
@@ -86,36 +85,31 @@
                 <span class="slider"></span>
               </label>
             </div>
-            
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-              <span>Haptic Feedback (Vibrate)</span>
+              <span>Haptic Vibe</span>
               <label class="switch">
                 <input type="checkbox" id="vibrate-toggle" checked onchange="saveCheckboxes()">
                 <span class="slider"></span>
               </label>
             </div>
-
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-              <span>Save Location (GPS)</span>
+              <span>Location Tracking</span>
               <label class="switch">
                 <input type="checkbox" id="location-toggle" checked onchange="toggleLocation()">
                 <span class="slider"></span>
               </label>
             </div>
-
             <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
-
-            <label>Interface Theme</label>
+            <label>Theme</label>
             <select id="theme-select" class="input-field" onchange="updateTheme()">
               <option value="light">Tech House Light</option>
               <option value="dark">Tech House Dark</option>
               <option value="midnight">Midnight Pro</option>
               <option value="rose">Rose Gold</option>
             </select>
-
             <label>Gemini API Key</label>
-            <input type="password" id="api-key" class="input-field" placeholder="Paste Key Here">
-            <button class="main-btn" onclick="saveSettings()">Apply Changes</button>
+            <input type="password" id="api-key" class="input-field" placeholder="Enter key here">
+            <button class="main-btn" onclick="saveSettings()">Save Configuration</button>
           </div>
         </div>
       </div>
@@ -170,42 +164,72 @@
       localStorage.setItem('th_theme', t);
     }
 
+    async function initCam() {
+      try {
+        if (camStream) camStream.getTracks().forEach(t => t.stop());
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        document.getElementById('cam-feed').srcObject = camStream;
+      } catch (e) {
+        document.getElementById('status-text').innerText = "Camera error: Enable permissions.";
+      }
+    }
+
     async function processScan() {
       const key = localStorage.getItem('th_key');
-      if(!key) return alert("Please set your API key first!");
+      if(!key) { alert("Add your Gemini API key in Settings first!"); return; }
       
-      document.getElementById('status-text').innerText = "Analyzing sample...";
-      const video = document.getElementById('cam-feed');
-      const cvs = document.createElement("canvas");
-      cvs.width = video.videoWidth; cvs.height = video.videoHeight;
-      cvs.getContext("2d").drawImage(video, 0, 0);
-      const b64 = cvs.toDataURL("image/jpeg").split(",")[1];
-
+      const statusText = document.getElementById('status-text');
+      statusText.innerText = "Processing visual data...";
+      
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
-          method: "POST", headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ contents: [{ parts: [
-            { text: "Food safety scan. Check for spoilage, contamination, or visual toxins. One sentence verdict." },
-            { inline_data: { mime_type: "image/jpeg", data: b64 } }
-          ]}]})
-        });
-        const data = await res.json();
-        const verdict = data.candidates[0].content.parts[0].text;
-        
-        // Haptics
-        if(document.getElementById('vibrate-toggle').checked && navigator.vibrate) navigator.vibrate(200);
+        const video = document.getElementById('cam-feed');
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0);
+        const base64Image = canvas.toDataURL("image/jpeg").split(",")[1];
 
-        // Sound
-        if(document.getElementById('sound-toggle').checked) {
-          const chime = document.getElementById('vista-chime');
-          chime.currentTime = 0;
-          chime.play().catch(() => {});
+        // Ensure we are using the correct endpoint and payload structure
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+        
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: "Food safety screening: Is there visible spoilage, toxins, or contamination? 1-sentence verdict." },
+                { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+              ]
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Gemini Error:", errorData);
+          throw new Error("API Refusal");
         }
 
-        document.getElementById('status-text').innerText = verdict;
+        const data = await response.json();
+        const verdict = data.candidates[0].content.parts[0].text;
+
+        // Vibe Triggers: Sound & Vibrate
+        if (document.getElementById('vibrate-toggle').checked && navigator.vibrate) navigator.vibrate(200);
+        if (document.getElementById('sound-toggle').checked) {
+          const chime = document.getElementById('vista-chime');
+          chime.currentTime = 0;
+          chime.play().catch(() => console.log("Sound interaction needed"));
+        }
+
+        statusText.innerText = verdict;
         speak(verdict);
         saveReport(verdict);
-      } catch (e) { document.getElementById('status-text').innerText = "Scan Failed."; }
+      } catch (err) {
+        console.error(err);
+        statusText.innerText = "Scan Failed. Check key/connection.";
+      }
     }
 
     function saveReport(txt) {
@@ -227,53 +251,48 @@
           <small style="opacity:0.6">${item.date}</small>
           <p><strong>${item.txt}</strong></p>
           <select class="action-select" onchange="handleAction(this, ${i})">
-            <option value="">Options...</option>
-            <option value="share">Share to Socials</option>
-            <option value="pdf">Save as PDF</option>
-            ${item.lat ? '<option value="map">View Location</option>' : ''}
-            <option value="delete" style="color:red;">Delete Record</option>
+            <option value="">Actions...</option>
+            <option value="share">Share Report</option>
+            <option value="pdf">Download PDF</option>
+            ${item.lat ? '<option value="map">View Map</option>' : ''}
+            <option value="delete">Delete</option>
           </select>
-        </div>`).join('') || "<p style='text-align:center'>No scan history found.</p>";
+        </div>`).join('') || "<p style='text-align:center'>History is clear.</p>";
     }
 
     function handleAction(el, i) {
       const h = JSON.parse(localStorage.getItem('th_hist'));
       const item = h[i];
-      const val = el.value;
-
-      if(val === 'share') {
-        const shareData = { title: 'Safety Report', text: `Tech House Scan: ${item.txt} at ${item.date}`, url: window.location.href };
-        if(navigator.share) navigator.share(shareData);
-        else alert("Sharing not supported on this browser.");
-      } else if(val === 'pdf') {
+      if(el.value === 'share') {
+        if(navigator.share) navigator.share({ title: 'Safety Alert', text: item.txt });
+      } else if(el.value === 'pdf') {
         const doc = new jsPDF();
-        doc.text("Tech House Single Report", 20, 20);
-        doc.setFontSize(10);
-        doc.text(`Date: ${item.date}`, 20, 30);
-        doc.text(`Verdict: ${item.txt}`, 20, 40, { maxWidth: 160 });
+        doc.text("Tech House Safety Report", 20, 20);
+        doc.text(`Result: ${item.txt}`, 20, 40, { maxWidth: 160 });
         doc.save(`Report_${item.id}.pdf`);
-      } else if(val === 'map') {
+      } else if(el.value === 'map') {
         window.open(`https://www.google.com/maps?q=${item.lat},${item.lng}`, '_blank');
-      } else if(val === 'delete') {
+      } else if(el.value === 'delete') {
         h.splice(i, 1);
         localStorage.setItem('th_hist', JSON.stringify(h));
         loadHistory();
       }
-      el.value = ""; // Reset select
+      el.value = "";
     }
 
     function generateFullReportPDF() {
       const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
       if(!h.length) return alert("Nothing to export!");
       const doc = new jsPDF();
-      doc.text("Tech House Safety History", 20, 20);
-      let y = 35;
-      h.forEach((item) => {
-        if(y > 270) { doc.addPage(); y = 20; }
+      doc.text("Full Safety History", 20, 20);
+      let y = 30;
+      h.forEach(item => {
+        if(y > 280) { doc.addPage(); y = 20; }
+        doc.setFontSize(10);
         doc.text(`${item.date}: ${item.txt}`, 20, y, { maxWidth: 170 });
-        y += 15;
+        y += 12;
       });
-      doc.save("Full_History.pdf");
+      doc.save("TechHouse_History.pdf");
     }
 
     function switchTab(id, el) {
@@ -285,18 +304,17 @@
 
     function saveSettings() {
       localStorage.setItem('th_key', document.getElementById('api-key').value.trim());
-      alert("Settings updated!");
+      alert("Settings saved!");
     }
 
-    async function initCam() {
-      try {
-        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        document.getElementById('cam-feed').srcObject = camStream;
-      } catch (e) { document.getElementById('status-text').innerText = "Cam Access Denied."; }
+    function speak(t) { 
+      window.speechSynthesis.cancel(); 
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); 
     }
-
-    function speak(t) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
-    function clearAll() { if(confirm("Wipe all data?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
+    
+    function clearAll() { 
+      if(confirm("Wipe everything?")) { localStorage.removeItem('th_hist'); loadHistory(); } 
+    }
   </script>
 </body>
 </html>
