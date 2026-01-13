@@ -6,266 +6,297 @@
   <title>Tech House | Poisoning Detector</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    :root { --primary: #28a745; --bg: #f4f7f9; --card: #ffffff; --text: #222; --border: #cbd5e1; --inactive: #64748b; }
-    body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: "Segoe UI", sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+    /* Tech House Vibes */
+    :root { --primary: #006d3a; --bg: #f4f7f9; --card: #ffffff; --text: #222; --border: #cbd5e1; }
+    [data-theme="dark"] { --primary: #006d3a; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --border: #333; }
+    [data-theme="midnight"] { --primary: #0a84ff; --bg: #010101; --card: #161b22; --text: #f0f6fc; --border: #30363d; }
+    [data-theme="rose"] { --primary: #ff375f; --bg: #fff0f3; --card: #ffffff; --text: #1d1d1f; --border: #ffccd5; }
+
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; transition: 0.4s; }
     .app-container { display: flex; flex-direction: column; height: 100vh; }
-    .tab-pane { display: none; height: 100%; overflow-y: auto; padding-bottom: 110px; box-sizing: border-box; }
+
+    /* Smooth Transitions */
+    .tab-pane { 
+      display: none; height: 100%; overflow-y: auto; padding-bottom: 110px; box-sizing: border-box;
+      animation: slideUp 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); 
+    }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     .tab-pane.active { display: block; }
-    .viewport { width: 90%; max-width: 500px; aspect-ratio: 1; margin: 15px auto; background: #000; border-radius: 20px; overflow: hidden; border: 4px solid var(--primary); position: relative; }
+
+    .viewport { width: 90%; max-width: 500px; aspect-ratio: 1; margin: 15px auto; background: #000; border-radius: 24px; overflow: hidden; border: 4px solid var(--primary); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
     video { width: 100%; height: 100%; object-fit: cover; }
-    .main-btn { width: 85%; padding: 18px; background: var(--primary); color: #fff; border: none; border-radius: 12px; font-size: 1.2rem; font-weight: 800; display: block; margin: 10px auto; cursor: pointer; }
+
+    .main-btn { width: 85%; padding: 18px; background: var(--primary); color: #fff; border: none; border-radius: 16px; font-size: 1rem; font-weight: bold; display: block; margin: 10px auto; cursor: pointer; transition: 0.2s; text-align: center; }
+    .main-btn:active { transform: scale(0.95); }
+
     .tab-bar { height: 85px; background: var(--card); border-top: 1px solid var(--border); display: flex; position: fixed; bottom: 0; width: 100%; z-index: 100; }
-    .tab-btn { flex: 1; background: none; border: none; color: var(--inactive); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .tab-btn.active { color: var(--primary); font-weight: bold; }
-    .card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin: 15px; position: relative; }
-    .options-menu { display: none; position: absolute; right: 10px; top: 40px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 10; width: 130px; }
-    .options-menu button { display: block; width: 100%; padding: 12px; text-align: left; background: none; border: none; color: var(--text); cursor: pointer; border-bottom: 1px solid var(--border); }
-    #tour-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 20px; }
-    .btn-row { display: flex; gap: 10px; width: 90%; justify-content: center; }
+    .tab-btn { flex: 1; background: none; border: none; color: #888; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.7rem; }
+    .tab-btn.active { color: var(--primary); transform: translateY(-3px); transition: 0.3s; }
+    .tab-btn span { font-size: 1.4rem; margin-bottom: 4px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 16px; margin: 15px; position: relative; }
+    .input-field { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1rem; }
+
+    /* Action Dropdown */
+    .action-select { width: 100%; background: var(--bg); color: var(--primary); border: 1px solid var(--primary); padding: 8px; border-radius: 8px; margin-top: 10px; font-weight: bold; cursor: pointer; }
+
+    .switch { position: relative; display: inline-block; width: 46px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--primary); }
+    input:checked + .slider:before { transform: translateX(22px); }
   </style>
 </head>
 <body>
 
-  <div id="tour-overlay" role="dialog" aria-modal="true">
-    <h1 id="tour-title">Tech House Tour</h1>
-    <p id="tour-desc" style="font-size: 1.3rem; margin: 20px 0; min-height: 80px;">Welcome to your poisoning detector.</p>
-    <div class="btn-row">
-       <button class="main-btn" style="width:120px; background:#007bff;" onclick="startAutoSlideshow()">Play All</button>
-       <button class="main-btn" style="width:100px;" onclick="manualTourNext()">Next</button>
-       <button class="main-btn" style="width:100px; background:#666;" onclick="stopTour()">Skip</button>
-    </div>
-  </div>
+  <audio id="vista-chime" src="vista_startup.mp3" preload="auto"></audio>
 
   <div class="app-container">
     <div class="tab-content" style="flex:1;">
       
       <div id="panel-scan" class="tab-pane active">
         <div style="padding: 20px; text-align: center;">
-          <h2 style="color:var(--primary)">Food Analysis</h2>
+          <h2 style="color:var(--primary)">Precision Scanner</h2>
           <div class="viewport"><video id="cam-feed" playsinline></video></div>
-          <button id="scan-btn" class="main-btn" onclick="processScan()" aria-label="Analyze food sample button">ANALYZE SAMPLE</button>
-          <button class="main-btn" style="background:#444; width:50%; padding:10px;" onclick="toggleFlash()">Flashlight</button>
-          <div id="status-text" role="status" style="padding:10px; font-weight:bold;">Ready</div>
+          <button class="main-btn" onclick="processScan()">ANALYZE SAMPLE</button>
+          <div id="status-text" style="padding:15px; font-weight:bold; opacity: 0.7;">Ready...</div>
         </div>
       </div>
 
       <div id="panel-history" class="tab-pane">
         <div style="padding: 20px;">
-          <div style="display:flex; justify-content:space-between;">
-            <h2>Recent Reports</h2>
-            <button onclick="downloadAll()" style="color:var(--primary); background:none; border:none; font-weight:bold;">Export All</button>
+          <h2 style="color:var(--primary)">History Reports</h2>
+          <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="main-btn" style="flex:3; margin:0;" onclick="generateFullReportPDF()">Export History (PDF)</button>
+            <button class="main-btn" style="flex:1; margin:0; background:#9b1c1c;" onclick="clearAll()">Wipe</button>
           </div>
           <div id="history-list"></div>
-          <button onclick="clearAll()" style="color:red; background:none; border:none; width:100%; padding:20px;">Wipe All History</button>
         </div>
       </div>
 
       <div id="panel-settings" class="tab-pane">
         <div style="padding: 20px;">
-          <h2>Settings</h2>
+          <h2 style="color:var(--primary)">Settings</h2>
           <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+              <span>Vista Startup Sound</span>
+              <label class="switch">
+                <input type="checkbox" id="sound-toggle" checked onchange="saveCheckboxes()">
+                <span class="slider"></span>
+              </label>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+              <span>Haptic Feedback (Vibrate)</span>
+              <label class="switch">
+                <input type="checkbox" id="vibrate-toggle" checked onchange="saveCheckboxes()">
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+              <span>Save Location (GPS)</span>
+              <label class="switch">
+                <input type="checkbox" id="location-toggle" checked onchange="toggleLocation()">
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
+
+            <label>Interface Theme</label>
+            <select id="theme-select" class="input-field" onchange="updateTheme()">
+              <option value="light">Tech House Light</option>
+              <option value="dark">Tech House Dark</option>
+              <option value="midnight">Midnight Pro</option>
+              <option value="rose">Rose Gold</option>
+            </select>
+
             <label>Gemini API Key</label>
-            <input type="password" id="api-key" style="width:100%; padding:10px; margin-top:5px;">
-            <button onclick="saveConfig()" class="main-btn" style="font-size:1rem;">Save & Test Voice</button>
+            <input type="password" id="api-key" class="input-field" placeholder="Paste Key Here">
+            <button class="main-btn" onclick="saveSettings()">Apply Changes</button>
           </div>
-          <button onclick="startTour()" class="main-btn" style="background:#444;">Replay Guided Tour</button>
         </div>
       </div>
     </div>
 
     <nav class="tab-bar">
-      <button class="tab-btn active" onclick="switchTab('panel-scan', this)"><span>🛡️</span><br>DETECT</button>
-      <button class="tab-btn" onclick="switchTab('panel-history', this)"><span>📜</span><br>HISTORY</button>
-      <button class="tab-btn" onclick="switchTab('panel-settings', this)"><span>⚙️</span><br>SETTINGS</button>
+      <button id="nav-scan" class="tab-btn active" onclick="switchTab('panel-scan', this)"><span>📷</span>SCAN</button>
+      <button id="nav-history" class="tab-btn" onclick="switchTab('panel-history', this)"><span>📜</span>HISTORY</button>
+      <button id="nav-settings" class="tab-btn" onclick="switchTab('panel-settings', this)"><span>⚙️</span>SETTINGS</button>
     </nav>
   </div>
 
   <script>
-    let camStream = null, tourIndex = 0, isAuto = false, flashOn = false;
-    let currentAddr = "Fetching address...";
-
-    const tourSteps = [
-      { title: "The Detector", desc: "This is the primary screen. Use the Analyze Food Sample button to detect spoilage.", panel: "panel-scan" },
-      { title: "Safety History", desc: "Your reports are saved here with your street address and time for reporting.", panel: "panel-history" },
-      { title: "App Settings", desc: "You can update your API key here or restart this tour anytime.", panel: "panel-settings" }
-    ];
+    const { jsPDF } = window.jspdf;
+    let camStream = null, lastCoords = { lat: 0, lng: 0 };
 
     window.onload = () => {
       document.getElementById('api-key').value = localStorage.getItem('th_key') || "";
-      initCam();
+      document.getElementById('theme-select').value = localStorage.getItem('th_theme') || 'light';
+      document.getElementById('sound-toggle').checked = localStorage.getItem('th_sound') !== 'false';
+      document.getElementById('vibrate-toggle').checked = localStorage.getItem('th_vibrate') !== 'false';
+      const locOn = localStorage.getItem('th_loc') !== 'false';
+      document.getElementById('location-toggle').checked = locOn;
+      
+      updateTheme();
+      initCam(); 
       loadHistory();
-      updateLocation();
-      if(!localStorage.getItem('th_first')) startTour();
+      if(locOn) startGps();
     };
 
-    async function initCam() {
-      try {
-        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        document.getElementById('cam-feed').srcObject = camStream;
-        document.getElementById('cam-feed').play();
-      } catch (e) { console.error("Cam access denied"); }
+    function saveCheckboxes() {
+      localStorage.setItem('th_sound', document.getElementById('sound-toggle').checked);
+      localStorage.setItem('th_vibrate', document.getElementById('vibrate-toggle').checked);
     }
 
-    function toggleFlash() {
-      const track = camStream.getVideoTracks()[0];
-      flashOn = !flashOn;
-      track.applyConstraints({ advanced: [{ torch: flashOn }] });
+    function toggleLocation() {
+      const isOn = document.getElementById('location-toggle').checked;
+      localStorage.setItem('th_loc', isOn);
+      if(isOn) startGps();
+      else lastCoords = { lat: 0, lng: 0 };
     }
 
-    function updateLocation() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async p => {
-          try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${p.coords.latitude}&lon=${p.coords.longitude}`);
-            const data = await res.json();
-            currentAddr = data.display_name || "Unknown Address";
-          } catch(e) { currentAddr = "GPS Coordinates Saved"; }
-        });
-      }
+    function startGps() {
+      navigator.geolocation.watchPosition(p => {
+        lastCoords = { lat: p.coords.latitude, lng: p.coords.longitude };
+      }, null, { enableHighAccuracy: true });
     }
 
-    async function speak(text, callback) {
-      const key = localStorage.getItem('th_key');
-      if(!key) { 
-        const u = new SpeechSynthesisUtterance(text);
-        u.onend = callback; window.speechSynthesis.speak(u);
-        return;
-      }
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } })
-        });
-        const data = await res.json();
-        const base64 = data.candidates[0].content.parts[0].inlineData.data;
-        const audio = new Audio(URL.createObjectURL(createWav(base64)));
-        if(callback) audio.onended = callback;
-        audio.play();
-      } catch (e) { if(callback) callback(); }
-    }
-
-    function createWav(b64) {
-      const s = atob(b64); const b = new ArrayBuffer(44 + s.length); const v = new DataView(b);
-      const w = (o, str) => { for(let i=0; i<str.length; i++) v.setUint8(o+i, str.charCodeAt(i)); };
-      w(0, 'RIFF'); v.setUint32(4, 36 + s.length, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
-      v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 24000, true); v.setUint32(28, 48000, true);
-      v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, s.length, true);
-      for(let i=0; i<s.length; i++) v.setUint8(44+i, s.charCodeAt(i));
-      return new Blob([b], { type: 'audio/wav' });
-    }
-
-    function startTour() {
-      tourIndex = 0; isAuto = false;
-      document.getElementById('tour-overlay').style.display = 'flex';
-      updateTourUI();
-    }
-
-    function startAutoSlideshow() {
-      isAuto = true;
-      runAutoStep();
-    }
-
-    function runAutoStep() {
-      if(!isAuto || tourIndex >= tourSteps.length) { stopTour(); return; }
-      updateTourUI();
-      const step = tourSteps[tourIndex];
-      speak(step.title + ". " + step.desc, () => {
-        setTimeout(() => { tourIndex++; runAutoStep(); }, 1500);
-      });
-    }
-
-    function manualTourNext() {
-      isAuto = false;
-      tourIndex++;
-      if(tourIndex >= tourSteps.length) stopTour(); else updateTourUI();
-    }
-
-    function updateTourUI() {
-      const step = tourSteps[tourIndex];
-      document.getElementById('tour-title').innerText = step.title;
-      document.getElementById('tour-desc').innerText = step.desc;
-      switchTab(step.panel, document.querySelectorAll('.tab-btn')[tourIndex]);
-    }
-
-    function stopTour() {
-      document.getElementById('tour-overlay').style.display = 'none';
-      localStorage.setItem('th_first', 'done');
-      switchTab('panel-scan', document.querySelectorAll('.tab-btn')[0]);
+    function updateTheme() {
+      const t = document.getElementById('theme-select').value;
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('th_theme', t);
     }
 
     async function processScan() {
       const key = localStorage.getItem('th_key');
-      if(!key) { speak("Add API key first."); return; }
-      document.getElementById('status-text').innerText = "Analyzing...";
+      if(!key) return alert("Please set your API key first!");
       
-      const cvs = document.createElement("canvas");
+      document.getElementById('status-text').innerText = "Analyzing sample...";
       const video = document.getElementById('cam-feed');
+      const cvs = document.createElement("canvas");
       cvs.width = video.videoWidth; cvs.height = video.videoHeight;
       cvs.getContext("2d").drawImage(video, 0, 0);
       const b64 = cvs.toDataURL("image/jpeg").split(",")[1];
 
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: "Analyze food safety. 1 sentence verdict." }, { inline_data: { mime_type: "image/jpeg", data: b64 } }] }] })
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ contents: [{ parts: [
+            { text: "Food safety scan. Check for spoilage, contamination, or visual toxins. One sentence verdict." },
+            { inline_data: { mime_type: "image/jpeg", data: b64 } }
+          ]}]})
         });
         const data = await res.json();
-        const txt = data.candidates[0].content.parts[0].text;
-        document.getElementById('status-text').innerText = txt;
-        speak(txt);
-        saveHist(txt);
-      } catch (e) { speak("Scan failed."); }
+        const verdict = data.candidates[0].content.parts[0].text;
+        
+        // Haptics
+        if(document.getElementById('vibrate-toggle').checked && navigator.vibrate) navigator.vibrate(200);
+
+        // Sound
+        if(document.getElementById('sound-toggle').checked) {
+          const chime = document.getElementById('vista-chime');
+          chime.currentTime = 0;
+          chime.play().catch(() => {});
+        }
+
+        document.getElementById('status-text').innerText = verdict;
+        speak(verdict);
+        saveReport(verdict);
+      } catch (e) { document.getElementById('status-text').innerText = "Scan Failed."; }
     }
 
-    function saveHist(txt) {
+    function saveReport(txt) {
       const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
-      h.unshift({ txt, addr: currentAddr, date: new Date().toLocaleString() });
-      localStorage.setItem('th_hist', JSON.stringify(h.slice(0, 20)));
+      const locOn = document.getElementById('location-toggle').checked;
+      h.unshift({ 
+        id: Date.now(), txt, date: new Date().toLocaleString(),
+        lat: locOn ? lastCoords.lat : null, lng: locOn ? lastCoords.lng : null
+      });
+      localStorage.setItem('th_hist', JSON.stringify(h.slice(0, 50)));
       loadHistory();
-      updateLocation(); // Refresh for next time
     }
 
     function loadHistory() {
       const list = document.getElementById('history-list');
       const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
-      list.innerHTML = h.map((item, idx) => `
+      list.innerHTML = h.map((item, i) => `
         <div class="card">
-          <div style="display:flex; justify-content:space-between;">
-            <div style="flex:1"><strong>${item.txt}</strong><br><small>${item.date}</small><br><small style="color:var(--primary)">${item.addr}</small></div>
-            <button onclick="toggleMenu(${idx})" style="background:none; border:none; font-size:1.5rem;">⋮</button>
-            <div id="menu-${idx}" class="options-menu">
-               <button onclick="copyItem(${idx})">Copy</button>
-               <button onclick="deleteItem(${idx})" style="color:red">Delete</button>
-            </div>
-          </div>
-        </div>`).join('') || "<p style='text-align:center'>No scans yet.</p>";
+          <small style="opacity:0.6">${item.date}</small>
+          <p><strong>${item.txt}</strong></p>
+          <select class="action-select" onchange="handleAction(this, ${i})">
+            <option value="">Options...</option>
+            <option value="share">Share to Socials</option>
+            <option value="pdf">Save as PDF</option>
+            ${item.lat ? '<option value="map">View Location</option>' : ''}
+            <option value="delete" style="color:red;">Delete Record</option>
+          </select>
+        </div>`).join('') || "<p style='text-align:center'>No scan history found.</p>";
     }
 
-    function toggleMenu(idx) {
-      const m = document.getElementById(`menu-${idx}`);
-      m.style.display = m.style.display === 'block' ? 'none' : 'block';
-    }
-
-    function deleteItem(idx) {
+    function handleAction(el, i) {
       const h = JSON.parse(localStorage.getItem('th_hist'));
-      h.splice(idx, 1);
-      localStorage.setItem('th_hist', JSON.stringify(h));
-      loadHistory();
+      const item = h[i];
+      const val = el.value;
+
+      if(val === 'share') {
+        const shareData = { title: 'Safety Report', text: `Tech House Scan: ${item.txt} at ${item.date}`, url: window.location.href };
+        if(navigator.share) navigator.share(shareData);
+        else alert("Sharing not supported on this browser.");
+      } else if(val === 'pdf') {
+        const doc = new jsPDF();
+        doc.text("Tech House Single Report", 20, 20);
+        doc.setFontSize(10);
+        doc.text(`Date: ${item.date}`, 20, 30);
+        doc.text(`Verdict: ${item.txt}`, 20, 40, { maxWidth: 160 });
+        doc.save(`Report_${item.id}.pdf`);
+      } else if(val === 'map') {
+        window.open(`https://www.google.com/maps?q=${item.lat},${item.lng}`, '_blank');
+      } else if(val === 'delete') {
+        h.splice(i, 1);
+        localStorage.setItem('th_hist', JSON.stringify(h));
+        loadHistory();
+      }
+      el.value = ""; // Reset select
     }
 
-    function clearAll() { if(confirm("Clear all?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
+    function generateFullReportPDF() {
+      const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
+      if(!h.length) return alert("Nothing to export!");
+      const doc = new jsPDF();
+      doc.text("Tech House Safety History", 20, 20);
+      let y = 35;
+      h.forEach((item) => {
+        if(y > 270) { doc.addPage(); y = 20; }
+        doc.text(`${item.date}: ${item.txt}`, 20, y, { maxWidth: 170 });
+        y += 15;
+      });
+      doc.save("Full_History.pdf");
+    }
 
     function switchTab(id, el) {
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.getElementById(id).classList.add('active');
-      if(el) el.classList.add('active');
+      el.classList.add('active');
     }
 
-    function saveConfig() {
+    function saveSettings() {
       localStorage.setItem('th_key', document.getElementById('api-key').value.trim());
-      speak("Connection test. Your Google speech engine is now active.");
+      alert("Settings updated!");
     }
+
+    async function initCam() {
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        document.getElementById('cam-feed').srcObject = camStream;
+      } catch (e) { document.getElementById('status-text').innerText = "Cam Access Denied."; }
+    }
+
+    function speak(t) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
+    function clearAll() { if(confirm("Wipe all data?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
   </script>
 </body>
 </html>
