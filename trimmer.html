@@ -2,69 +2,73 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tech House Memory-Safe Trimmer</title>
+    <title>Tech House High-Speed Trimmer</title>
+    
+    <script src="coi-serviceworker.js"></script>
+    
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.10.1/dist/ffmpeg.min.js"></script>
+
     <style>
-        body { font-family: sans-serif; background-color: #121212; color: #fff; padding: 20px; max-width: 800px; margin: 0 auto; }
-        .container { border: 1px solid #333; padding: 20px; border-radius: 8px; background: #1e1e1e; }
-        .status-area { background: #000; color: #0f0; padding: 15px; font-family: monospace; border: 1px solid #444; margin-bottom: 20px; height: 50px; overflow: hidden; }
-        button { padding: 15px; width: 100%; font-size: 1.2rem; font-weight: bold; cursor: pointer; background: #2e7d32; color: white; border: none; border-radius: 4px; margin-top: 10px; }
-        button:disabled { background: #555; cursor: wait; }
-        video { width: 100%; background: black; margin-top: 10px; max-height: 50vh; }
-        .sr-only { position: absolute; left: -9999px; }
+        body { font-family: system-ui, sans-serif; background-color: #0f172a; color: #f1f5f9; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .card { background: #1e293b; padding: 25px; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 10px 15px rgba(0,0,0,0.3); }
+        .status-box { background: #000; color: #4ade80; padding: 15px; font-family: monospace; margin: 20px 0; border-radius: 6px; border: 1px solid #334155; }
+        .time-readout { font-size: 1.4rem; color: #fbbf24; font-weight: bold; margin: 10px 0; }
+        video { width: 100%; background: #000; border-radius: 8px; margin-top: 10px; }
+        button { width: 100%; padding: 15px; background: #38bdf8; color: #0f172a; border: none; border-radius: 8px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin-top: 20px; transition: 0.2s; }
+        button:disabled { background: #475569; color: #94a3b8; cursor: wait; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+        .marker-info { display: flex; gap: 20px; margin-top: 15px; background: #334155; padding: 10px; border-radius: 6px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Tech House Memory-Safe Trimmer</h1>
-    <div id="aria-announce" class="sr-only" aria-live="assertive"></div>
+<div class="card">
+    <h1>🎬 Tech House Precision Cutter</h1>
     
-    <div id="status-log" class="status-area">System Idle.</div>
+    <div id="announcer" class="sr-only" aria-live="assertive"></div>
 
-    <input type="file" id="uploader" accept="video/*" aria-label="Select Video">
+    <div id="status-display" class="status-box">Status: Loading Engine...</div>
+
+    <input type="file" id="uploader" accept="video/*" aria-label="Upload Video">
     
     <video id="player" controls></video>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
-        <div style="background:#333; padding:10px;">Start (S): <span id="start-time">0:00</span></div>
-        <div style="background:#333; padding:10px;">End (E): <span id="end-time">0:00</span></div>
+    <div class="time-readout" id="current-time">Time: 0m 0s</div>
+
+    <div class="marker-info">
+        <div>Start (S): <span id="start-val" style="color:#4ade80">Not Set</span></div>
+        <div>End (E): <span id="end-val" style="color:#f87171">Not Set</span></div>
     </div>
 
     <button id="export-btn" disabled>EXPORT VIDEO (Press X)</button>
+
+    <div style="margin-top:20px; font-size:0.9rem; opacity:0.8;">
+        <strong>Shortcuts:</strong> Space (Play/Pause) | Arrows (10s) | Shift+Arrows (1s) | S (Start) | E (End) | X (Export)
+    </div>
 </div>
 
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
     const ffmpeg = createFFmpeg({ log: true });
 
-    const statusLog = document.getElementById('status-log');
-    const uploader = document.getElementById('uploader');
     const player = document.getElementById('player');
+    const uploader = document.getElementById('uploader');
+    const statusDisp = document.getElementById('status-display');
+    const announcer = document.getElementById('announcer');
+    const startVal = document.getElementById('start-val');
+    const endVal = document.getElementById('end-val');
+    const timeDisp = document.getElementById('current-time');
     const exportBtn = document.getElementById('export-btn');
-    const startDisplay = document.getElementById('start-time');
-    const endDisplay = document.getElementById('end-time');
-    const announcer = document.getElementById('aria-announce');
 
     let startTime = -1;
     let endTime = -1;
     let videoFile = null;
 
-    // --- Audio Feedback ---
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function beep(f=440, d=0.1) {
-        const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
-        o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination);
-        o.start(); g.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime+d);
-        o.stop(audioCtx.currentTime+d);
-    }
-
-    function log(msg, speak=false) {
-        statusLog.innerText = msg;
-        if(speak) {
-            announcer.innerText = "";
-            setTimeout(() => announcer.innerText = msg, 50);
-        }
+    // --- Helper Functions ---
+    function announce(msg) {
+        announcer.innerText = "";
+        setTimeout(() => { announcer.innerText = msg; }, 50);
+        statusDisp.innerText = "Status: " + msg;
     }
 
     function fmt(s) {
@@ -73,112 +77,109 @@
         return `${m}m ${sec}s`;
     }
 
+    // --- Start Engine ---
     (async () => {
         try {
-            log("Loading Engine...", true);
             await ffmpeg.load();
-            log("Engine Ready. Please Upload.", true);
-        } catch(e) {
-            log("Engine Fail. Refresh or check server.", true);
+            announce("Engine Ready. Please upload your video.");
+        } catch (e) {
+            announce("Engine Error. Ensure coi-serviceworker.js is in your GitHub folder.");
         }
     })();
 
     uploader.onchange = (e) => {
         videoFile = e.target.files[0];
-        if(!videoFile) return;
-        player.src = URL.createObjectURL(videoFile);
-        exportBtn.disabled = false;
-        log(`Loaded ${videoFile.name}. Press S for Start, E for End.`, true);
-        beep(600);
+        if (videoFile) {
+            player.src = URL.createObjectURL(videoFile);
+            exportBtn.disabled = false;
+            announce(`Loaded ${videoFile.name}. Use Arrows to navigate.`);
+        }
     };
 
+    player.ontimeupdate = () => {
+        timeDisp.innerText = "Time: " + fmt(player.currentTime);
+    };
+
+    // --- Keyboard Logic ---
     window.addEventListener('keydown', (e) => {
         const k = e.key.toLowerCase();
+        
         if (k === ' ' || e.code === 'Space') {
             e.preventDefault();
             player.paused ? player.play() : player.pause();
         }
-        if (k === 'arrowright') {
+        else if (k === 'arrowright') {
             e.preventDefault();
             player.currentTime += (e.shiftKey ? 1 : 10);
-            log(fmt(player.currentTime));
+            announce(fmt(player.currentTime));
         }
-        if (k === 'arrowleft') {
+        else if (k === 'arrowleft') {
             e.preventDefault();
             player.currentTime -= (e.shiftKey ? 1 : 10);
-            log(fmt(player.currentTime));
+            announce(fmt(player.currentTime));
         }
-        if (k === 's') {
+        else if (k === 's') {
             startTime = player.currentTime;
-            startDisplay.innerText = fmt(startTime);
-            log("Start Set: " + fmt(startTime), true);
-            beep(800);
+            startVal.innerText = fmt(startTime);
+            announce("Start set at " + fmt(startTime));
         }
-        if (k === 'e') {
+        else if (k === 'e') {
             endTime = player.currentTime;
-            endDisplay.innerText = fmt(endTime);
-            log("End Set: " + fmt(endTime), true);
-            beep(800);
+            endVal.innerText = fmt(endTime);
+            announce("End set at " + fmt(endTime));
         }
-        if (k === 'x') {
-            if(!exportBtn.disabled) runSmartExport();
+        else if (k === 'x') {
+            if(!exportBtn.disabled) runExport();
         }
     });
 
-    async function runSmartExport() {
-        if(startTime < 0 || endTime < 0 || endTime <= startTime) {
-            return log("Check your start/end points.", true);
+    // --- The Process ---
+    async function runExport() {
+        if (startTime < 0 || endTime <= startTime) {
+            return announce("Error: Set Start and End points first.");
         }
-        
+
         exportBtn.disabled = true;
-        log("Mounting file from disk...", true);
-        beep(400, 0.3);
+        announce("Mounting file from disk...");
 
         try {
-            // MAGIC FIX: WORKERFS
-            // Instead of writing to memory, we MOUNT the file system.
-            // This reads the file directly from your disk as needed.
+            // Memory Optimization: Mounting WORKERFS
             ffmpeg.FS('mount', 'WORKERFS', { files: [videoFile] }, '/data');
+            
+            announce("Cutting video... Please stay on this tab.");
 
-            log("Processing... Please wait.", true);
-
-            // Command uses input from the mounted folder '/data'
-            // We force a fast copy.
+            // FAST CUT (-c copy)
             await ffmpeg.run(
                 '-ss', startTime.toString(),
                 '-to', endTime.toString(),
-                '-i', '/data/' + videoFile.name, 
+                '-i', '/data/' + videoFile.name,
                 '-c', 'copy',
                 'output.mp4'
             );
 
-            log("Saving...", true);
+            announce("Saving to downloads...");
             const data = ffmpeg.FS('readFile', 'output.mp4');
             const url = URL.createObjectURL(new Blob([data.buffer], {type: 'video/mp4'}));
             const a = document.createElement('a');
             a.href = url;
-            a.download = `trimmed_${videoFile.name}`;
+            a.download = `cut_${videoFile.name}`;
             a.click();
 
             // Cleanup
             ffmpeg.FS('unmount', '/data');
             ffmpeg.FS('unlink', 'output.mp4');
             
-            log("Done! File downloaded.", true);
-            beep(1000, 0.5);
+            announce("Success! File saved.");
             exportBtn.disabled = false;
-
-        } catch(err) {
+        } catch (err) {
             console.error(err);
-            log("Error: " + err.message, true);
-            // Attempt Unmount in case of fail
+            announce("Error: File too large or browser limit reached.");
             try { ffmpeg.FS('unmount', '/data'); } catch(e){}
             exportBtn.disabled = false;
         }
     }
 
-    exportBtn.onclick = runSmartExport;
-
+    exportBtn.onclick = runExport;
 </script>
 </body>
 </html>
