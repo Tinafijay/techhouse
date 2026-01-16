@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="coi-serviceworker.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech House - High Speed Editor</title>
+    
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
+    <link rel="stylesheet" href="tech-house-editor-style.css">
+</head>
+<body>
+
+<div class="card">
+    <h1>🎬 Tech House Editor</h1>
+    
+    <div id="announcer" class="sr-only" aria-live="assertive"></div>
+
+    <div id="status-display" class="status-box">Status: Initializing Engine...</div>
+
+    <input type="file" id="uploader" accept="video/*" aria-label="Select Video to Edit">
+    
+    <video id="player" controls></video>
+
+    <div class="time-readout" id="current-time">Time: 0 minutes, 0 seconds</div>
+
+    <div class="trim-points">
+        <p><strong>Start Point (S):</strong> <span id="start-val">Not Set</span></p>
+        <p><strong>End Point (E):</strong> <span id="end-val">Not Set</span></p>
+    </div>
+
+    <button id="export-btn" disabled>START FAST EXPORT (Press X)</button>
+</div>
+
+<script src="tech-house-editor-script.js"></script>
+</body>
+</html>
