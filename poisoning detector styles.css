@@ -1,37 +1,32 @@
-:root { --primary: #006d3a; --bg: #f4f7f9; --card: #ffffff; --text: #222; --border: #cbd5e1; }
-[data-theme="dark"] { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --border: #333; }
-[data-theme="midnight"] { --primary: #3b82f6; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155; }
-[data-theme="cyberpunk"] { --primary: #f0db4f; --bg: #000; --card: #1a1a1a; --text: #00ff00; --border: #00ff00; }
+:root { --primary: #006d3a; --bg: #000; --card: #1a1a1a; --text: #fff; }
+[data-theme="light"] { --bg: #f4f7f9; --card: #fff; --text: #222; }
 
-body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: "Segoe UI", sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
 
-.tab-pane { display: none; visibility: hidden; height: 0; overflow: hidden; }
-.tab-pane.active { display: block; visibility: visible; height: 100%; overflow-y: auto; padding-bottom: 110px; }
+/* Immersive Full-Screen Camera Background */
+.camera-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+#cam-feed { width: 100%; height: 100%; object-fit: cover; }
 
-.content-padding { padding: 20px; text-align: center; }
-.brand-text { color: var(--primary); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
+/* Overlay UI for Scan Tab */
+.ui-overlay { height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box; background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 40%, rgba(0,0,0,0.8) 100%); }
 
-.viewport { width: 90%; max-width: 450px; aspect-ratio: 1; margin: 0 auto 15px; background: #000; border-radius: 20px; overflow: hidden; border: 4px solid var(--primary); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
-video { width: 100%; height: 100%; object-fit: cover; }
+.brand-text { text-align: center; font-size: 1.2rem; letter-spacing: 2px; color: #fff; text-shadow: 2px 2px 6px #000; }
+.scan-controls { margin-bottom: 110px; text-align: center; }
+.glass-card { background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); padding: 15px; border-radius: 15px; margin-top: 10px; border: 1px solid var(--primary); color: #fff; }
 
-.main-btn { width: 85%; padding: 18px; background: var(--primary); color: #fff; border: none; border-radius: 12px; font-weight: bold; margin: 10px auto; cursor: pointer; font-size: 1.1rem; }
-.secondary-btn { padding: 12px; background: transparent; color: var(--primary); border: 2px solid var(--primary); border-radius: 10px; font-weight: bold; }
+.flashlight-pill { display: inline-block; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px; margin: 10px 0; color: #fff; font-weight: bold; }
 
-.flashlight-container { margin: 15px auto; width: 80%; background: var(--card); padding: 12px; border-radius: 10px; border: 1px solid var(--border); }
-.flashlight-label { display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+.main-btn { width: 100%; padding: 20px; border-radius: 15px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; }
+.scan-btn { font-size: 1.4rem; box-shadow: 0 0 25px var(--primary); }
 
-.toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.tab-pane { display: none; height: 100%; overflow-y: auto; padding-bottom: 100px; }
+.tab-pane.active { display: block; }
+.content-padding { padding: 25px; text-align: center; }
 
-.card { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 16px; margin: 15px 0; text-align: left; position: relative; }
-.history-img { width: 100%; height: 160px; object-fit: cover; border-radius: 10px; }
+.tab-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: rgba(0,0,0,0.95); display: flex; border-top: 1px solid #333; }
+.tab-btn { flex: 1; border: none; background: none; color: #fff; opacity: 0.5; font-size: 0.9rem; }
+.tab-btn.active { opacity: 1; color: var(--primary); border-top: 4px solid var(--primary); }
 
-.three-dot-menu { position: absolute; top: 10px; right: 10px; z-index: 10; }
-.dot-btn { background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; font-size: 1.2rem; }
-.menu-content { display: none; position: absolute; right: 0; background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.menu-content button { width: 100%; padding: 12px; border: none; background: none; color: var(--text); text-align: left; border-bottom: 1px solid var(--border); }
-
-.tab-bar { height: 85px; background: var(--card); border-top: 1px solid var(--border); display: flex; position: fixed; bottom: 0; width: 100%; }
-.tab-btn { flex: 1; background: none; border: none; color: #888; font-weight: bold; font-size: 0.8rem; }
-.tab-btn.active { color: var(--primary); border-top: 5px solid var(--primary); background: rgba(0, 109, 58, 0.05); }
-
-.input-field { width: 100%; padding: 14px; margin: 10px 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-sizing: border-box; }
+.card { background: var(--card); border: 1px solid #333; padding: 20px; border-radius: 20px; margin: 15px 0; text-align: left; }
+#tour-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+.tour-card { background: var(--card); padding: 35px; border-radius: 25px; text-align: center; width: 85%; max-width: 400px; border: 2px solid var(--primary); }

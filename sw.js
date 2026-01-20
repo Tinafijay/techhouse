@@ -1,16 +1,38 @@
-const CACHE_NAME = 'th-v1';
+const CACHE_NAME = 'tech-house-v1';
 const ASSETS = [
-  'poisoning detector.html',
-  'poisoning detector styles.css',
-  'poisoning detector script.js',
-  'Tech House logo.jpg',
-  'vista_startup.mp3'
+    './poisoning%20detector.html',
+    './poisoning%20detector%20styles.css',
+    './poisoning%20detector%20script.js',
+    './manifest.json',
+    './Tech%20House%20logo.jpg',
+    './vista_startup.mp3' // Caching the completion sound
 ];
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)));
+// Install: Cache all branding and audio files
+self.addEventListener('install', (event) => {
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => {
+            return cache.addAll(ASSETS);
+        })
+    );
 });
 
-self.addEventListener('fetch', (e) => {
-  e.respondWith(caches.match(e.request).then((res) => res || fetch(e.request)));
+// Activation: Clean up old versions
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((keys) => {
+            return Promise.all(
+                keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+            );
+        })
+    );
+});
+
+// Fetch: Serve from cache so it works offline/fast
+self.addEventListener('fetch', (event) => {
+    event.respondWith(
+        caches.match(event.request).then((response) => {
+            return response || fetch(event.request);
+        })
+    );
 });
