@@ -8,90 +8,81 @@
     <link rel="stylesheet" href="poisoning detector styles.css">
 </head>
 <body>
-    <div id="tour-overlay" aria-hidden="true">
-        <h1 id="tour-title">Tech House Tour</h1>
-        <p id="tour-desc"></p>
-        <div class="tour-controls">
+    <div id="tour-overlay" style="display:none;">
+        <div class="tour-card">
+            <img src="Tech House logo.jpg" style="width: 70px; margin-bottom: 10px;">
+            <h1 id="tour-title"></h1>
+            <p id="tour-desc"></p>
+            <p id="tour-link-msg" style="font-size: 0.8rem;"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary); font-weight:bold;">GET KEY AT AI STUDIO</a></p>
             <button class="main-btn" onclick="nextTourStep()">Next</button>
-            <button class="main-btn" id="play-tour-btn" onclick="autoPlayTour()">Play Tour</button>
+            <button class="skip-btn" onclick="closeTour()">Skip</button>
         </div>
-        <button class="skip-btn" onclick="closeTour()">Skip</button>
     </div>
 
     <div class="app-container">
-        <main id="panel-scan" class="tab-pane active" role="tabpanel">
-            <div class="content-padding">
-                <h2 class="brand-text">Precision Scanner</h2>
-                <div class="viewport">
-                    <video id="cam-feed" autoplay playsinline muted></video>
-                </div>
-                
-                <button class="main-btn" onclick="processScan()">SCAN FOOD</button>
-                
-                <div class="flashlight-container">
-                    <label for="flashlight-toggle" class="flashlight-label">
-                        <input type="checkbox" id="flashlight-toggle" onchange="toggleFlash()">
-                        <span>Flashlight Switch</span>
+        <main id="panel-scan" class="tab-pane active">
+            <div class="camera-bg">
+                <video id="cam-feed" autoplay playsinline muted></video>
+                <canvas id="proc-canvas" style="display:none;"></canvas>
+            </div>
+            
+            <div class="ui-overlay">
+                <h2 class="brand-text">TECH HOUSE POISONING DETECTOR</h2>
+                <div class="scan-controls">
+                    <button class="main-btn scan-btn" onclick="processScan()">SCAN FOOD</button>
+                    <label class="flashlight-pill">
+                        Flashlight <input type="checkbox" id="flashlight-toggle" onclick="toggleFlash()">
                     </label>
+                    <div id="status-text">Ready</div>
+                    <div id="analysis-out" class="glass-card"></div>
                 </div>
-
-                <div id="status-text" aria-live="polite">System Ready</div>
             </div>
         </main>
 
-        <section id="panel-history" class="tab-pane" role="tabpanel" aria-hidden="true">
+        <section id="panel-history" class="tab-pane">
             <div class="content-padding">
-                <h2 class="brand-text">Security Logs</h2>
-                <div class="history-top-actions">
-                    <button class="secondary-btn" onclick="generateFullReportPDF()">Download All PDF</button>
-                    <button class="secondary-btn wipe-btn" onclick="clearAll()">Wipe</button>
-                </div>
+                <h2 class="brand-text">HISTORY</h2>
+                <p>Track all previous security scans and GPS logs here.</p>
+                <button class="main-btn" style="margin-bottom:20px;" onclick="downloadMasterHistory()">Download Master Report (PDF)</button>
                 <div id="history-list"></div>
             </div>
         </section>
 
-        <section id="panel-settings" class="tab-pane" role="tabpanel" aria-hidden="true">
+        <section id="panel-settings" class="tab-pane">
             <div class="content-padding">
-                <h2 class="brand-text">Settings</h2>
-                <div class="settings-card">
-                    <label for="api-key">Gemini API Key</label>
-                    <input type="password" id="api-key" class="input-field" placeholder="Paste Key Here">
+                <h2 class="brand-text">SYSTEM SETTINGS</h2>
+                <div class="card">
+                    <div id="install-btn-container" style="display:none; margin-bottom:20px;">
+                        <button class="main-btn" style="background:#0051a8;" onclick="installApp()">INSTALL APP ON DEVICE</button>
+                        <hr>
+                    </div>
+
+                    <label>System Key</label>
+                    <input type="password" id="api-key" class="input-field">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary); font-weight:bold; display:block; margin: 10px 0;">GET KEY AT AI STUDIO</a>
                     
-                    <button class="secondary-btn" style="width:100%; margin-bottom:15px;" onclick="testConnection()">Test Connection</button>
-
-                    <hr>
-                    <label>Preferences</label>
-                    <div class="toggle-row">
-                        <span>System Sounds</span>
-                        <input type="checkbox" id="toggle-sound">
-                    </div>
-                    <div class="toggle-row">
-                        <span>Haptic Vibration</span>
-                        <input type="checkbox" id="toggle-vibe">
-                    </div>
-
-                    <hr>
-                    <label for="theme-select">Interface Theme</label>
-                    <select id="theme-select" class="input-field">
-                        <option value="light">Tech House Light</option>
-                        <option value="dark">Tech House Dark</option>
-                        <option value="midnight">Midnight Pro</option>
-                        <option value="cyberpunk">Cyberpunk Neon</option>
+                    <div class="setting-item"><span>Audio Assist</span><input type="checkbox" id="toggle-sound"></div>
+                    <div class="setting-item"><span>Haptics</span><input type="checkbox" id="toggle-vibe"></div>
+                    
+                    <label>Interface Theme</label>
+                    <select id="theme-select" class="input-field" onchange="saveAllSettings()">
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                        <option value="midnight">Midnight</option>
                     </select>
                     
-                    <button class="main-btn" style="background: var(--primary); margin-top:20px;" onclick="saveAllSettings()">SAVE ALL SETTINGS</button>
-                    <button class="main-btn tour-btn" style="background:#444;" onclick="startTour()">Revisit Tour</button>
+                    <button class="main-btn" onclick="saveAllSettings()">SAVE PREFERENCES</button>
+                    <button class="main-btn" style="background:#444; margin-top:10px;" onclick="restartTour()">REVISIT TOUR</button>
                 </div>
             </div>
         </section>
 
-        <nav class="tab-bar" role="tablist">
-            <button id="nav-scan" class="tab-btn active" role="tab" onclick="switchTab('panel-scan', this)">📷<br>SCAN</button>
-            <button id="nav-history" class="tab-btn" role="tab" onclick="switchTab('panel-history', this)">📜<br>HISTORY</button>
-            <button id="nav-settings" class="tab-btn" role="tab" onclick="switchTab('panel-settings', this)">⚙️<br>SETTINGS</button>
+        <nav class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('panel-scan', this)">📷 SCAN</button>
+            <button class="tab-btn" onclick="switchTab('panel-history', this)">📜 HISTORY</button>
+            <button class="tab-btn" onclick="switchTab('panel-settings', this)">⚙️ SETTINGS</button>
         </nav>
     </div>
-
     <script src="poisoning detector script.js"></script>
 </body>
 </html>
