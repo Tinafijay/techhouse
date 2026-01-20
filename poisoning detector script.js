@@ -1,155 +1,171 @@
 const { jsPDF } = window.jspdf;
-let camStream = null, videoTrack = null, torchActive = false;
-let lastCoords = { lat: "0", lng: "0" }, tourStep = 0, isAutoplay = false, deferredPrompt = null;
+let camStream = null, lastCoords = { lat: 0, lng: 0 };
 
-const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
-const tourSteps = [
-    { tab: 'panel-scan', title: "Detector", desc: "Align the sample. Gemini 3.0 analyzes contaminants instantly." },
-    { tab: 'panel-history', title: "Logs", desc: "Your results are stored here. Export them as PDF reports." },
-    { tab: 'panel-settings', title: "Setup", desc: "Paste your API key here (Get it in 60s at Google AI Studio)." },
-    { tab: 'panel-settings', title: "Install", desc: "Use the 'Install' button for easy access from your home screen." }
-];
+const vistaSound = new Audio('https://www.soundboard.com/handler/DownLoadTrack.ashx?cliptitle=Windows+Vista+Startup&filename=mt/mtyzndm5ndm5mtyzntm2_Xp3XfP9X_2bY.mp3');
+const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
 
 window.onload = () => {
-    // PWA Prompt for Android
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
-
-    document.getElementById('install-btn').onclick = () => {
-        if (isIOS()) document.getElementById('ios-guide').style.display = 'flex';
-        else if (deferredPrompt) deferredPrompt.prompt();
-        else alert("To install: Use your browser menu and tap 'Add to Home Screen'.");
-    };
-
-    // State Restoration
+    // Load Settings
     document.getElementById('api-key').value = localStorage.getItem('th_key') || "";
-    document.getElementById('sound-toggle').checked = localStorage.getItem('th_h_sound') !== 'false';
-    document.getElementById('haptic-toggle').checked = localStorage.getItem('th_haptic') !== 'false';
+    document.getElementById('toggle-sound').checked = localStorage.getItem('th_sound') !== 'false';
+    document.getElementById('toggle-vibe').checked = localStorage.getItem('th_vibe') !== 'false';
     
-    initCam(); loadHistory(); startGPS();
-    if (!localStorage.getItem('tour_done')) {
-        document.getElementById('tour-overlay').style.display = 'flex';
-        runTourStep();
+    const theme = localStorage.getItem('th_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.getElementById('theme-select').value = theme;
+
+    if(localStorage.getItem('th_sound') !== 'false') {
+        vistaSound.play().catch(() => console.log("Sound ready after first touch"));
     }
+
+    initCam(); loadHistory(); startGPS();
 };
 
-// --- FLASHLIGHT (Android/Chrome) ---
-async function toggleTorch() {
-    if (!videoTrack) return;
+async function initCam() {
     try {
-        torchActive = !torchActive;
-        await videoTrack.applyConstraints({ advanced: [{ torch: torchActive }] });
-    } catch (e) { console.log("Torch not supported on this device."); }
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        document.getElementById('cam-feed').srcObject = camStream;
+    } catch (e) { speak("Camera access is required for scanning."); }
 }
 
-// --- SCANNING ---
+function startGPS() {
+    navigator.geolocation.watchPosition(p => {
+        lastCoords = { lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5) };
+    }, null, { enableHighAccuracy: true });
+}
+
+function saveAllSettings() {
+    localStorage.setItem('th_key', document.getElementById('api-key').value.trim());
+    localStorage.setItem('th_sound', document.getElementById('toggle-sound').checked);
+    localStorage.setItem('th_vibe', document.getElementById('toggle-vibe').checked);
+    localStorage.setItem('th_theme', document.getElementById('theme-select').value);
+    
+    document.documentElement.setAttribute('data-theme', document.getElementById('theme-select').value);
+    if(document.getElementById('toggle-vibe').checked) navigator.vibrate(100);
+    speak("Settings saved and applied.");
+}
+
+async function testConnection() {
+    const key = document.getElementById('api-key').value.trim();
+    if(!key) return speak("Please enter a key first.");
+    try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
+        });
+        if(res.ok) speak("Connection successful."); else speak("Invalid key.");
+    } catch (e) { speak("Network error."); }
+}
+
 async function processScan() {
     const key = localStorage.getItem('th_key');
-    if(!key) { switchTab('panel-settings', document.getElementById('nav-settings')); return alert("Add API Key first!"); }
+    if(!key) return speak("Configure API key in settings first.");
+
+    if(localStorage.getItem('th_vibe') !== 'false') navigator.vibrate(100);
+    document.getElementById('status-text').innerText = "Analyzing visual safety...";
     
-    const status = document.getElementById('status-text');
-    status.innerText = "Processing scan...";
-    
+    const video = document.getElementById('cam-feed');
+    const cvs = document.createElement("canvas");
+    cvs.width = video.videoWidth; cvs.height = video.videoHeight;
+    cvs.getContext("2d").drawImage(video, 0, 0);
+    const b64 = cvs.toDataURL("image/jpeg");
+
     try {
-        const video = document.getElementById('cam-feed');
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-        canvas.getContext("2d").drawImage(video, 0, 0);
-        const b64 = canvas.toDataURL("image/jpeg").split(",")[1];
-        
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: "Detect toxins. One sentence verdict." }, { inline_data: { mime_type: "image/jpeg", data: b64 } }]}]})
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ contents: [{ parts: [
+                { text: "Analyze this image for visual signs of spoilage, mold, or discoloration. Provide a 1-sentence verdict on food safety based only on visual cues." },
+                { inline_data: { mime_type: "image/jpeg", data: b64.split(',')[1] } }
+            ]}]})
         });
         const data = await res.json();
         const verdict = data.candidates[0].content.parts[0].text;
         
-        status.innerText = verdict; // Updates on page for screen reader
-        
-        if(document.getElementById('sound-toggle').checked) document.getElementById('vista-chime').play();
-        if(document.getElementById('haptic-toggle').checked && navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        
-        saveReport(verdict);
+        if(localStorage.getItem('th_sound') !== 'false') scanSound.play();
+        document.getElementById('status-text').innerText = verdict;
         speak(verdict);
-    } catch (e) { status.innerText = "Error: Check API Key/Connection."; }
+        saveReport(verdict, b64);
+    } catch (e) { speak("Analysis failed."); }
 }
 
-// --- HISTORY LOGIC (THE FIX) ---
-function saveReport(txt) {
+function saveReport(txt, img) {
     const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
-    h.unshift({ id: Date.now(), txt, date: new Date().toLocaleString(), lat: lastCoords.lat, lng: lastCoords.lng });
-    localStorage.setItem('th_hist', JSON.stringify(h.slice(0, 50)));
+    h.unshift({ id: Date.now(), txt, img, lat: lastCoords.lat, lng: lastCoords.lng, date: new Date().toLocaleString() });
+    localStorage.setItem('th_hist', JSON.stringify(h.slice(0, 30)));
     loadHistory();
 }
 
 function loadHistory() {
     const list = document.getElementById('history-list');
     const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
-    list.innerHTML = ""; // Clear existing
-    
-    if (h.length === 0) {
-        list.innerHTML = "<p style='text-align:center; opacity:0.5;'>No scan history yet.</p>";
-        return;
-    }
-
-    h.forEach((item, index) => {
-        const card = document.createElement('div');
-        card.className = "card";
-        card.innerHTML = `
-            <small>${item.date} | 📍 ${item.lat}</small>
+    list.innerHTML = h.map((item, i) => `
+        <div class="card">
+            <div class="three-dot-menu">
+                <button class="dot-btn" onclick="toggleMenu(${i})">⋮</button>
+                <div id="menu-${i}" class="menu-content">
+                    <button onclick="downloadPDF(${i})">Download PDF</button>
+                    <button onclick="deleteItem(${i})" style="color:red">Delete</button>
+                </div>
+            </div>
+            <img src="${item.img}" class="history-img">
             <p><strong>${item.txt}</strong></p>
-            <button class="secondary-btn" style="width:100%" id="pdf-${index}">Download PDF</button>
-            <button style="border:none; color:red; background:none; margin-top:10px;" id="del-${index}">Delete</button>
-        `;
-        list.appendChild(card);
-        
-        // Safe button binding
-        document.getElementById(`pdf-${index}`).onclick = () => generatePDF(item);
-        document.getElementById(`del-${index}`).onclick = () => { h.splice(index, 1); localStorage.setItem('th_hist', JSON.stringify(h)); loadHistory(); };
-    });
+            <a href="https://www.google.com/maps?q=${item.lat},${item.lng}" target="_blank" style="color:var(--primary); font-weight:bold;">📍 View Location</a>
+        </div>
+    `).join('') || "<p>No logs yet.</p>";
 }
 
-function generatePDF(item) {
+function toggleMenu(i) {
+    const m = document.getElementById(`menu-${i}`);
+    m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+
+function downloadPDF(i) {
+    const item = JSON.parse(localStorage.getItem('th_hist'))[i];
     const doc = new jsPDF();
-    const img = new Image(); img.src = 'Tech House logo.jpg';
-    img.onload = () => {
-        doc.addImage(img, 'JPEG', 15, 10, 20, 20);
-        doc.text("TECH HOUSE SAFETY REPORT", 40, 22);
+    doc.text("TECH HOUSE SAFETY LOG", 20, 20);
+    doc.addImage(item.img, 'JPEG', 20, 30, 80, 60);
+    doc.text(`Date: ${item.date}`, 20, 100);
+    doc.text(doc.splitTextToSize(`Verdict: ${item.txt}`, 170), 20, 110);
+    doc.save(`TechHouse_Log_${item.id}.pdf`);
+}
+
+function generateFullReportPDF() {
+    const h = JSON.parse(localStorage.getItem('th_hist') || '[]');
+    if(!h.length) return speak("History is empty.");
+    const doc = new jsPDF();
+    doc.text("FULL SECURITY REPORT", 20, 20);
+    let y = 30;
+    h.forEach(item => {
+        if(y > 270) { doc.addPage(); y = 20; }
         doc.setFontSize(10);
-        doc.text(`Result: ${item.txt}`, 15, 45, {maxWidth: 170});
-        doc.save(`SafetyReport_${item.id}.pdf`);
-    };
+        doc.text(`${item.date}: ${item.txt.substring(0, 60)}...`, 20, y);
+        y += 10;
+    });
+    doc.save("Full_Report.pdf");
 }
 
-// --- SYSTEM UTILS ---
 function switchTab(id, el) {
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => { p.classList.remove('active'); p.setAttribute('aria-hidden', 'true'); });
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    if (el) el.classList.add('active');
+    const active = document.getElementById(id);
+    active.classList.add('active');
+    active.setAttribute('aria-hidden', 'false');
+    el.classList.add('active');
+    speak(el.innerText + " tab active");
 }
 
-async function initCam() {
-    try {
-        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        document.getElementById('cam-feed').srcObject = camStream;
-        videoTrack = camStream.getVideoTracks()[0];
-        const caps = videoTrack.getCapabilities();
-        if (caps.torch) document.getElementById('torch-btn').style.display = 'block';
-    } catch (e) { document.getElementById('status-text').innerText = "Cam Error."; }
+function toggleFlash() {
+    if(!camStream) return;
+    const isChecked = document.getElementById('flashlight-toggle').checked;
+    camStream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: isChecked }] });
 }
 
-function startGPS() { navigator.geolocation.watchPosition(p => { lastCoords = { lat: p.coords.latitude.toFixed(4), lng: p.coords.longitude.toFixed(4) }; }); }
-function saveKey() { localStorage.setItem('th_key', document.getElementById('api-key').value.trim()); alert("Saved!"); }
+function deleteItem(i) {
+    const h = JSON.parse(localStorage.getItem('th_hist'));
+    h.splice(i, 1);
+    localStorage.setItem('th_hist', JSON.stringify(h));
+    loadHistory();
+}
+
 function speak(t) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
-function clearHistory() { if(confirm("Clear all?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
-// Tour Logic
-function nextTourStep() { if (tourStep < tourSteps.length - 1) { tourStep++; runTourStep(); } else { closeTour(); } }
-function runTourStep() {
-    const s = tourSteps[tourStep];
-    switchTab(s.tab, document.getElementById('nav-' + s.tab.split('-')[1]));
-    document.getElementById('tour-title').innerText = s.title;
-    document.getElementById('tour-desc').innerText = s.desc;
-    document.getElementById('tour-primary-btn').innerText = (tourStep === tourSteps.length - 1) ? "FINISH" : "NEXT";
-}
-function closeTour() { document.getElementById('tour-overlay').style.display='none'; localStorage.setItem('tour_done', 'true'); switchTab('panel-scan', document.getElementById('nav-scan')); }
+function clearAll() { if(confirm("Wipe all logs?")) { localStorage.removeItem('th_hist'); loadHistory(); } }
