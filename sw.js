@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tech-house-v6';
+const CACHE_NAME = 'tech-house-v7';
 const ASSETS = [
     '/poisoning%20detector.html',
     '/poisoning%20detector%20styles.css',

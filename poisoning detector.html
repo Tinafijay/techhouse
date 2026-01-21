@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Tech House | Poisoning Detector</title>
     
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#006d3a">
     
     <link rel="icon" type="image/png" href="Tech House logo.png">
@@ -22,63 +22,46 @@
                 <canvas id="proc-canvas" style="display:none;"></canvas>
             </div>
             <div class="ui-overlay">
-                <h2 class="brand-text">TECH HOUSE POISONING DETECTOR</h2>
-                <div class="scan-controls">
-                    <button class="main-btn" onclick="processScan()">SCAN FOOD</button>
-                    <label class="flashlight-pill">
+                <h2 class="brand-text" style="color: white; text-align: center; margin-top: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">TECH HOUSE POISONING DETECTOR</h2>
+                <div class="scan-controls" style="position: fixed; bottom: 100px; width: 100%; text-align: center;">
+                    <button class="main-btn" onclick="processScan()" style="background: #006d3a; color: white; padding: 15px 30px; border: none; border-radius: 10px; font-weight: bold; width: 80%;">SCAN FOOD</button>
+                    <div style="margin-top: 10px; color: white;">
                         Flashlight <input type="checkbox" id="flashlight-toggle" onclick="toggleFlash()">
-                    </label>
-                    <div id="status-text">Ready</div>
-                    <div id="analysis-out" class="glass-card"></div>
+                    </div>
+                    <div id="status-text" style="margin-top: 10px; color: white; font-weight: bold;">Ready</div>
+                    <div id="analysis-out" class="glass-card" style="margin: 15px; background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 15px; border-radius: 10px; color: white; min-height: 50px;"></div>
                 </div>
             </div>
         </main>
 
-        <section id="panel-history" class="tab-pane" style="display:none;">
-            <div class="content-padding">
-                <h2 class="brand-text">SECURITY LOGS</h2>
-                <button class="main-btn" style="margin-bottom:20px;" onclick="downloadMasterHistory()">Download Master PDF</button>
-                <div id="history-list"></div>
-            </div>
+        <section id="panel-history" class="tab-pane" style="display:none; padding: 20px;">
+            <h2 class="brand-text">SECURITY LOGS</h2>
+            <button class="main-btn" onclick="downloadMasterHistory()" style="margin-bottom:20px; width: 100%;">Download Master PDF</button>
+            <div id="history-list"></div>
         </section>
 
-        <section id="panel-settings" class="tab-pane" style="display:none;">
-            <div class="content-padding">
-                <h2 class="brand-text">SETTINGS</h2>
-                <div class="card">
-                    <div id="install-btn-container" style="display:none; margin-bottom:20px;">
-                        <button class="main-btn" style="background:#0051a8;" onclick="installApp()">INSTALL APP</button>
-                        <hr>
-                    </div>
-                    
-                    <label>Gemini API Key</label>
-                    <input type="password" id="api-key" class="input-field">
-                    
-                    <div class="toggle-row">
-                        <span>Sounds</span>
-                        <input type="checkbox" id="toggle-sound">
-                    </div>
-                    <div class="toggle-row">
-                        <span>Haptics</span>
-                        <input type="checkbox" id="toggle-vibe">
-                    </div>
-                    
-                    <label>Theme</label>
-                    <select id="theme-select" class="input-field" onchange="saveAllSettings()">
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                        <option value="midnight">Midnight</option>
-                    </select>
-                    
-                    <button class="main-btn" onclick="saveAllSettings()">SAVE PREFERENCES</button>
-                </div>
+        <section id="panel-settings" class="tab-pane" style="display:none; padding: 20px;">
+            <h2 class="brand-text">SETTINGS</h2>
+            <div id="install-btn-container" style="display:none; margin-bottom:20px;">
+                <button class="main-btn" style="background:#0051a8; width: 100%; color: white; padding: 15px; border: none; border-radius: 10px;" onclick="installApp()">INSTALL APP</button>
+                <hr style="margin: 20px 0; border-color: #333;">
             </div>
+            
+            <label style="display: block; margin-bottom: 5px;">Gemini API Key</label>
+            <input type="password" id="api-key" style="width: 100%; padding: 10px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #333; background: #1e293b; color: white;">
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <span>Sounds</span>
+                <input type="checkbox" id="toggle-sound">
+            </div>
+            
+            <button class="main-btn" onclick="saveAllSettings()" style="width: 100%; background: #006d3a; color: white; padding: 15px; border: none; border-radius: 10px;">SAVE PREFERENCES</button>
         </section>
 
-        <nav class="tab-bar">
-            <button class="tab-btn active" onclick="switchTab('panel-scan', this)">📷 SCAN</button>
-            <button class="tab-btn" onclick="switchTab('panel-history', this)">📜 HISTORY</button>
-            <button class="tab-btn" onclick="switchTab('panel-settings', this)">⚙️ SETTINGS</button>
+        <nav class="tab-bar" style="position: fixed; bottom: 0; width: 100%; height: 70px; background: #1e293b; display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #333;">
+            <button class="tab-btn active" onclick="switchTab('panel-scan', this)" style="background: none; border: none; color: white;">📷 SCAN</button>
+            <button class="tab-btn" onclick="switchTab('panel-history', this)" style="background: none; border: none; color: #94a3b8;">📜 HISTORY</button>
+            <button class="tab-btn" onclick="switchTab('panel-settings', this)" style="background: none; border: none; color: #94a3b8;">⚙️ SETTINGS</button>
         </nav>
     </div>
 
@@ -86,12 +69,11 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('Tech House SW Active'))
-                    .catch(err => console.error('SW Error:', err));
+                    .then(reg => console.log('Tech House Service Worker Registered'))
+                    .catch(err => console.error('Service Worker Failed:', err));
             });
         }
     </script>
-
     <script src="poisoning%20detector%20script.js"></script>
 </body>
 </html>
