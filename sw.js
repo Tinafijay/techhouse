@@ -1,6 +1,6 @@
-const CACHE_NAME = 'tech-house-v3'; // Incremented version to force update
+const CACHE_NAME = 'tech-house-v2';
 const ASSETS = [
-    './', // Cache the root
+    '/',
     './poisoning%20detector.html',
     './poisoning%20detector%20styles.css',
     './poisoning%20detector%20script.js',
@@ -9,9 +9,9 @@ const ASSETS = [
     './vista_startup.mp3'
 ];
 
-// Install: Cache all branding and audio files
+// Install: Cache all branding and the Vista audio file
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); // Force the new service worker to take over immediately
+    self.skipWaiting(); // Forces the new worker to become active immediately
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll(ASSETS);
@@ -19,7 +19,7 @@ self.addEventListener('install', (event) => {
     );
 });
 
-// Activation: Clean up old versions to save space
+// Activation: Clean up the old v1 cache to free up device space
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((keys) => {
@@ -30,7 +30,7 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Fetch: Serve from cache so it works offline/fast
+// Fetch: Serve from cache so the app works offline
 self.addEventListener('fetch', (event) => {
     event.respondWith(
         caches.match(event.request).then((response) => {
