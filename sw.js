@@ -1,19 +1,17 @@
-const CACHE_NAME = 'tech-house-v7';
+const CACHE_NAME = 'tech-house-v9';
 const ASSETS = [
-    '/poisoning%20detector.html',
-    '/poisoning%20detector%20styles.css',
-    '/poisoning%20detector%20script.js',
-    '/manifest.json',
-    '/Tech%20House%20logo.png',
-    '/vista_startup.mp3'
+    './poisoning%20detector.html',
+    './poisoning%20detector%20styles.css',
+    './poisoning%20detector%20script.js',
+    './manifest.json',
+    './Tech%20House%20logo.png',
+    './vista_startup.mp3'
 ];
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(ASSETS);
-        })
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
     );
 });
 
@@ -29,8 +27,6 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     event.respondWith(
-        caches.match(event.request).then((response) => {
-            return response || fetch(event.request);
-        })
+        caches.match(event.request).then((response) => response || fetch(event.request))
     );
 });
