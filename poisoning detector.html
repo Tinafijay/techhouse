@@ -8,6 +8,9 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#006d3a">
     
+    <link rel="icon" type="image/png" href="Tech House logo.png">
+    <link rel="apple-touch-icon" href="Tech House logo.png">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="poisoning%20detector%20styles.css">
 </head>
@@ -82,9 +85,9 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('Service Worker Registered'))
-                    .catch(err => console.log('Service Worker Failed', err));
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Tech House SW Active'))
+                    .catch(err => console.error('SW Error:', err));
             });
         }
     </script>

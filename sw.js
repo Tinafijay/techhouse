@@ -1,11 +1,11 @@
-const CACHE_NAME = 'tech-house-v4';
+const CACHE_NAME = 'tech-house-v6';
 const ASSETS = [
     '/poisoning%20detector.html',
-    './poisoning%20detector%20styles.css',
-    './poisoning%20detector%20script.js',
-    './manifest.json',
-    './Tech%20House%20logo.jpg',
-    './vista_startup.mp3'
+    '/poisoning%20detector%20styles.css',
+    '/poisoning%20detector%20script.js',
+    '/manifest.json',
+    '/Tech%20House%20logo.png',
+    '/vista_startup.mp3'
 ];
 
 self.addEventListener('install', (event) => {
