@@ -1,32 +1,108 @@
-:root { --primary: #006d3a; --bg: #000; --card: #1a1a1a; --text: #fff; }
-[data-theme="light"] { --bg: #f4f7f9; --card: #fff; --text: #222; }
+:root {
+    --primary: #006d3a;
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text: #f8fafc;
+    --border: #334155;
+}
 
-body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+}
 
-/* Immersive Full-Screen Camera Background */
-.camera-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
-#cam-feed { width: 100%; height: 100%; object-fit: cover; }
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+}
 
-/* Overlay UI for Scan Tab */
-.ui-overlay { height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box; background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 40%, rgba(0,0,0,0.8) 100%); }
+/* Fix: Immersive Camera Background */
+.camera-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+}
 
-.brand-text { text-align: center; font-size: 1.2rem; letter-spacing: 2px; color: #fff; text-shadow: 2px 2px 6px #000; }
-.scan-controls { margin-bottom: 110px; text-align: center; }
-.glass-card { background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); padding: 15px; border-radius: 15px; margin-top: 10px; border: 1px solid var(--primary); color: #fff; }
+#cam-feed {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
 
-.flashlight-pill { display: inline-block; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px; margin: 10px 0; color: #fff; font-weight: bold; }
+.tab-pane {
+    display: none;
+    height: 100%;
+    overflow-y: auto;
+    padding-bottom: 100px;
+}
 
-.main-btn { width: 100%; padding: 20px; border-radius: 15px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; }
-.scan-btn { font-size: 1.4rem; box-shadow: 0 0 25px var(--primary); }
+.tab-pane.active {
+    display: block;
+}
 
-.tab-pane { display: none; height: 100%; overflow-y: auto; padding-bottom: 100px; }
-.tab-pane.active { display: block; }
-.content-padding { padding: 25px; text-align: center; }
+/* UI Elements */
+.glass-card {
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 15px;
+}
 
-.tab-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: rgba(0,0,0,0.95); display: flex; border-top: 1px solid #333; }
-.tab-btn { flex: 1; border: none; background: none; color: #fff; opacity: 0.5; font-size: 0.9rem; }
-.tab-btn.active { opacity: 1; color: var(--primary); border-top: 4px solid var(--primary); }
+.main-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 18px;
+    border-radius: 12px;
+    width: 90%;
+    font-weight: bold;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
 
-.card { background: var(--card); border: 1px solid #333; padding: 20px; border-radius: 20px; margin: 15px 0; text-align: left; }
-#tour-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 10000; display: flex; align-items: center; justify-content: center; }
-.tour-card { background: var(--card); padding: 35px; border-radius: 25px; text-align: center; width: 85%; max-width: 400px; border: 2px solid var(--primary); }
+.tab-bar {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    height: 85px;
+    background: var(--card);
+    display: flex;
+    justify-content: space-around;
+    border-top: 1px solid var(--border);
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.8rem;
+}
+
+.tab-btn.active {
+    color: var(--primary);
+}
+
+/* Maps Link Styling */
+.maps-link {
+    display: inline-block;
+    margin-top: 10px;
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: bold;
+    border: 1px solid var(--primary);
+    padding: 8px 12px;
+    border-radius: 8px;
+}

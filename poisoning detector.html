@@ -8,28 +8,16 @@
     <link rel="stylesheet" href="poisoning detector styles.css">
 </head>
 <body>
-    <div id="tour-overlay" style="display:none;">
-        <div class="tour-card">
-            <img src="Tech House logo.jpg" style="width: 70px; margin-bottom: 10px;">
-            <h1 id="tour-title"></h1>
-            <p id="tour-desc"></p>
-            <p id="tour-link-msg" style="font-size: 0.8rem;"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary); font-weight:bold;">GET KEY AT AI STUDIO</a></p>
-            <button class="main-btn" onclick="nextTourStep()">Next</button>
-            <button class="skip-btn" onclick="closeTour()">Skip</button>
-        </div>
-    </div>
-
     <div class="app-container">
         <main id="panel-scan" class="tab-pane active">
             <div class="camera-bg">
                 <video id="cam-feed" autoplay playsinline muted></video>
                 <canvas id="proc-canvas" style="display:none;"></canvas>
             </div>
-            
             <div class="ui-overlay">
                 <h2 class="brand-text">TECH HOUSE POISONING DETECTOR</h2>
                 <div class="scan-controls">
-                    <button class="main-btn scan-btn" onclick="processScan()">SCAN FOOD</button>
+                    <button class="main-btn" onclick="processScan()">SCAN FOOD</button>
                     <label class="flashlight-pill">
                         Flashlight <input type="checkbox" id="flashlight-toggle" onclick="toggleFlash()">
                     </label>
@@ -39,40 +27,33 @@
             </div>
         </main>
 
-        <section id="panel-history" class="tab-pane">
+        <section id="panel-history" class="tab-pane" style="display:none;">
             <div class="content-padding">
-                <h2 class="brand-text">HISTORY</h2>
-                <p>Track all previous security scans and GPS logs here.</p>
-                <button class="main-btn" style="margin-bottom:20px;" onclick="downloadMasterHistory()">Download Master Report (PDF)</button>
+                <h2 class="brand-text">SECURITY LOGS</h2>
+                <button class="main-btn" style="margin-bottom:20px;" onclick="downloadMasterHistory()">Download Master PDF</button>
                 <div id="history-list"></div>
             </div>
         </section>
 
-        <section id="panel-settings" class="tab-pane">
+        <section id="panel-settings" class="tab-pane" style="display:none;">
             <div class="content-padding">
-                <h2 class="brand-text">SYSTEM SETTINGS</h2>
+                <h2 class="brand-text">SETTINGS</h2>
                 <div class="card">
                     <div id="install-btn-container" style="display:none; margin-bottom:20px;">
-                        <button class="main-btn" style="background:#0051a8;" onclick="installApp()">INSTALL APP ON DEVICE</button>
+                        <button class="main-btn" style="background:#0051a8;" onclick="installApp()">INSTALL APP</button>
                         <hr>
                     </div>
-
-                    <label>System Key</label>
+                    <label>Gemini API Key</label>
                     <input type="password" id="api-key" class="input-field">
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary); font-weight:bold; display:block; margin: 10px 0;">GET KEY AT AI STUDIO</a>
-                    
-                    <div class="setting-item"><span>Audio Assist</span><input type="checkbox" id="toggle-sound"></div>
-                    <div class="setting-item"><span>Haptics</span><input type="checkbox" id="toggle-vibe"></div>
-                    
-                    <label>Interface Theme</label>
+                    <div class="toggle-row"><span>Sounds</span><input type="checkbox" id="toggle-sound"></div>
+                    <div class="toggle-row"><span>Haptics</span><input type="checkbox" id="toggle-vibe"></div>
+                    <label>Theme</label>
                     <select id="theme-select" class="input-field" onchange="saveAllSettings()">
                         <option value="light">Light</option>
                         <option value="dark">Dark</option>
                         <option value="midnight">Midnight</option>
                     </select>
-                    
                     <button class="main-btn" onclick="saveAllSettings()">SAVE PREFERENCES</button>
-                    <button class="main-btn" style="background:#444; margin-top:10px;" onclick="restartTour()">REVISIT TOUR</button>
                 </div>
             </div>
         </section>
