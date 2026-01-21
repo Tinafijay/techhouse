@@ -4,8 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Tech House | Poisoning Detector</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#006d3a">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <link rel="stylesheet" href="poisoning detector styles.css">
+    <link rel="stylesheet" href="poisoning%20detector%20styles.css">
 </head>
 <body>
     <div class="app-container">
@@ -43,16 +47,26 @@
                         <button class="main-btn" style="background:#0051a8;" onclick="installApp()">INSTALL APP</button>
                         <hr>
                     </div>
+                    
                     <label>Gemini API Key</label>
                     <input type="password" id="api-key" class="input-field">
-                    <div class="toggle-row"><span>Sounds</span><input type="checkbox" id="toggle-sound"></div>
-                    <div class="toggle-row"><span>Haptics</span><input type="checkbox" id="toggle-vibe"></div>
+                    
+                    <div class="toggle-row">
+                        <span>Sounds</span>
+                        <input type="checkbox" id="toggle-sound">
+                    </div>
+                    <div class="toggle-row">
+                        <span>Haptics</span>
+                        <input type="checkbox" id="toggle-vibe">
+                    </div>
+                    
                     <label>Theme</label>
                     <select id="theme-select" class="input-field" onchange="saveAllSettings()">
                         <option value="light">Light</option>
                         <option value="dark">Dark</option>
                         <option value="midnight">Midnight</option>
                     </select>
+                    
                     <button class="main-btn" onclick="saveAllSettings()">SAVE PREFERENCES</button>
                 </div>
             </div>
@@ -64,6 +78,17 @@
             <button class="tab-btn" onclick="switchTab('panel-settings', this)">⚙️ SETTINGS</button>
         </nav>
     </div>
-    <script src="poisoning detector script.js"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker Registered'))
+                    .catch(err => console.log('Service Worker Failed', err));
+            });
+        }
+    </script>
+
+    <script src="poisoning%20detector%20script.js"></script>
 </body>
 </html>
