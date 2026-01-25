@@ -1,9 +1,70 @@
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('Tech House System: Service Worker Active'))
-                .catch(err => console.log('Tech House System: Registration Error', err));
-        });
-    }
-</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Tech House Detector</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#006d3a">
+    <link rel="stylesheet" href="poisoning%20detector%20styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <main id="panel-scan" class="tab-pane active">
+            <div class="camera-bg"><video id="cam-feed" autoplay playsinline muted></video></div>
+            <div class="ui-overlay">
+                <h2 class="brand-text">Tech House System</h2>
+                <div style="margin-top:auto">
+                    <button class="main-btn" onclick="processScan()">INITIATE SCAN</button>
+                    <div id="status-text" style="text-align:center; margin-top:10px; font-weight:bold;">READY</div>
+                    <div id="analysis-out" class="glass-card" style="margin-top:15px; min-height:80px;"></div>
+                </div>
+            </div>
+        </main>
+
+        <section id="panel-history" class="tab-pane" style="display:none; padding:20px;">
+            <h2 class="brand-text">Security Logs</h2>
+            <div id="history-list"></div>
+        </section>
+
+        <section id="panel-settings" class="tab-pane" style="display:none; padding:20px;">
+            <h2 class="brand-text">System Configuration</h2>
+            <div class="glass-card">
+                <div id="install-btn-container" style="display:none; margin-bottom:20px;">
+                    <button class="main-btn" style="background:#0051a8" onclick="installApp()">INSTALL PWA</button>
+                </div>
+                <button class="main-btn" style="background:#475569; margin-bottom:15px;" onclick="testConnection()">TEST SYSTEM LINK</button>
+                
+                <label>Gemini Access Key</label>
+                <input type="password" id="api-key" class="input-field">
+                
+                <div class="toggle-row"><span>Audio Feedback</span><input type="checkbox" id="toggle-sound"></div>
+                <div class="toggle-row"><span>Haptic Engine</span><input type="checkbox" id="toggle-vibe"></div>
+                
+                <label>Visual Interface</label>
+                <select id="theme-select" class="input-field">
+                    <option value="dark">Classic Dark</option>
+                    <option value="light">High Contrast</option>
+                    <option value="midnight">Midnight Blue</option>
+                    <option value="emerald">Emerald City</option>
+                </select>
+                <button class="main-btn" onclick="saveAllSettings()">SAVE CONFIG</button>
+            </div>
+        </section>
+
+        <nav class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('panel-scan', this)">📷 SCAN</button>
+            <button class="tab-btn" onclick="switchTab('panel-history', this)">📜 HISTORY</button>
+            <button class="tab-btn" onclick="switchTab('panel-settings', this)">⚙️ SETTINGS</button>
+        </nav>
+    </div>
+
+    <script src="poisoning%20detector%20script.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').then(() => console.log("Tech House Online"));
+        }
+    </script>
+</body>
+</html>
