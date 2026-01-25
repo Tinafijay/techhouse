@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tech-house-v9';
+const CACHE_NAME = 'tech-house-v12';
 const ASSETS = [
     './poisoning%20detector.html',
     './poisoning%20detector%20styles.css',
@@ -8,25 +8,11 @@ const ASSETS = [
     './vista_startup.mp3'
 ];
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', (e) => {
     self.skipWaiting();
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
-    );
+    e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
 });
 
-self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        caches.keys().then((keys) => {
-            return Promise.all(
-                keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-            );
-        })
-    );
-});
-
-self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        caches.match(event.request).then((response) => response || fetch(event.request))
-    );
+self.addEventListener('fetch', (e) => {
+    e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
