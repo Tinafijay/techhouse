@@ -11,25 +11,35 @@
 </head>
 <body>
     <div class="app-container">
+        
+        <!-- SCAN PANEL -->
         <main id="panel-scan" class="tab-pane active">
             <div class="camera-bg"><video id="cam-feed" autoplay playsinline muted></video></div>
             <div class="ui-overlay">
-                <h2 class="brand-text">Tech House System</h2>
+                <h2 class="brand-text">Tech House<br>Poisoning Detector</h2>
                 <div style="margin-top:auto">
-                    <button class="main-btn" onclick="processScan()">INITIATE SCAN</button>
+                    <button class="main-btn" onclick="processScan()">SCAN FOOD</button>
                     <div id="status-text" style="text-align:center; margin-top:10px; font-weight:bold;">READY</div>
-                    <div id="analysis-out" class="glass-card" style="margin-top:15px; min-height:80px;"></div>
+                    <div id="analysis-out" class="glass-card" style="margin-top:15px; min-height:80px; font-size:0.9rem; max-height: 200px; overflow-y: auto;">
+                        Awaiting scan data...
+                    </div>
                 </div>
             </div>
         </main>
 
+        <!-- HISTORY PANEL -->
         <section id="panel-history" class="tab-pane" style="display:none; padding:20px;">
             <h2 class="brand-text">Security Logs</h2>
+            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                <button class="main-btn" onclick="clearHistory()" style="background:#dc2626; font-size:0.8rem;">CLEAR ALL</button>
+                <button class="main-btn" onclick="exportAllPDF()" style="background:#2563eb; font-size:0.8rem;">EXPORT ALL (PDF)</button>
+            </div>
             <div id="history-list"></div>
         </section>
 
+        <!-- SETTINGS PANEL -->
         <section id="panel-settings" class="tab-pane" style="display:none; padding:20px;">
-            <h2 class="brand-text">System Configuration</h2>
+            <h2 class="brand-text">Detector Settings</h2>
             <div class="glass-card">
                 <div id="install-btn-container" style="display:none; margin-bottom:20px;">
                     <button class="main-btn" style="background:#0051a8" onclick="installApp()">INSTALL PWA</button>
@@ -37,10 +47,9 @@
                 <button class="main-btn" style="background:#475569; margin-bottom:15px;" onclick="testConnection()">TEST SYSTEM LINK</button>
                 
                 <label>Gemini Access Key</label>
-                <input type="password" id="api-key" class="input-field">
+                <input type="password" id="api-key" class="input-field" placeholder="Paste API Key Here">
                 
-                <div class="toggle-row"><span>Audio Feedback</span><input type="checkbox" id="toggle-sound"></div>
-                <div class="toggle-row"><span>Haptic Engine</span><input type="checkbox" id="toggle-vibe"></div>
+                <div class="toggle-row"><span>Haptic Engine (Vibrations)</span><input type="checkbox" id="toggle-vibe"></div>
                 
                 <label>Visual Interface</label>
                 <select id="theme-select" class="input-field">
@@ -49,10 +58,11 @@
                     <option value="midnight">Midnight Blue</option>
                     <option value="emerald">Emerald City</option>
                 </select>
-                <button class="main-btn" onclick="saveAllSettings()">SAVE CONFIG</button>
+                <button class="main-btn" onclick="saveAllSettings()" style="margin-top:15px;">SAVE CONFIG</button>
             </div>
         </section>
 
+        <!-- NAVIGATION -->
         <nav class="tab-bar">
             <button class="tab-btn active" onclick="switchTab('panel-scan', this)">📷 SCAN</button>
             <button class="tab-btn" onclick="switchTab('panel-history', this)">📜 HISTORY</button>
@@ -60,10 +70,24 @@
         </nav>
     </div>
 
+    <!-- ONBOARDING TOUR MODAL -->
+    <div id="onboarding-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="tour-title" style="margin-top:0;">Welcome</h2>
+            <p id="tour-text" style="font-size:0.95rem; line-height:1.5; margin-bottom:25px;">Let's get started.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span id="tour-step-counter" style="opacity:0.6; font-size:0.8rem;">1 / 4</span>
+                <button class="main-btn" style="width:auto; padding:10px 20px;" onclick="nextTourStep()">NEXT</button>
+            </div>
+        </div>
+    </div>
+
     <script src="poisoning%20detector%20script.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js').then(() => console.log("Tech House Online"));
+            navigator.serviceWorker.register('./sw.js')
+                .then(() => console.log("Tech House SW Online"))
+                .catch(err => console.log("SW Registration failed", err));
         }
     </script>
 </body>
