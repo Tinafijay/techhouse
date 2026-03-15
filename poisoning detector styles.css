@@ -25,10 +25,16 @@ body {
     transition: background 0.3s ease;
 }
 
-.app-container { height: 100vh; display: flex; flex-direction: column; }
+.app-container { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-/* Camera UI */
-.camera-bg { position: fixed; top: 0; width: 100%; height: 100%; z-index: -1; }
+.tab-pane { 
+    flex: 1; 
+    overflow-y: auto; 
+    padding-bottom: 20px;
+}
+#panel-scan { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+.camera-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
 #cam-feed { width: 100%; height: 100%; object-fit: cover; }
 
 .ui-overlay { flex: 1; display: flex; flex-direction: column; padding: 20px; background: linear-gradient(to bottom, rgba(0,0,0,0.4), transparent 40%, rgba(0,0,0,0.4)); }
@@ -49,11 +55,35 @@ body {
 .main-btn:active { transform: scale(0.98); }
 
 .tab-bar {
+    flex-shrink: 0;
     display: flex; justify-content: space-around; background: var(--card);
-    backdrop-filter: blur(20px); padding: 10px 0 25px 0; border-top: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(20px); padding: 15px 0 25px 0; border-top: 1px solid rgba(255,255,255,0.1);
 }
-.tab-btn { background: none; border: none; color: var(--text); opacity: 0.6; font-size: 0.8rem; }
+.tab-btn { background: none; border: none; color: var(--text); opacity: 0.6; font-size: 0.8rem; font-weight: bold; cursor: pointer; }
 .tab-btn.active { opacity: 1; color: var(--accent); }
 
-.toggle-row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; }
+.toggle-row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; font-weight: bold; }
 .input-field { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: white; }
+.input-field option { background: #0f172a; color: white; }
+
+/* --- FIXED ONBOARDING MODAL STYLES --- */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); /* Much darker background so the modal pops */
+    backdrop-filter: blur(10px);
+    display: none; justify-content: center; align-items: center; z-index: 9999; padding: 20px;
+}
+
+.modal-content {
+    background: var(--bg); /* Solid background instead of transparent */
+    border: 2px solid var(--accent); /* Bright border */
+    border-radius: 16px; padding: 30px 25px; width: 100%; max-width: 350px;
+    text-align: center; color: var(--text); 
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+    animation: popIn 0.3s ease-out forwards;
+}
+
+@keyframes popIn {
+    0% { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
