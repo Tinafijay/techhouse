@@ -1,12 +1,13 @@
 /**
- * Tech House Master Editor Pro - Logic Engine (v0.12 Fixed)
+ * Tech House Master Editor Pro - (v0.11 Proven Engine)
  */
 
-// THE BUG FIX: The new library uses window.FFmpegWASM and window.FFmpegUtil
-const { FFmpeg } = window.FFmpegWASM;
-const { fetchFile, toBlobURL } = window.FFmpegUtil;
+const { createFFmpeg, fetchFile } = FFmpeg;
 
-const ffmpegInstance = new FFmpeg();
+const ffmpegInstance = createFFmpeg({ 
+    log: true,
+    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+});
 
 // DOM Elements
 const player = document.getElementById('player');
@@ -54,30 +55,28 @@ function updateUI() {
 
 async function init() {
     try {
-        announce("Initializing Engine (SSD Mode)...");
-        await ffmpegInstance.load({
-            coreURL: await toBlobURL('https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js', 'text/javascript'),
-            wasmURL: await toBlobURL('https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm', 'application/wasm'),
-        });
+        announce("Starting Proven Engine (v0.11)...");
+        await ffmpegInstance.load();
         announce("Tech House Engine Ready. Upload a video.");
     } catch (e) {
         console.error(e);
-        announce("Engine Error. Ensure coi-serviceworker.js is loaded correctly.");
+        announce("Engine Error. Please refresh the page.");
     }
 }
 init();
 
-// --- FILE LOADING ---
+// --- FILE LOADING & SPACEBAR FIX ---
 
 uploader.onchange = (e) => {
     videoFile = e.target.files[0];
     if (videoFile) {
+        // Load the video into the player
         const url = URL.createObjectURL(videoFile);
         player.src = url;
-        player.load(); // Forces the browser to load the data
-        player.style.display = "block"; // Unhides the video player
+        player.style.display = "block"; // Make video visible
         
-        // Prevents the Spacebar from opening the file picker again
+        // BUG FIX: Remove keyboard focus from the "Choose File" button
+        // so that pressing Space doesn't open the file picker again.
         uploader.blur(); 
         
         if (exportBtn) exportBtn.disabled = false;
@@ -93,7 +92,7 @@ window.addEventListener('keydown', (e) => {
     // 1. SPACE: Purely Play/Pause Logic
     if (e.code === 'Space') {
         e.preventDefault(); // Stop page scrolling
-        if (document.activeElement === uploader) uploader.blur(); // Stop button re-clicking
+        if (document.activeElement === uploader) uploader.blur(); 
         
         if (player.paused) {
             player.play();
@@ -169,11 +168,10 @@ player.ontimeupdate = () => {
 
 // --- PROGRESS TRACKING ---
 
-ffmpegInstance.on('progress', ({ ratio }) => {
+ffmpegInstance.setProgress(({ ratio }) => {
     const pct = Math.floor(ratio * 100);
     if (progBar) progBar.style.width = pct + '%';
     if (progLabel) progLabel.innerText = pct + '% Complete';
-    if (pct % 10 === 0) announce(`Processing: ${pct}%`);
 });
 
 // --- MASTER EXPORT ENGINE ---
@@ -185,32 +183,30 @@ async function runExport(isPortrait) {
 
     exportBtn.disabled = true;
     if (progContainer) progContainer.classList.remove('hidden');
-    announce("Tech House Render Starting... resolving filters.");
+    announce("Tech House Render Starting... computing pixels.");
 
     try {
-        // Step 1: Write input video to virtual SSD
-        await ffmpegInstance.writeFile('input.mp4', await fetchFile(videoFile));
+        // Step 1: Write input video to MEMFS
+        ffmpegInstance.FS('writeFile', 'input.mp4', await fetchFile(videoFile));
 
         // Step 2: Build Filter Complex
         const duration = trimPoints.end - trimPoints.start;
-        const fadeOutStart = Math.max(0, duration - 1); // Ensure fade doesn't crash on short clips
+        const fadeOutStart = Math.max(0, duration - 1); 
         
-        // Automatic Fading (1s in, 1s out)
+        // Fading (1s in, 1s out)
         let vFilter = `fade=t=in:st=0:d=1,fade=t=out:st=${fadeOutStart}:d=1`;
         let aFilter = `afade=t=in:st=0:d=1,afade=t=out:st=${fadeOutStart}:d=1`;
 
-        // Portrait Mode Logic
         if (isPortrait) {
             vFilter += `,crop=ih*(9/16):ih,scale=720:1280`;
         }
 
-        // Overlay Logic
         let args =['-ss', trimPoints.start.toString(), '-to', trimPoints.end.toString(), '-i', 'input.mp4'];
 
+        // Overlay Logic
         if (overlayFile) {
-            await ffmpegInstance.writeFile('image.png', await fetchFile(overlayFile));
+            ffmpegInstance.FS('writeFile', 'image.png', await fetchFile(overlayFile));
             args.push('-i', 'image.png');
-            // Overlay at bottom right corner (20px gap) with timed enable window
             vFilter = `[0:v]${vFilter}[vbase]; [vbase][1:v]overlay=W-w-20:H-h-20:enable='between(t,${overlayPoints.start - trimPoints.start},${overlayPoints.end - trimPoints.start})'`;
         }
 
@@ -224,7 +220,7 @@ async function runExport(isPortrait) {
         args.push('-filter_complex', vFilter);
         args.push('-af', aFilter);
         
-        // Encoder optimization for Dell Chromebook 11 (Celeron Processor)
+        // Optimizer for Celeron Processor
         args.push(
             '-c:v', 'libx264', 
             '-preset', 'ultrafast', 
@@ -232,30 +228,30 @@ async function runExport(isPortrait) {
             'output.mp4'
         );
 
-        // Execute Render
-        await ffmpegInstance.exec(args);
+        // Execute Render using the v0.11 spread operator
+        await ffmpegInstance.run(...args);
 
         // Step 3: Fetch result and download
-        const data = await ffmpegInstance.readFile('output.mp4');
+        const data = ffmpegInstance.FS('readFile', 'output.mp4');
         const url = URL.createObjectURL(new Blob([data.buffer], {type: 'video/mp4'}));
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = `tech-house-edit-${Date.now()}.mp4`;
+        a.download = `tech-house-pro-${Date.now()}.mp4`;
         a.click();
 
-        announce("✅ MASTERPIECE COMPLETE!");
+        announce("✅ EXPORT COMPLETE!");
     } catch (err) {
         console.error(err);
-        announce("❌ EXPORT FAILED. Make sure your browser has enough storage.");
+        announce("❌ EXPORT FAILED.");
     } finally {
-        // Memory Cleanup (Crucial for 4GB RAM)
+        // Memory Cleanup (Crucial for preventing ChromeOS crash on next video)
         if (progContainer) progContainer.classList.add('hidden');
         exportBtn.disabled = false;
         try {
-            await ffmpegInstance.deleteFile('input.mp4');
-            if (overlayFile) await ffmpegInstance.deleteFile('image.png');
-            await ffmpegInstance.deleteFile('output.mp4');
+            ffmpegInstance.FS('unlink', 'input.mp4');
+            if (overlayFile) ffmpegInstance.FS('unlink', 'image.png');
+            ffmpegInstance.FS('unlink', 'output.mp4');
         } catch (e) { /* ignore cleanup errors */ }
     }
 }
