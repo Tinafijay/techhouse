@@ -12,7 +12,6 @@ body {
     border-radius: 12px; border: 1px solid #334155; 
 }
 
-/* Highly visible focus rings for accessibility */
 :focus { outline: 4px solid var(--gold) !important; outline-offset: 4px; }
 
 .status-box { 
@@ -25,18 +24,33 @@ body {
 video { width: 100%; border-radius: 8px; background: #000; margin-top: 15px; border: 2px solid #334155; }
 .time-readout { font-size: 2.5rem; color: var(--gold); font-weight: bold; margin: 15px 0; text-align: center; font-variant-numeric: tabular-nums; }
 
-/* Dashboard for tracking layered assets */
+/* NEW TOOLBOX CSS */
+.toolbox-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0;
+}
+.tool-field {
+    display: flex; flex-direction: column; gap: 8px;
+    background: #0b1120; padding: 15px; border-radius: 8px; border: 1px solid #334155;
+}
+.tool-field label { font-weight: bold; color: var(--text); }
+.input-dropdown {
+    width: 100%; padding: 10px; background: var(--bg); color: white;
+    border: 1px solid #334155; border-radius: 6px; font-size: 1rem; cursor: pointer;
+}
+.secondary-btn {
+    background: #475569; color: white; padding: 10px 15px; font-size: 0.9rem;
+    border: none; border-radius: 6px; cursor: pointer;
+}
+.secondary-btn:hover { background: #64748b; }
+
 .task-card { 
     background: #0b1120; padding: 20px; 
-    border-radius: 10px; border: 2px dashed var(--accent); 
-    margin: 20px 0; 
+    border-radius: 10px; border: 2px dashed var(--accent); margin: 20px 0; 
 }
-#asset-list { list-style: none; padding: 0; margin: 0; }
-#asset-list li { padding: 5px 0; border-bottom: 1px solid #334155; }
-#asset-list li:last-child { border-bottom: none; }
+#asset-list { list-style: none; padding: 0; margin: 0; line-height: 1.8; }
+#asset-list li { border-bottom: 1px solid #334155; }
 #asset-list span { color: var(--gold); font-weight: bold; float: right; }
 
-/* Progress bar */
 .progress-container { height: 25px; background: #000; border-radius: 12px; margin: 20px 0; overflow: hidden; position: relative; }
 #prog-bar { height: 100%; width: 0%; background: var(--green); transition: width 0.2s; }
 #prog-label { position: absolute; width: 100%; text-align: center; top: 3px; font-weight: bold; color: white; text-shadow: 1px 1px 2px black; }
@@ -49,7 +63,6 @@ button {
 button:hover { background: #7dd3fc; }
 button:disabled { background: #475569; opacity: 0.5; color: #94a3b8; cursor: not-allowed;}
 
-/* Keyboard grid */
 .shortcuts-help { 
     margin-top: 25px; display: grid; grid-template-columns: 1fr 1fr; 
     gap: 15px; background: #334155; padding: 20px; border-radius: 8px; 
