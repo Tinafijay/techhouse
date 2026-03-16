@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech House Master Editor Pro</title>
-    
-    <!-- Required for FFmpeg SharedArrayBuffer -->
     <script src="coi-serviceworker.js"></script>
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <link rel="stylesheet" href="tech-house-editor-style.css">
@@ -15,7 +13,6 @@
 <div class="card">
     <header>
         <h1>🎬 Tech House Editor <span id="mode-badge">TRIM MODE</span></h1>
-        <!-- ARIA Live region for Screen Readers (Crucial for visually impaired) -->
         <div id="announcer" class="sr-only" aria-live="assertive"></div>
         <div id="status-display" class="status-box">Status: Initializing Engine...</div>
     </header>
@@ -29,10 +26,44 @@
         <video id="player" controls style="display:none;"></video>
         <div class="time-readout" id="current-time" aria-hidden="true">00:00.000</div>
 
-        <!-- DASHBOARD: Shows users what is currently loaded -->
+        <!-- NEW: TOOLBOX PANEL WITH DROPDOWNS -->
+        <div class="toolbox-grid">
+            <!-- Add Media Dropdown -->
+            <div class="tool-field">
+                <label for="track-type">➕ Add Extra Media</label>
+                <div style="display: flex; gap: 10px;">
+                    <select id="track-type" class="input-dropdown">
+                        <option value="img">🖼️ Image Overlay</option>
+                        <option value="bgm">🎵 Background Music</option>
+                        <option value="sfx">🔊 Sound Effect</option>
+                    </select>
+                    <button id="btn-browse-track" class="secondary-btn">BROWSE</button>
+                </div>
+            </div>
+
+            <!-- Visual Effects Dropdown -->
+            <div class="tool-field">
+                <label for="video-fx">✨ Visual Effects</label>
+                <select id="video-fx" class="input-dropdown" onchange="announce('Effect changed to ' + this.options[this.selectedIndex].text)">
+                    <option value="none">Normal (No Effect)</option>
+                    <option value="bw">Black & White</option>
+                    <option value="sepia">Vintage Sepia</option>
+                    <option value="blur">Cinematic Blur</option>
+                </select>
+            </div>
+
+            <!-- Denoise Toggle -->
+            <div class="tool-field" style="justify-content: center; align-items: center; background: #0b1120; border-radius: 8px;">
+                <label style="cursor: pointer; font-size: 1.1rem; color: #4ade80;">
+                    <input type="checkbox" id="denoise-toggle" style="transform: scale(1.5); margin-right: 10px;" onchange="announce(this.checked ? 'Denoise ON' : 'Denoise OFF')"> 
+                    🎙️ AI Denoise (Clean Voice)
+                </label>
+            </div>
+        </div>
+
         <div id="task-panel" class="task-card">
-            <h2 style="margin-top:0; color:#38bdf8;">Current Assets Layered</h2>
-            <ul id="asset-list" style="line-height: 1.8;">
+            <h2 style="margin-top:0; color:#38bdf8; font-size:1.2rem;">Current Assets Layered</h2>
+            <ul id="asset-list">
                 <li><strong>Video Trim:</strong> <span id="lbl-trim">Not Set</span></li>
                 <li><strong>Image Overlay:</strong> <span id="lbl-img">None</span></li>
                 <li><strong>Backing Music:</strong> <span id="lbl-bgm">None</span></li>
@@ -40,7 +71,6 @@
             </ul>
         </div>
 
-        <!-- PROGRESS BAR -->
         <div id="prog-container" class="progress-container hidden">
             <div id="prog-bar"></div>
             <div id="prog-label">0% Complete</div>
@@ -49,17 +79,18 @@
         <button id="export-btn" disabled>🚀 EXPORT VIDEO (Ctrl + X)</button>
 
         <div class="shortcuts-help">
-            <div><kbd>Space</kbd> Play / Pause</div>
-            <div><kbd>S</kbd> / <kbd>E</kbd> Set Start/End Point</div>
-            <div><kbd>←</kbd> / <kbd>→</kbd> Seek 10s (Shift for 1s)</div>
-            <div><kbd>↑</kbd> / <kbd>↓</kbd> Change Volume (Audio Modes)</div>
-            <div><kbd>Ctrl+O</kbd> Add Image Overlay</div>
-            <div><kbd>Ctrl+M</kbd> Add Background Music</div>
-            <div><kbd>Ctrl+F</kbd> Add Sound Effect (SFX)</div>
-            <div><kbd>Enter</kbd> Lock Layer & Return to Trim</div>
+            <div><kbd>Space</kbd> Play/Pause</div>
+            <div><kbd>S</kbd> / <kbd>E</kbd> Set Start/End</div>
+            <div><kbd>←</kbd> / <kbd>→</kbd> Seek 10s</div>
+            <div><kbd>Shift</kbd> + <kbd>←/→</kbd> Seek 1s</div>
+            <div><kbd>↑</kbd> / <kbd>↓</kbd> Set Audio Volume</div>
+            <div><kbd>Enter</kbd> Lock Layer & Return</div>
         </div>
     </main>
 </div>
+
+<!-- Hidden inputs for the dropdown uploader -->
+<input type="file" id="track-uploader" style="display:none;">
 
 <script src="tech-house-editor-script.js"></script>
 </body>
