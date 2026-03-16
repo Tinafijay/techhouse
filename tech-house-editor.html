@@ -4,71 +4,68 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech House Master Editor Pro</title>
-    <!-- v0.12 Libraries for SSD-Writing Mode -->
+    <!-- v0.12 Libraries -->
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.umd.js"></script>
     <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
     <script src="coi-serviceworker.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="tech-house-editor-style.css">
 </head>
 <body>
 
 <div class="card">
     <header>
-        <h1>🎬 Tech House Master Editor <span id="mode-badge">TRIM MODE</span></h1>
+        <h1>🎬 Tech House Master <span id="mode-badge">TRIM MODE</span></h1>
         <div id="announcer" class="sr-only" aria-live="assertive"></div>
         <div id="status-display" class="status-box">Status: Initializing Engine...</div>
     </header>
 
     <main>
         <div class="upload-zone">
-            <input type="file" id="uploader" accept="video/*" aria-label="Select Video to Edit">
+            <label for="uploader" style="cursor:pointer; display:block; padding:10px; background:#334155; border-radius:8px; text-align:center;">
+                📁 Choose Video File
+            </label>
+            <input type="file" id="uploader" accept="video/*" style="display:none;">
         </div>
         
-        <video id="player" controls></video>
+        <video id="player" controls style="display:none;"></video>
 
         <div class="time-readout" id="current-time">00:00:00.000</div>
 
-        <!-- Task Panel: Appears for Manual Overrides and Overlay Settings -->
         <div id="task-panel" class="task-card hidden">
             <h2 id="task-title">Overlay Settings</h2>
             <div class="input-row">
                 <div class="field">
-                    <label for="manual-s">Start (ms)</label>
-                    <input type="number" id="manual-s" step="0.001" value="0.000">
+                    <label>Start (s)</label>
+                    <input type="number" id="manual-s" step="0.001">
                 </div>
                 <div class="field">
-                    <label for="manual-e">End (ms)</label>
-                    <input type="number" id="manual-e" step="0.001" value="5.000">
+                    <label>End (s)</label>
+                    <input type="number" id="manual-e" step="0.001">
                 </div>
             </div>
-            <p class="hint">Press <strong>S</strong> or <strong>E</strong> to set via player, then <strong>ENTER</strong> to save.</p>
+            <p class="hint">Use <strong>S</strong> / <strong>E</strong> keys, then <strong>ENTER</strong>.</p>
         </div>
 
         <div class="master-controls">
-            <label class="toggle-ui">
-                <input type="checkbox" id="denoise-toggle" checked> 🎙️ Remove Background Noise
-            </label>
+            <label><input type="checkbox" id="denoise-toggle" checked> 🎙️ Denoise</label>
         </div>
 
-        <!-- Progress Tracking -->
         <div id="prog-container" class="progress-container hidden">
             <div id="prog-bar"></div>
-            <span id="prog-label">0% Processing</span>
+            <span id="prog-label">0%</span>
         </div>
 
-        <button id="export-btn" disabled>🚀 EXPORT (Press Ctrl + X)</button>
+        <button id="export-btn" disabled>🚀 EXPORT (Ctrl + X)</button>
     </main>
 
     <div class="shortcuts-help">
         <div><kbd>Space</kbd> Play/Pause</div>
-        <div><kbd>S</kbd> Set Start</div>
-        <div><kbd>E</kbd> Set End</div>
-        <div><kbd>Ctrl</kbd>+<kbd>O</kbd> Add Illustration</div>
-        <div><kbd>Enter</kbd> Confirm Overlay</div>
-        <div><kbd>Ctrl</kbd>+<kbd>X</kbd> Export</div>
+        <div><kbd>S</kbd> / <kbd>E</kbd> Set Points</div>
+        <div><kbd>Ctrl+O</kbd> Add Image</div>
+        <div><kbd>Ctrl+X</kbd> Export</div>
     </div>
 </div>
 
-<script src="script.js"></script>
+<script src="tech-house-editor-script.js"></script>
 </body>
 </html>
