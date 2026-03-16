@@ -25,25 +25,31 @@ if (typeof window === 'undefined') {
                         headers: newHeaders,
                     });
                 })
-                .catch((e) => console.error(e))
+                .catch((e) => console.error("COI Fetch Error:", e))
         );
     });
 } else {
     (() => {
-        const script = document.currentScript;
-        script.removeAttribute("src");
-        const coep = true;
+        // Optimization: Only register if we aren't already isolated
+        if (window.crossOriginIsolated) return;
 
-        if (window.crossOriginIsolated !== false || !navigator.serviceWorker) {
+        if (!navigator.serviceWorker) {
+            console.error("COI: Service Workers are not supported or you are using file://");
             return;
         }
 
-        const registration = navigator.serviceWorker.register(window.location.pathname, { scope: "./" });
-        registration.then(() => {
-            console.log("COI Service Worker registered.");
-            window.location.reload();
+        navigator.serviceWorker.register(window.location.href, { scope: "./" }).then((registration) => {
+            registration.addEventListener("updatefound", () => {
+                // If a new worker is found, reload to apply headers immediately
+                window.location.reload();
+            });
+
+            if (registration.active && !window.crossOriginIsolated) {
+                // If worker is active but page isn't isolated, we need one reload
+                window.location.reload();
+            }
         }, (err) => {
-            console.error("COI Service Worker registration failed: ", err);
+            console.error("COI registration failed: ", err);
         });
     })();
 }
