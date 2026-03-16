@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech House Master Editor Pro</title>
-    <!-- v0.12 Libraries -->
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.umd.js"></script>
-    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+    
+    <!-- The ROCK SOLID v0.11 Engine that works on your Chromebook -->
     <script src="coi-serviceworker.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
     <link rel="stylesheet" href="tech-house-editor-style.css">
 </head>
 <body>
@@ -21,18 +22,20 @@
 
     <main>
         <div class="upload-zone">
-            <label for="uploader" style="cursor:pointer; display:block; padding:10px; background:#334155; border-radius:8px; text-align:center;">
+            <label for="uploader" style="cursor:pointer; display:block; padding:10px; background:#334155; border-radius:8px; text-align:center; font-weight:bold;">
                 📁 Choose Video File
             </label>
             <input type="file" id="uploader" accept="video/*" style="display:none;">
         </div>
         
-        <video id="player" controls style="display:none;"></video>
+        <!-- Video Player -->
+        <video id="player" controls style="display:none; width: 100%; border-radius: 8px; margin-top: 15px;"></video>
 
         <div class="time-readout" id="current-time">00:00:00.000</div>
 
+        <!-- Hidden Panel for Image Overlays -->
         <div id="task-panel" class="task-card hidden">
-            <h2 id="task-title">Overlay Settings</h2>
+            <h2 id="task-title" style="margin-top:0; color:#38bdf8;">Overlay Settings</h2>
             <div class="input-row">
                 <div class="field">
                     <label>Start (s)</label>
@@ -43,11 +46,11 @@
                     <input type="number" id="manual-e" step="0.001">
                 </div>
             </div>
-            <p class="hint">Use <strong>S</strong> / <strong>E</strong> keys, then <strong>ENTER</strong>.</p>
+            <p class="hint" style="margin-bottom:0;">Use <strong>S</strong> / <strong>E</strong> keys, then <strong>ENTER</strong>.</p>
         </div>
 
-        <div class="master-controls">
-            <label><input type="checkbox" id="denoise-toggle" checked> 🎙️ Denoise</label>
+        <div class="master-controls" style="margin-top:15px;">
+            <label><input type="checkbox" id="denoise-toggle" checked> 🎙️ Denoise Audio</label>
         </div>
 
         <div id="prog-container" class="progress-container hidden">
@@ -55,7 +58,7 @@
             <span id="prog-label">0%</span>
         </div>
 
-        <button id="export-btn" disabled>🚀 EXPORT (Ctrl + X)</button>
+        <button id="export-btn" disabled style="margin-top:20px;">🚀 EXPORT (Ctrl + X)</button>
     </main>
 
     <div class="shortcuts-help">
