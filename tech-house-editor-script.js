@@ -1,10 +1,10 @@
 /**
- * Tech House Master Editor Pro - Logic Engine (v0.12)
- * Designed for Dell Chromebook 11 (3180) - ChromeOS 103
+ * Tech House Master Editor Pro - Logic Engine (v0.12 Fixed)
  */
 
-const { FFmpeg } = ffmpeg;
-const { fetchFile, toBlobURL } = FFmpegUtil;
+// THE BUG FIX: The new library uses window.FFmpegWASM and window.FFmpegUtil
+const { FFmpeg } = window.FFmpegWASM;
+const { fetchFile, toBlobURL } = window.FFmpegUtil;
 
 const ffmpegInstance = new FFmpeg();
 
@@ -30,11 +30,12 @@ let overlayPoints = { start: 0, end: 5 };
 // --- HELPERS ---
 
 function announce(msg) {
-    statusDisp.innerText = "Status: " + msg;
-    announcer.innerText = msg;
+    if (statusDisp) statusDisp.innerText = "Status: " + msg;
+    if (announcer) announcer.innerText = msg;
 }
 
 function formatTime(seconds) {
+    if (isNaN(seconds)) return "00:00:00.000";
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = (seconds % 60).toFixed(3);
@@ -43,8 +44,10 @@ function formatTime(seconds) {
 
 function updateUI() {
     const target = (mode === "TRIM") ? trimPoints : overlayPoints;
-    document.getElementById('manual-s').value = target.start.toFixed(3);
-    document.getElementById('manual-e').value = target.end.toFixed(3);
+    const sInput = document.getElementById('manual-s');
+    const eInput = document.getElementById('manual-e');
+    if (sInput) sInput.value = target.start.toFixed(3);
+    if (eInput) eInput.value = target.end.toFixed(3);
 }
 
 // --- ENGINE INITIALIZATION ---
@@ -59,7 +62,7 @@ async function init() {
         announce("Tech House Engine Ready. Upload a video.");
     } catch (e) {
         console.error(e);
-        announce("Engine Error. Ensure coi-serviceworker.js is present.");
+        announce("Engine Error. Ensure coi-serviceworker.js is loaded correctly.");
     }
 }
 init();
@@ -72,12 +75,12 @@ uploader.onchange = (e) => {
         const url = URL.createObjectURL(videoFile);
         player.src = url;
         player.load(); // Forces the browser to load the data
-        player.style.display = "block";
+        player.style.display = "block"; // Unhides the video player
         
-        // Fix: Force focus away from the button so Spacebar works only for play/pause
+        // Prevents the Spacebar from opening the file picker again
         uploader.blur(); 
         
-        exportBtn.disabled = false;
+        if (exportBtn) exportBtn.disabled = false;
         announce("Video Loaded. Use Space to play, S/E to trim.");
     }
 };
@@ -160,15 +163,16 @@ window.addEventListener('keydown', (e) => {
 
 // Update timer readout
 player.ontimeupdate = () => {
-    document.getElementById('current-time').innerText = formatTime(player.currentTime);
+    const timeDisplay = document.getElementById('current-time');
+    if (timeDisplay) timeDisplay.innerText = formatTime(player.currentTime);
 };
 
 // --- PROGRESS TRACKING ---
 
 ffmpegInstance.on('progress', ({ ratio }) => {
     const pct = Math.floor(ratio * 100);
-    progBar.style.width = pct + '%';
-    progLabel.innerText = pct + '% Complete';
+    if (progBar) progBar.style.width = pct + '%';
+    if (progLabel) progLabel.innerText = pct + '% Complete';
     if (pct % 10 === 0) announce(`Processing: ${pct}%`);
 });
 
@@ -180,7 +184,7 @@ async function runExport(isPortrait) {
     }
 
     exportBtn.disabled = true;
-    progContainer.classList.remove('hidden');
+    if (progContainer) progContainer.classList.remove('hidden');
     announce("Tech House Render Starting... resolving filters.");
 
     try {
@@ -188,9 +192,12 @@ async function runExport(isPortrait) {
         await ffmpegInstance.writeFile('input.mp4', await fetchFile(videoFile));
 
         // Step 2: Build Filter Complex
+        const duration = trimPoints.end - trimPoints.start;
+        const fadeOutStart = Math.max(0, duration - 1); // Ensure fade doesn't crash on short clips
+        
         // Automatic Fading (1s in, 1s out)
-        let vFilter = `fade=t=in:st=0:d=1,fade=t=out:st=${trimPoints.end - trimPoints.start - 1}:d=1`;
-        let aFilter = `afade=t=in:st=0:d=1,afade=t=out:st=${trimPoints.end - trimPoints.start - 1}:d=1`;
+        let vFilter = `fade=t=in:st=0:d=1,fade=t=out:st=${fadeOutStart}:d=1`;
+        let aFilter = `afade=t=in:st=0:d=1,afade=t=out:st=${fadeOutStart}:d=1`;
 
         // Portrait Mode Logic
         if (isPortrait) {
@@ -198,7 +205,7 @@ async function runExport(isPortrait) {
         }
 
         // Overlay Logic
-        let args = ['-ss', trimPoints.start.toString(), '-to', trimPoints.end.toString(), '-i', 'input.mp4'];
+        let args =['-ss', trimPoints.start.toString(), '-to', trimPoints.end.toString(), '-i', 'input.mp4'];
 
         if (overlayFile) {
             await ffmpegInstance.writeFile('image.png', await fetchFile(overlayFile));
@@ -208,7 +215,8 @@ async function runExport(isPortrait) {
         }
 
         // Denoise logic
-        if (document.getElementById('denoise-toggle').checked) {
+        const denoiseToggle = document.getElementById('denoise-toggle');
+        if (denoiseToggle && denoiseToggle.checked) {
             aFilter = `afftdn,${aFilter}`;
         }
 
@@ -220,9 +228,7 @@ async function runExport(isPortrait) {
         args.push(
             '-c:v', 'libx264', 
             '-preset', 'ultrafast', 
-            '-crf', '24', 
             '-c:a', 'aac', 
-            '-b:a', '128k', 
             'output.mp4'
         );
 
@@ -241,10 +247,10 @@ async function runExport(isPortrait) {
         announce("✅ MASTERPIECE COMPLETE!");
     } catch (err) {
         console.error(err);
-        announce("❌ EXPORT FAILED. Try a shorter clip.");
+        announce("❌ EXPORT FAILED. Make sure your browser has enough storage.");
     } finally {
         // Memory Cleanup (Crucial for 4GB RAM)
-        progContainer.classList.add('hidden');
+        if (progContainer) progContainer.classList.add('hidden');
         exportBtn.disabled = false;
         try {
             await ffmpegInstance.deleteFile('input.mp4');
