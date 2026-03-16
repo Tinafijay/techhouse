@@ -5,68 +5,60 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech House Master Editor Pro</title>
     
-    <!-- The ROCK SOLID v0.11 Engine that works on your Chromebook -->
+    <!-- Required for FFmpeg SharedArrayBuffer -->
     <script src="coi-serviceworker.js"></script>
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-    
     <link rel="stylesheet" href="tech-house-editor-style.css">
 </head>
 <body>
 
 <div class="card">
     <header>
-        <h1>🎬 Tech House Master <span id="mode-badge">TRIM MODE</span></h1>
+        <h1>🎬 Tech House Editor <span id="mode-badge">TRIM MODE</span></h1>
+        <!-- ARIA Live region for Screen Readers (Crucial for visually impaired) -->
         <div id="announcer" class="sr-only" aria-live="assertive"></div>
         <div id="status-display" class="status-box">Status: Initializing Engine...</div>
     </header>
 
     <main>
         <div class="upload-zone">
-            <label for="uploader" style="cursor:pointer; display:block; padding:10px; background:#334155; border-radius:8px; text-align:center; font-weight:bold;">
-                📁 Choose Video File
-            </label>
+            <button id="main-upload-btn" class="action-btn" onclick="document.getElementById('uploader').click()">📁 Choose Main Video File</button>
             <input type="file" id="uploader" accept="video/*" style="display:none;">
         </div>
         
-        <!-- Video Player -->
-        <video id="player" controls style="display:none; width: 100%; border-radius: 8px; margin-top: 15px;"></video>
+        <video id="player" controls style="display:none;"></video>
+        <div class="time-readout" id="current-time" aria-hidden="true">00:00.000</div>
 
-        <div class="time-readout" id="current-time">00:00:00.000</div>
-
-        <!-- Hidden Panel for Image Overlays -->
-        <div id="task-panel" class="task-card hidden">
-            <h2 id="task-title" style="margin-top:0; color:#38bdf8;">Overlay Settings</h2>
-            <div class="input-row">
-                <div class="field">
-                    <label>Start (s)</label>
-                    <input type="number" id="manual-s" step="0.001">
-                </div>
-                <div class="field">
-                    <label>End (s)</label>
-                    <input type="number" id="manual-e" step="0.001">
-                </div>
-            </div>
-            <p class="hint" style="margin-bottom:0;">Use <strong>S</strong> / <strong>E</strong> keys, then <strong>ENTER</strong>.</p>
+        <!-- DASHBOARD: Shows users what is currently loaded -->
+        <div id="task-panel" class="task-card">
+            <h2 style="margin-top:0; color:#38bdf8;">Current Assets Layered</h2>
+            <ul id="asset-list" style="line-height: 1.8;">
+                <li><strong>Video Trim:</strong> <span id="lbl-trim">Not Set</span></li>
+                <li><strong>Image Overlay:</strong> <span id="lbl-img">None</span></li>
+                <li><strong>Backing Music:</strong> <span id="lbl-bgm">None</span></li>
+                <li><strong>Sound Effect:</strong> <span id="lbl-sfx">None</span></li>
+            </ul>
         </div>
 
-        <div class="master-controls" style="margin-top:15px;">
-            <label><input type="checkbox" id="denoise-toggle" checked> 🎙️ Denoise Audio</label>
-        </div>
-
+        <!-- PROGRESS BAR -->
         <div id="prog-container" class="progress-container hidden">
             <div id="prog-bar"></div>
-            <span id="prog-label">0%</span>
+            <div id="prog-label">0% Complete</div>
         </div>
 
-        <button id="export-btn" disabled style="margin-top:20px;">🚀 EXPORT (Ctrl + X)</button>
-    </main>
+        <button id="export-btn" disabled>🚀 EXPORT VIDEO (Ctrl + X)</button>
 
-    <div class="shortcuts-help">
-        <div><kbd>Space</kbd> Play/Pause</div>
-        <div><kbd>S</kbd> / <kbd>E</kbd> Set Points</div>
-        <div><kbd>Ctrl+O</kbd> Add Image</div>
-        <div><kbd>Ctrl+X</kbd> Export</div>
-    </div>
+        <div class="shortcuts-help">
+            <div><kbd>Space</kbd> Play / Pause</div>
+            <div><kbd>S</kbd> / <kbd>E</kbd> Set Start/End Point</div>
+            <div><kbd>←</kbd> / <kbd>→</kbd> Seek 10s (Shift for 1s)</div>
+            <div><kbd>↑</kbd> / <kbd>↓</kbd> Change Volume (Audio Modes)</div>
+            <div><kbd>Ctrl+O</kbd> Add Image Overlay</div>
+            <div><kbd>Ctrl+M</kbd> Add Background Music</div>
+            <div><kbd>Ctrl+F</kbd> Add Sound Effect (SFX)</div>
+            <div><kbd>Enter</kbd> Lock Layer & Return to Trim</div>
+        </div>
+    </main>
 </div>
 
 <script src="tech-house-editor-script.js"></script>
