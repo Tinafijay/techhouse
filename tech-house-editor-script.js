@@ -6,13 +6,11 @@ const player = document.getElementById('player');
 
 let files = { vid: null, img: null, bgm: null, sfx: null };
 let markers = {
-    trimS: 0, trimE: 0,
+    start: 0, end: 0,
     imgS: 0, imgE: 5,
     sfxAt: 0,
-    logoCorner: 'top-right'
+    logoPos: 'W-w-10:10' // Default top-right
 };
-
-const corners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 function notify(msg) {
     document.getElementById('announcer').innerText = msg;
@@ -31,7 +29,7 @@ function playBeep(f) {
 async function loadEngine() {
     notify("Warming up FFmpeg engine...");
     await ffmpeg.load();
-    notify("Engine Ready. Upload a video!");
+    notify("Engine Ready!");
 }
 loadEngine();
 
@@ -40,55 +38,35 @@ document.getElementById('vid-up').onchange = (e) => {
     files.vid = e.target.files;
     player.src = URL.createObjectURL(files.vid);
     player.onloadedmetadata = () => {
-        markers.trimE = player.duration;
+        markers.end = player.duration;
         document.getElementById('stat-vid').innerText = `Video: ${player.duration.toFixed(1)}s`;
         document.getElementById('export-btn').disabled = false;
         notify("Video loaded.");
     };
 };
 
-document.getElementById('img-up').onchange = (e) => { 
-    files.img = e.target.files; 
-    notify("Image/Logo loaded. Use Ctrl+I to place."); 
-};
+document.getElementById('img-up').onchange = (e) => { files.img = e.target.files; notify("Logo loaded!"); };
 
-// --- SHORTCUTS ---
+// --- KEYBOARD ---
 window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     const k = e.key.toLowerCase();
-    const mode = document.getElementById('edit-mode').value;
+    const t = player.currentTime;
 
-    // Standard Play/Pause
-    if (k === 'k' || e.code === 'Space') {
+    if (k === 'i') { markers.start = t; playBeep(400); notify(`Point A set: ${t.toFixed(1)}`); }
+    if (k === 'o') { markers.end = t; playBeep(600); notify(`Point B set: ${t.toFixed(1)}`); }
+    
+    // BACKSPACE TO DELETE PART
+    if (e.key === 'Backspace') {
+        notify(`Marked zone ${markers.start.toFixed(1)} to ${markers.end.toFixed(1)} for deletion.`);
+        playBeep(200);
+    }
+
+    if (e.ctrlKey && k === 'i') {
         e.preventDefault();
-        player.paused ? player.play() : player.pause();
-    }
-
-    // Logic by Mode
-    if (mode === 'trim') {
-        if (k === 'i') { markers.trimS = player.currentTime; playBeep(400); notify(`Start: ${markers.trimS.toFixed(1)}`); }
-        if (k === 'o') { markers.trimE = player.currentTime; playBeep(600); notify(`End: ${markers.trimE.toFixed(1)}`); }
-    }
-
-    if (mode === 'logo' || e.ctrlKey && k === 'i') {
-        if (e.ctrlKey && k === 'i') {
-            e.preventDefault();
-            markers.imgS = player.currentTime;
-            markers.imgE = player.currentTime + 5;
-            notify("Logo start set for 5 seconds.");
-        }
-        if (k === 'l') {
-            const idx = (corners.indexOf(markers.logoCorner) + 1) % 4;
-            markers.logoCorner = corners[idx];
-            document.getElementById('stat-pos').innerText = `Logo Position: ${markers.logoCorner}`;
-            notify(`Position: ${markers.logoCorner}`);
-        }
-    }
-
-    if (k === 'm' && mode === 'sfx') {
-        markers.sfxAt = player.currentTime;
-        playBeep(1000);
-        notify(`SFX set at ${markers.sfxAt.toFixed(1)}`);
+        markers.imgS = t;
+        markers.imgE = t + 5;
+        notify("Logo set for 5 seconds.");
     }
 
     if (e.ctrlKey && k === 'x') { e.preventDefault(); runExport(); }
@@ -96,47 +74,47 @@ window.addEventListener('keydown', (e) => {
 
 async function runExport() {
     const btn = document.getElementById('export-btn');
+    const isTrim = document.getElementById('trim-mode-check').checked;
     btn.disabled = true;
     document.getElementById('progress-container').classList.remove('hidden');
-    notify("Mastering your video...");
+    notify("Exporting... don't close the tab!");
 
     try {
         ffmpeg.FS('writeFile', 'v.mp4', await fetchFile(files.vid));
-        let inputs = ['-ss', markers.trimS.toString(), '-to', markers.trimE.toString(), '-i', 'v.mp4'];
         
-        // Position Math
-        const posMap = {
-            'top-left': '10:10',
-            'top-right': 'W-w-10:10',
-            'bottom-left': '10:H-h-10',
-            'bottom-right': 'W-w-10:H-h-10'
-        };
+        let vFilter = "";
+        let aFilter = "";
 
-        let vFilter = '[0:v]';
-        const isPortrait = document.getElementById('format-mode').value === 'portrait';
-        if (isPortrait) vFilter += `crop=ih*(9/16):ih[v0];[v0]`;
-        else vFilter += `copy[v0];[v0]`;
-
-        if (files.img) {
-            ffmpeg.FS('writeFile', 'logo.png', await fetchFile(files.img));
-            inputs.push('-i', 'logo.png');
-            vFilter += `[1:v]overlay=${posMap[markers.logoCorner]}:enable='between(t,${markers.imgS - markers.trimS},${markers.imgE - markers.trimS})'[v1]`;
+        if (isTrim) {
+            // TRIM MODE: Only keep what's between I and O
+            vFilter = `[0:v]trim=start=${markers.start}:end=${markers.end},setpts=PTS-STARTPTS[v0];`;
+            aFilter = `[0:a]atrim=start=${markers.start}:end=${markers.end},asetpts=PTS-STARTPTS[a0];`;
         } else {
-            vFilter += `null[v1]`;
+            // CUT MODE: Delete what's between I and O
+            vFilter = `[0:v]select='not(between(t,${markers.start},${markers.end}))',setpts=N/FRAME_RATE/TB[v0];`;
+            aFilter = `[0:a]aselect='not(between(t,${markers.start},${markers.end}))',asetpts=N/SR/TB[a0];`;
         }
 
-        // Simple audio mix logic
-        let aFilter = '[0:a]amix=inputs=1[aout]'; 
+        // Add Logo if present
+        if (files.img) {
+            ffmpeg.FS('writeFile', 'l.png', await fetchFile(files.img));
+            vFilter += `[v0][1:v]overlay=${markers.logoPos}:enable='between(t,${markers.imgS},${markers.imgE})'[v1]`;
+        } else {
+            vFilter += `[v0]copy[v1]`;
+        }
 
-        await ffmpeg.run(...inputs, '-filter_complex', `${vFilter};${aFilter}`, '-map', '[v1]', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'ultrafast', 'out.mp4');
+        const args = ['-i', 'v.mp4'];
+        if (files.img) args.push('-i', 'l.png');
+        
+        await ffmpeg.run(...args, '-filter_complex', `${vFilter};${aFilter}`, '-map', '[v1]', '-map', '[a0]', '-c:v', 'libx264', '-preset', 'ultrafast', 'out.mp4');
 
         const data = ffmpeg.FS('readFile', 'out.mp4');
         const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
         const a = document.createElement('a');
-        a.href = url; a.download = 'vibe-edit.mp4'; a.click();
-        notify("Export finished! Check downloads.");
+        a.href = url; a.download = 'vibe-render.mp4'; a.click();
+        notify("Done!");
     } catch (err) {
-        notify("Error during export. Check console.");
+        notify("Export failed. Check the console!");
         console.error(err);
     } finally {
         btn.disabled = false;
