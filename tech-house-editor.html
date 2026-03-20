@@ -14,7 +14,7 @@
     <header>
         <h1>Vibe Editor Pro</h1>
         <div id="announcer" class="sr-only" aria-live="assertive"></div>
-        <div id="status-bar" class="status-box">Ready. Upload video to start.</div>
+        <div id="status-bar" class="status-box">Ready. Upload your video.</div>
     </header>
 
     <main>
@@ -30,32 +30,37 @@
             <input type="file" id="sfx-up" hidden accept="audio/*">
         </section>
 
-        <div class="mode-selector-zone">
-            <label><input type="checkbox" id="trim-mode-check"> ✂️ <strong>TRIM MODE</strong> (Keep only the selection)</label>
-            <p style="font-size: 0.8rem; color: #888;">If unchecked, hitting Backspace deletes the selection from the full video.</p>
-            
-            <label for="format-mode"><strong>Export Format:</strong></label>
-            <select id="format-mode" class="mode-select">
-                <option value="landscape">Landscape (16:9)</option>
-                <option value="portrait">Portrait (9:16)</option>
-            </select>
+        <div class="editor-settings">
+            <div class="setting-group">
+                <label for="edit-mode"><strong>Action Mode:</strong></label>
+                <select id="edit-mode" class="mode-select">
+                    <option value="trim">Trim (I/O to select area)</option>
+                    <option value="logo">Logo (Ctrl+I to place)</option>
+                    <option value="sfx">SFX (M to place Ding)</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label><input type="checkbox" id="trim-check"> ✂️ <strong>Keep Selection Only</strong> (Trim)</label>
+                <p class="hint">If unchecked, hitting Backspace deletes the I-O area.</p>
+            </div>
         </div>
 
         <video id="player" controls></video>
         
-        <div class="asset-status-panel">
+        <div class="status-panel">
             <div id="stat-vid">Video: None</div>
-            <div id="stat-selection">Selection: Full Video</div>
-            <div id="stat-img">Logo: Not Placed</div>
+            <div id="stat-markers">Markers: Not set</div>
+            <div id="stat-action">Action: Full Video Export</div>
         </div>
 
-        <div class="controls-card">
-            <label><input type="checkbox" id="denoise-check"> Clean Voice</label>
+        <div class="render-zone">
+            <label><input type="checkbox" id="denoise-check"> Denoise Audio</label>
             <button id="export-btn" class="export-btn" disabled>🚀 RENDER (Ctrl+X)</button>
         </div>
 
         <div id="progress-container" class="hidden">
-            <progress id="render-prog" value="0" max="100" style="width:100%"></progress>
+            <progress id="render-prog" value="0" max="100"></progress>
             <p id="prog-text">0% Rendered</p>
         </div>
     </main>
