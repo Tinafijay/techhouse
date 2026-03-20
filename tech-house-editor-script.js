@@ -4,15 +4,16 @@ const ffmpeg = createFFmpeg({ log: true, corePath: 'https://unpkg.com/@ffmpeg/co
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const player = document.getElementById('player');
 
-// State: All layers
 let files = { vid: null, img: null, bgm: null, sfx: null };
 let markers = {
     trimS: 0, trimE: 0,
     imgS: 0, imgE: 5,
-    sfxAt: 0
+    sfxAt: 0,
+    logoCorner: 'top-right'
 };
 
-// --- HELPERS ---
+const corners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+
 function notify(msg) {
     document.getElementById('announcer').innerText = msg;
     document.getElementById('status-bar').innerText = msg;
@@ -27,156 +28,116 @@ function playBeep(f) {
     o.start(); o.stop(audioCtx.currentTime + 0.1);
 }
 
-// --- INITIALIZE ---
 async function loadEngine() {
-    notify("Engine warming up...");
+    notify("Warming up FFmpeg engine...");
     await ffmpeg.load();
-    notify("Ready. Upload your Video to start.");
+    notify("Engine Ready. Upload a video!");
 }
 loadEngine();
 
-// --- UPLOAD LOGIC ---
+// --- UPLOADS ---
 document.getElementById('vid-up').onchange = (e) => {
-    files.vid = e.target.files[0];
+    files.vid = e.target.files;
     player.src = URL.createObjectURL(files.vid);
     player.onloadedmetadata = () => {
         markers.trimE = player.duration;
-        document.getElementById('stat-vid').innerText = `Video: Loaded (${player.duration.toFixed(1)}s)`;
+        document.getElementById('stat-vid').innerText = `Video: ${player.duration.toFixed(1)}s`;
         document.getElementById('export-btn').disabled = false;
         notify("Video loaded.");
     };
 };
 
 document.getElementById('img-up').onchange = (e) => { 
-    files.img = e.target.files[0]; 
-    document.getElementById('stat-img').innerText = "Image: Loaded. Press G/H to place.";
-    notify("Image uploaded."); 
+    files.img = e.target.files; 
+    notify("Image/Logo loaded. Use Ctrl+I to place."); 
 };
 
-document.getElementById('bgm-up').onchange = (e) => { 
-    files.bgm = e.target.files[0]; 
-    document.getElementById('stat-bgm').innerText = "Music: Loaded (Looping/Background)";
-    notify("Background music loaded."); 
-};
-
-document.getElementById('sfx-up').onchange = (e) => { 
-    files.sfx = e.target.files[0]; 
-    document.getElementById('stat-sfx').innerText = "SFX: Loaded. Move seekhead and press M.";
-    notify("Sound effect loaded."); 
-};
-
-// --- KEYBOARD LOGIC ---
+// --- SHORTCUTS ---
 window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
-    const t = player.currentTime;
+    const mode = document.getElementById('edit-mode').value;
 
+    // Standard Play/Pause
     if (k === 'k' || e.code === 'Space') {
         e.preventDefault();
         player.paused ? player.play() : player.pause();
     }
-    if (k === 'l') player.currentTime += 5;
-    if (k === 'j') player.currentTime -= 5;
 
-    // MARKERS
-    if (k === 'i') { markers.trimS = t; playBeep(800); notify(`Trim Start: ${t.toFixed(1)}`); }
-    if (k === 'o') { markers.trimE = t; playBeep(400); notify(`Trim End: ${t.toFixed(1)}`); }
-    
-    if (k === 'g') { markers.imgS = t; playBeep(1000); notify(`Image appears at: ${t.toFixed(1)}`); }
-    if (k === 'h') { markers.imgE = t; playBeep(600); notify(`Image disappears at: ${t.toFixed(1)}`); }
-    
-    if (k === 'm') { markers.sfxAt = t; playBeep(1200); notify(`Sound Effect set at: ${t.toFixed(1)}`); }
+    // Logic by Mode
+    if (mode === 'trim') {
+        if (k === 'i') { markers.trimS = player.currentTime; playBeep(400); notify(`Start: ${markers.trimS.toFixed(1)}`); }
+        if (k === 'o') { markers.trimE = player.currentTime; playBeep(600); notify(`End: ${markers.trimE.toFixed(1)}`); }
+    }
 
-    if (k === 'v') {
-        notify(`Status: Trim ${markers.trimS.toFixed(1)} to ${markers.trimE.toFixed(1)}. SFX at ${markers.sfxAt.toFixed(1)}.`);
+    if (mode === 'logo' || e.ctrlKey && k === 'i') {
+        if (e.ctrlKey && k === 'i') {
+            e.preventDefault();
+            markers.imgS = player.currentTime;
+            markers.imgE = player.currentTime + 5;
+            notify("Logo start set for 5 seconds.");
+        }
+        if (k === 'l') {
+            const idx = (corners.indexOf(markers.logoCorner) + 1) % 4;
+            markers.logoCorner = corners[idx];
+            document.getElementById('stat-pos').innerText = `Logo Position: ${markers.logoCorner}`;
+            notify(`Position: ${markers.logoCorner}`);
+        }
+    }
+
+    if (k === 'm' && mode === 'sfx') {
+        markers.sfxAt = player.currentTime;
+        playBeep(1000);
+        notify(`SFX set at ${markers.sfxAt.toFixed(1)}`);
     }
 
     if (e.ctrlKey && k === 'x') { e.preventDefault(); runExport(); }
 });
 
-// --- RENDER ENGINE ---
 async function runExport() {
     const btn = document.getElementById('export-btn');
     btn.disabled = true;
     document.getElementById('progress-container').classList.remove('hidden');
-    notify("Starting Master Render...");
+    notify("Mastering your video...");
 
     try {
-        // 1. Write files to FFmpeg Virtual Drive
         ffmpeg.FS('writeFile', 'v.mp4', await fetchFile(files.vid));
-        let inputCount = 1;
         let inputs = ['-ss', markers.trimS.toString(), '-to', markers.trimE.toString(), '-i', 'v.mp4'];
-
-        if (files.img) { ffmpeg.FS('writeFile', 'i.png', await fetchFile(files.img)); inputs.push('-i', 'i.png'); }
-        if (files.bgm) { ffmpeg.FS('writeFile', 'b.mp3', await fetchFile(files.bgm)); inputs.push('-i', 'b.mp3'); }
-        if (files.sfx) { ffmpeg.FS('writeFile', 's.mp3', await fetchFile(files.sfx)); inputs.push('-i', 's.mp3'); }
-
-        // 2. Build Complex Filter
-        // We shift timestamps relative to the trim start
-        const relImgS = Math.max(0, markers.imgS - markers.trimS);
-        const relImgE = Math.max(0, markers.imgE - markers.trimS);
-        const relSfxAt = Math.max(0, markers.sfxAt - markers.trimS) * 1000; // ms for adelay
-
-        let vFilter = '[0:v]'; 
-        let aFilter = '[0:a]'; 
-        let aStreams = ['[a0]'];
-
-        // Denoise first?
-        if (document.getElementById('denoise-check').checked) {
-            aFilter = '[0:a]afftdn[a0];';
-        } else {
-            aFilter = '[0:a]copy[a0];'; // Placeholder
-        }
-
-        // Image Overlay (Input 1)
-        if (files.img) {
-            vFilter += `[1:v]overlay=10:10:enable='between(t,${relImgS},${relImgE})'[v1];`;
-            vFilter = '[v1]';
-        }
-
-        // Audio Mixing
-        let aMix = aFilter;
-        let mixIndex = 1;
-        if (files.img) mixIndex++; // skip image index
-
-        if (files.bgm) {
-            aMix += `[${mixIndex}:a]volume=0.3[abgm];`;
-            aStreams.push('[abgm]');
-            mixIndex++;
-        }
-        if (files.sfx) {
-            aMix += `[${mixIndex}:a]volume=1.0,adelay=${relSfxAt}|${relSfxAt}[asfx];`;
-            aStreams.push('[asfx]');
-        }
-
-        const finalAMix = `${aMix}${aStreams.join('')}amix=inputs=${aStreams.length}:duration=first[aout]`;
-
-        // 3. RUN FFmpeg
-        let fullArgs = [...inputs, '-filter_complex', `${vFilter}${finalAMix}`, '-map', '[v1]', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'ultrafast', 'out.mp4'];
         
-        // If no image, map original video
-        if (!files.img) {
-            fullArgs = [...inputs, '-filter_complex', finalAMix, '-map', '0:v', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'ultrafast', 'out.mp4'];
+        // Position Math
+        const posMap = {
+            'top-left': '10:10',
+            'top-right': 'W-w-10:10',
+            'bottom-left': '10:H-h-10',
+            'bottom-right': 'W-w-10:H-h-10'
+        };
+
+        let vFilter = '[0:v]';
+        const isPortrait = document.getElementById('format-mode').value === 'portrait';
+        if (isPortrait) vFilter += `crop=ih*(9/16):ih[v0];[v0]`;
+        else vFilter += `copy[v0];[v0]`;
+
+        if (files.img) {
+            ffmpeg.FS('writeFile', 'logo.png', await fetchFile(files.img));
+            inputs.push('-i', 'logo.png');
+            vFilter += `[1:v]overlay=${posMap[markers.logoCorner]}:enable='between(t,${markers.imgS - markers.trimS},${markers.imgE - markers.trimS})'[v1]`;
+        } else {
+            vFilter += `null[v1]`;
         }
 
-        ffmpeg.setProgress(({ ratio }) => {
-            const p = Math.floor(ratio * 100);
-            document.getElementById('render-prog').value = p;
-            document.getElementById('prog-text').innerText = `${p}% Rendered`;
-        });
+        // Simple audio mix logic
+        let aFilter = '[0:a]amix=inputs=1[aout]'; 
 
-        await ffmpeg.run(...fullArgs);
+        await ffmpeg.run(...inputs, '-filter_complex', `${vFilter};${aFilter}`, '-map', '[v1]', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'ultrafast', 'out.mp4');
 
-        // 4. DOWNLOAD
         const data = ffmpeg.FS('readFile', 'out.mp4');
         const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
         const a = document.createElement('a');
-        a.href = url; a.download = 'pro-edit.mp4'; a.click();
-        notify("Export Complete!");
-
-    } catch (e) {
-        notify("Render Error. Files might be too large for Chromebook RAM.");
-        console.error(e);
+        a.href = url; a.download = 'vibe-edit.mp4'; a.click();
+        notify("Export finished! Check downloads.");
+    } catch (err) {
+        notify("Error during export. Check console.");
+        console.error(err);
     } finally {
         btn.disabled = false;
         document.getElementById('progress-container').classList.add('hidden');
