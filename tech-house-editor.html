@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tech-House Multi-Layer Editor</title>
+    <title>Vibe Editor Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/coi-serviceworker@0.1.7/coi-serviceworker.min.js"></script>
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <link rel="stylesheet" href="style.css">
@@ -12,17 +12,17 @@
 
 <div class="editor-container">
     <header>
-        <h1>Accessible Multi-Layer Editor</h1>
+        <h1>Vibe Editor Pro</h1>
         <div id="announcer" class="sr-only" aria-live="assertive"></div>
-        <div id="status-bar" class="status-box">Ready. Upload main video.</div>
+        <div id="status-bar" class="status-box">Ready. Upload video to start.</div>
     </header>
 
     <main>
         <section class="upload-grid">
             <button class="layer-btn" onclick="document.getElementById('vid-up').click()">📁 Video</button>
-            <button class="layer-btn" onclick="document.getElementById('img-up').click()">🖼️ Image</button>
+            <button class="layer-btn" onclick="document.getElementById('img-up').click()">🖼️ Logo/Img</button>
             <button class="layer-btn" onclick="document.getElementById('bgm-up').click()">🎵 Music</button>
-            <button class="layer-btn" onclick="document.getElementById('sfx-up').click()">🔊 SFX (Ding)</button>
+            <button class="layer-btn" onclick="document.getElementById('sfx-up').click()">🔊 SFX</button>
             
             <input type="file" id="vid-up" hidden accept="video/*">
             <input type="file" id="img-up" hidden accept="image/*">
@@ -30,20 +30,32 @@
             <input type="file" id="sfx-up" hidden accept="audio/*">
         </section>
 
-        <video id="player" controls></video>
-        
-        <div class="asset-status-panel" role="region" aria-label="Layer Status">
-            <div id="stat-vid">Video: None</div>
-            <div id="stat-img">Image: None (Use G/H to place)</div>
-            <div id="stat-bgm">Music: None</div>
-            <div id="stat-sfx">SFX: None (Use M to place)</div>
+        <div class="mode-selector-zone">
+            <label for="edit-mode"><strong>Current Edit Mode:</strong></label>
+            <select id="edit-mode" class="mode-select">
+                <option value="trim">Trim (I for Start, O for End)</option>
+                <option value="logo">Logo (Ctrl+I to Place, L to Cycle Corner)</option>
+                <option value="sfx">SFX (M to Place Ding)</option>
+            </select>
+
+            <label for="format-mode"><strong>Export Format:</strong></label>
+            <select id="format-mode" class="mode-select">
+                <option value="landscape">Landscape (16:9)</option>
+                <option value="portrait">Portrait (9:16)</option>
+            </select>
         </div>
 
-        <div class="time-display" id="current-time">00:00.00</div>
+        <video id="player" controls></video>
+        
+        <div class="asset-status-panel">
+            <div id="stat-vid">Video: None</div>
+            <div id="stat-img">Logo: Not Placed</div>
+            <div id="stat-pos">Logo Position: Top-Right</div>
+        </div>
 
         <div class="controls-card">
-            <label><input type="checkbox" id="denoise-check"> Clean Voice (Denoise)</label>
-            <button id="export-btn" class="export-btn" disabled>🚀 RENDER & DOWNLOAD (Ctrl+X)</button>
+            <label><input type="checkbox" id="denoise-check"> Clean Voice</label>
+            <button id="export-btn" class="export-btn" disabled>🚀 RENDER (Ctrl+X)</button>
         </div>
 
         <div id="progress-container" class="hidden">
@@ -51,16 +63,6 @@
             <p id="prog-text">0% Rendered</p>
         </div>
     </main>
-
-    <footer class="help-section">
-        <h3>Master Shortcuts</h3>
-        <ul class="shortcut-list">
-            <li><kbd>I</kbd> / <kbd>O</kbd> : Trim Start / End</li>
-            <li><kbd>G</kbd> / <kbd>H</kbd> : Image Appear / Disappear</li>
-            <li><kbd>M</kbd> : Set SFX "Ding" Timestamp</li>
-            <li><kbd>V</kbd> : Speak current status</li>
-        </ul>
-    </footer>
 </div>
 
 <script src="script.js"></script>
