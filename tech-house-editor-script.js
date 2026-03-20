@@ -1,263 +1,184 @@
 const { createFFmpeg, fetchFile } = FFmpeg;
 const ffmpeg = createFFmpeg({ log: true, corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js' });
 
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const player = document.getElementById('player');
-const statusDisp = document.getElementById('status-display');
-const announcer = document.getElementById('announcer');
-const exportBtn = document.getElementById('export-btn');
-const modeBadge = document.getElementById('mode-badge');
 
-let mode = "TRIM"; 
-let videoFile = null;
-
-const assets = {
-    trim: { s: 0, e: 0 },
-    img: { file: null, s: 0, e: 5 },
-    bgm: { file: null, vol: 0.2 },
-    sfx: { file: null, s: 0, e: 2, vol: 0.8 }
+// State: All layers
+let files = { vid: null, img: null, bgm: null, sfx: null };
+let markers = {
+    trimS: 0, trimE: 0,
+    imgS: 0, imgE: 5,
+    sfxAt: 0
 };
 
 // --- HELPERS ---
-function announce(msg) {
-    statusDisp.innerText = "Status: " + msg;
-    announcer.innerText = msg;
+function notify(msg) {
+    document.getElementById('announcer').innerText = msg;
+    document.getElementById('status-bar').innerText = msg;
 }
 
-function formatTime(sec) {
-    if (isNaN(sec)) return "00:00.000";
-    const m = Math.floor(sec / 60);
-    const s = (sec % 60).toFixed(3);
-    return `${m.toString().padStart(2, '0')}:${s.padStart(6, '0')}`;
+function playBeep(f) {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.frequency.value = f;
+    g.gain.value = 0.1;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.1);
 }
 
-function updateUI() {
-    document.getElementById('lbl-trim').innerText = `${assets.trim.s.toFixed(2)}s to ${assets.trim.e.toFixed(2)}s`;
-    if(assets.img.file) document.getElementById('lbl-img').innerText = `Active (${assets.img.s.toFixed(2)}s to ${assets.img.e.toFixed(2)}s)`;
-    if(assets.bgm.file) document.getElementById('lbl-bgm').innerText = `Active (Vol: ${Math.round(assets.bgm.vol * 100)}%)`;
-    if(assets.sfx.file) document.getElementById('lbl-sfx').innerText = `Active (${assets.sfx.s.toFixed(2)}s, Vol: ${Math.round(assets.sfx.vol * 100)}%)`;
+// --- INITIALIZE ---
+async function loadEngine() {
+    notify("Engine warming up...");
+    await ffmpeg.load();
+    notify("Ready. Upload your Video to start.");
 }
+loadEngine();
 
-async function init() {
-    try {
-        announce("Starting Proven Engine... Please wait.");
-        await ffmpeg.load();
-        announce("Tech House Engine Ready. Upload your main video to begin.");
-    } catch (e) {
-        announce("Engine Error. Please refresh the page.");
-    }
-}
-init();
-
-// --- MAIN VIDEO UPLOAD ---
-document.getElementById('uploader').onchange = (e) => {
-    videoFile = e.target.files[0];
-    if (videoFile) {
-        player.src = URL.createObjectURL(videoFile);
-        player.style.display = "block";
-        document.getElementById('main-upload-btn').blur(); 
-        
-        player.onloadedmetadata = () => {
-            assets.trim.e = player.duration; 
-            updateUI();
-            exportBtn.disabled = false;
-            announce(`Video Loaded. Duration ${player.duration.toFixed(1)} seconds.`);
-        };
-    }
-};
-
-player.ontimeupdate = () => { document.getElementById('current-time').innerText = formatTime(player.currentTime); };
-
-// --- DROPDOWN UPLOADER LOGIC ---
-document.getElementById('btn-browse-track').onclick = () => {
-    const trackType = document.getElementById('track-type').value;
-    const uploader = document.getElementById('track-uploader');
-    
-    uploader.accept = (trackType === 'img') ? 'image/*' : 'audio/*';
-    uploader.onchange = (e) => {
-        const file = e.target.files[0];
-        if(!file) return;
-
-        if (trackType === 'img') {
-            assets.img.file = file; mode = "OVERLAY"; modeBadge.innerText = "IMAGE OVERLAY MODE";
-            announce("Image added. Press S and E to set when it appears, then Enter to lock.");
-        } else if (trackType === 'bgm') {
-            assets.bgm.file = file; mode = "BGM"; modeBadge.innerText = "BGM MUSIC MODE";
-            announce("Background Music added. Up and Down arrows change volume. Enter to lock.");
-        } else if (trackType === 'sfx') {
-            assets.sfx.file = file; mode = "SFX"; modeBadge.innerText = "SOUND EFFECT MODE";
-            announce("Sound Effect added. Press S to mark exactly when it should play. Enter to lock.");
-        }
-        document.getElementById('btn-browse-track').blur();
-        updateUI();
+// --- UPLOAD LOGIC ---
+document.getElementById('vid-up').onchange = (e) => {
+    files.vid = e.target.files[0];
+    player.src = URL.createObjectURL(files.vid);
+    player.onloadedmetadata = () => {
+        markers.trimE = player.duration;
+        document.getElementById('stat-vid').innerText = `Video: Loaded (${player.duration.toFixed(1)}s)`;
+        document.getElementById('export-btn').disabled = false;
+        notify("Video loaded.");
     };
-    uploader.click();
 };
 
-// --- KEYBOARD CONTROLLER ---
+document.getElementById('img-up').onchange = (e) => { 
+    files.img = e.target.files[0]; 
+    document.getElementById('stat-img').innerText = "Image: Loaded. Press G/H to place.";
+    notify("Image uploaded."); 
+};
+
+document.getElementById('bgm-up').onchange = (e) => { 
+    files.bgm = e.target.files[0]; 
+    document.getElementById('stat-bgm').innerText = "Music: Loaded (Looping/Background)";
+    notify("Background music loaded."); 
+};
+
+document.getElementById('sfx-up').onchange = (e) => { 
+    files.sfx = e.target.files[0]; 
+    document.getElementById('stat-sfx').innerText = "SFX: Loaded. Move seekhead and press M.";
+    notify("Sound effect loaded."); 
+};
+
+// --- KEYBOARD LOGIC ---
 window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON" || e.target.tagName === "SELECT") return;
-    
+    if (e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
-    const currTime = player.currentTime;
+    const t = player.currentTime;
 
-    if (e.code === 'Space') {
+    if (k === 'k' || e.code === 'Space') {
         e.preventDefault();
-        if (player.paused) { player.play(); announce("Playing"); } 
-        else { player.pause(); announce(`Paused at ${currTime.toFixed(2)}`); }
+        player.paused ? player.play() : player.pause();
+    }
+    if (k === 'l') player.currentTime += 5;
+    if (k === 'j') player.currentTime -= 5;
+
+    // MARKERS
+    if (k === 'i') { markers.trimS = t; playBeep(800); notify(`Trim Start: ${t.toFixed(1)}`); }
+    if (k === 'o') { markers.trimE = t; playBeep(400); notify(`Trim End: ${t.toFixed(1)}`); }
+    
+    if (k === 'g') { markers.imgS = t; playBeep(1000); notify(`Image appears at: ${t.toFixed(1)}`); }
+    if (k === 'h') { markers.imgE = t; playBeep(600); notify(`Image disappears at: ${t.toFixed(1)}`); }
+    
+    if (k === 'm') { markers.sfxAt = t; playBeep(1200); notify(`Sound Effect set at: ${t.toFixed(1)}`); }
+
+    if (k === 'v') {
+        notify(`Status: Trim ${markers.trimS.toFixed(1)} to ${markers.trimE.toFixed(1)}. SFX at ${markers.sfxAt.toFixed(1)}.`);
     }
 
-    // SHIFT = 1 SECOND (Precise), NORMAL = 10 SECONDS (Fast)
-    if (e.code === 'ArrowRight') {
-        e.preventDefault();
-        const jump = e.shiftKey ? 1 : 10;
-        player.currentTime = Math.min(player.duration, currTime + jump);
-        announce(`Seeked forward ${jump} ${jump === 1 ? 'second' : 'seconds'}.`);
-    }
-    if (e.code === 'ArrowLeft') {
-        e.preventDefault();
-        const jump = e.shiftKey ? 1 : 10;
-        player.currentTime = Math.max(0, currTime - jump);
-        announce(`Seeked backward ${jump} ${jump === 1 ? 'second' : 'seconds'}.`);
-    }
-
-    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-        if(mode === "BGM" || mode === "SFX") {
-            e.preventDefault();
-            const change = e.code === 'ArrowUp' ? 0.1 : -0.1;
-            assets[mode.toLowerCase()].vol = Math.max(0, Math.min(1, assets[mode.toLowerCase()].vol + change));
-            announce(`${mode} Volume: ${Math.round(assets[mode.toLowerCase()].vol * 100)} percent.`);
-            updateUI();
-        }
-    }
-
-    if (k === 's') {
-        if(mode === "BGM") return announce("BGM covers the whole video. Press Enter to lock.");
-        assets[mode.toLowerCase()].s = currTime;
-        announce(`${mode} Start marked at ${currTime.toFixed(2)}.`);
-        updateUI();
-    }
-    if (k === 'e') {
-        if(mode === "BGM") return;
-        assets[mode.toLowerCase()].e = currTime;
-        announce(`${mode} End marked at ${currTime.toFixed(2)}.`);
-        updateUI();
-    }
-
-    if (k === 'enter' && mode !== "TRIM") {
-        mode = "TRIM"; modeBadge.innerText = "TRIM MODE";
-        announce("Layer Locked. Back to Main Trim Mode.");
-    }
-
-    if (e.ctrlKey && k === 'x') {
-        e.preventDefault();
-        if (!videoFile) return announce("Upload a video first!");
-        runExport(confirm("Click OK for Portrait (9:16), or Cancel for Widescreen."));
-    }
+    if (e.ctrlKey && k === 'x') { e.preventDefault(); runExport(); }
 });
 
-ffmpeg.setProgress(({ ratio }) => {
-    const pct = Math.floor(ratio * 100);
-    document.getElementById('prog-bar').style.width = pct + '%';
-    document.getElementById('prog-label').innerText = pct + '% Complete';
-});
-
-// --- MASTER EXPORT RENDERER ---
-async function runExport(isPortrait) {
-    if (assets.trim.e <= assets.trim.s) return announce("Error: End point must be after Start point.");
-
-    exportBtn.disabled = true;
-    document.getElementById('prog-container').classList.remove('hidden');
-    announce("Tech House Render Starting... computing pixels.");
+// --- RENDER ENGINE ---
+async function runExport() {
+    const btn = document.getElementById('export-btn');
+    btn.disabled = true;
+    document.getElementById('progress-container').classList.remove('hidden');
+    notify("Starting Master Render...");
 
     try {
-        ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(videoFile));
-        let args = ['-ss', assets.trim.s.toString(), '-to', assets.trim.e.toString(), '-i', 'input.mp4'];
-        
-        let inputIdx = 1;
-        let vStream = '[0:v]';
-        let audioStreams = [];
-        let vFilter = '', aFilter = '';
+        // 1. Write files to FFmpeg Virtual Drive
+        ffmpeg.FS('writeFile', 'v.mp4', await fetchFile(files.vid));
+        let inputCount = 1;
+        let inputs = ['-ss', markers.trimS.toString(), '-to', markers.trimE.toString(), '-i', 'v.mp4'];
 
-        // 1. AUDIO DENOISE LOGIC (Restored!)
-        if (document.getElementById('denoise-toggle').checked) {
-            aFilter += `[0:a]afftdn[aden];`;
-            audioStreams.push('[aden]');
+        if (files.img) { ffmpeg.FS('writeFile', 'i.png', await fetchFile(files.img)); inputs.push('-i', 'i.png'); }
+        if (files.bgm) { ffmpeg.FS('writeFile', 'b.mp3', await fetchFile(files.bgm)); inputs.push('-i', 'b.mp3'); }
+        if (files.sfx) { ffmpeg.FS('writeFile', 's.mp3', await fetchFile(files.sfx)); inputs.push('-i', 's.mp3'); }
+
+        // 2. Build Complex Filter
+        // We shift timestamps relative to the trim start
+        const relImgS = Math.max(0, markers.imgS - markers.trimS);
+        const relImgE = Math.max(0, markers.imgE - markers.trimS);
+        const relSfxAt = Math.max(0, markers.sfxAt - markers.trimS) * 1000; // ms for adelay
+
+        let vFilter = '[0:v]'; 
+        let aFilter = '[0:a]'; 
+        let aStreams = ['[a0]'];
+
+        // Denoise first?
+        if (document.getElementById('denoise-check').checked) {
+            aFilter = '[0:a]afftdn[a0];';
         } else {
-            audioStreams.push('[0:a]'); // Use original audio
+            aFilter = '[0:a]copy[a0];'; // Placeholder
         }
 
-        // 2. VISUAL EFFECTS LOGIC (New!)
-        const fx = document.getElementById('video-fx').value;
-        if (fx === 'bw') { vFilter += `${vStream}hue=s=0[vfx];`; vStream = '[vfx]'; } 
-        else if (fx === 'sepia') { vFilter += `${vStream}colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131[vfx];`; vStream = '[vfx]'; } 
-        else if (fx === 'blur') { vFilter += `${vStream}boxblur=5:1[vfx];`; vStream = '[vfx]'; }
-
-        // 3. PORTRAIT CROP
-        if (isPortrait) {
-            vFilter += `${vStream}crop=ih*(9/16):ih,scale=720:1280[vport];`;
-            vStream = '[vport]';
+        // Image Overlay (Input 1)
+        if (files.img) {
+            vFilter += `[1:v]overlay=10:10:enable='between(t,${relImgS},${relImgE})'[v1];`;
+            vFilter = '[v1]';
         }
 
-        // 4. IMAGE OVERLAY
-        if (assets.img.file) {
-            ffmpeg.FS('writeFile', 'img.png', await fetchFile(assets.img.file));
-            args.push('-i', 'img.png');
-            const relStart = Math.max(0, assets.img.s - assets.trim.s);
-            const relEnd = Math.max(0, assets.img.e - assets.trim.s);
-            vFilter += `${vStream}[${inputIdx}:v]overlay=W-w-20:H-h-20:enable='between(t,${relStart},${relEnd})'[vout];`;
-            vStream = '[vout]';
-            inputIdx++;
+        // Audio Mixing
+        let aMix = aFilter;
+        let mixIndex = 1;
+        if (files.img) mixIndex++; // skip image index
+
+        if (files.bgm) {
+            aMix += `[${mixIndex}:a]volume=0.3[abgm];`;
+            aStreams.push('[abgm]');
+            mixIndex++;
+        }
+        if (files.sfx) {
+            aMix += `[${mixIndex}:a]volume=1.0,adelay=${relSfxAt}|${relSfxAt}[asfx];`;
+            aStreams.push('[asfx]');
         }
 
-        // 5. BACKGROUND MUSIC
-        if (assets.bgm.file) {
-            ffmpeg.FS('writeFile', 'bgm.mp3', await fetchFile(assets.bgm.file));
-            args.push('-i', 'bgm.mp3');
-            aFilter += `[${inputIdx}:a]volume=${assets.bgm.vol}[abgm];`;
-            audioStreams.push('[abgm]');
-            inputIdx++;
+        const finalAMix = `${aMix}${aStreams.join('')}amix=inputs=${aStreams.length}:duration=first[aout]`;
+
+        // 3. RUN FFmpeg
+        let fullArgs = [...inputs, '-filter_complex', `${vFilter}${finalAMix}`, '-map', '[v1]', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'ultrafast', 'out.mp4'];
+        
+        // If no image, map original video
+        if (!files.img) {
+            fullArgs = [...inputs, '-filter_complex', finalAMix, '-map', '0:v', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'ultrafast', 'out.mp4'];
         }
 
-        // 6. SOUND EFFECT
-        if (assets.sfx.file) {
-            ffmpeg.FS('writeFile', 'sfx.mp3', await fetchFile(assets.sfx.file));
-            args.push('-i', 'sfx.mp3');
-            const relStartMs = Math.max(0, assets.sfx.s - assets.trim.s) * 1000;
-            aFilter += `[${inputIdx}:a]volume=${assets.sfx.vol},adelay=${relStartMs}|${relStartMs}[asfx];`;
-            audioStreams.push('[asfx]');
-            inputIdx++;
-        }
+        ffmpeg.setProgress(({ ratio }) => {
+            const p = Math.floor(ratio * 100);
+            document.getElementById('render-prog').value = p;
+            document.getElementById('prog-text').innerText = `${p}% Rendered`;
+        });
 
-        // Mix audio tracks
-        if (audioStreams.length > 1) {
-            aFilter += `${audioStreams.join('')}amix=inputs=${audioStreams.length}:duration=first:dropout_transition=2[aout]`;
-        }
+        await ffmpeg.run(...fullArgs);
 
-        // Apply Graph
-        if (vFilter || aFilter) {
-            let fullComplex = [];
-            if (vFilter) fullComplex.push(vFilter);
-            if (aFilter) fullComplex.push(aFilter);
-            args.push('-filter_complex', fullComplex.join(''));
-            args.push('-map', vStream === '[0:v]' ? '0:v' : vStream);
-            args.push('-map', audioStreams.length > 1 ? '[aout]' : (document.getElementById('denoise-toggle').checked ? '[aden]' : '0:a'));
-        }
-
-        args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', 'output.mp4');
-
-        await ffmpeg.run(...args);
-
-        const data = ffmpeg.FS('readFile', 'output.mp4');
-        const url = URL.createObjectURL(new Blob([data.buffer], {type: 'video/mp4'}));
+        // 4. DOWNLOAD
+        const data = ffmpeg.FS('readFile', 'out.mp4');
+        const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
         const a = document.createElement('a');
-        a.href = url; a.download = `tech-house-pro-${Date.now()}.mp4`; a.click();
+        a.href = url; a.download = 'pro-edit.mp4'; a.click();
+        notify("Export Complete!");
 
-        announce("EXPORT COMPLETE! File downloaded.");
-    } catch (err) {
-        console.error(err);
-        announce("EXPORT FAILED.");
+    } catch (e) {
+        notify("Render Error. Files might be too large for Chromebook RAM.");
+        console.error(e);
     } finally {
-        document.getElementById('prog-container').classList.add('hidden');
-        exportBtn.disabled = false;
+        btn.disabled = false;
+        document.getElementById('progress-container').classList.add('hidden');
     }
 }
