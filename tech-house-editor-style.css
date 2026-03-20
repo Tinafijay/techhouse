@@ -1,14 +1,11 @@
 :root { --bg: #0d1117; --accent: #58a6ff; --gold: #f2cc60; --text: #c9d1d9; }
 body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; padding: 20px; }
-.editor-container { max-width: 900px; width: 100%; background: #161b22; padding: 30px; border-radius: 16px; border: 1px solid #30363d; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-.status-box { background: #000; color: #7ee787; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; border-left: 5px solid var(--accent); }
-.upload-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
-.layer-btn { padding: 15px; border: none; border-radius: 8px; background: #21262d; color: white; cursor: pointer; border: 1px solid #30363d; transition: 0.2s; }
-.layer-btn:hover { background: #30363d; border-color: var(--accent); }
-video { width: 100%; border-radius: 12px; border: 2px solid #30363d; margin-bottom: 20px; }
-.mode-selector-zone { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; background: #0d1117; padding: 15px; border-radius: 8px; }
-.mode-select { padding: 12px; background: #21262d; color: white; border: 1px solid #30363d; border-radius: 6px; font-size: 1rem; }
-.export-btn { width: 100%; padding: 20px; background: var(--accent); color: #fff; font-weight: bold; font-size: 1.2rem; border-radius: 10px; cursor: pointer; border: none; margin-top: 20px; }
-.export-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+.editor-container { max-width: 800px; width: 100%; background: #161b22; padding: 25px; border-radius: 12px; border: 1px solid #30363d; }
+.status-box { background: #000; color: #7ee787; padding: 12px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid var(--accent); }
+.mode-selector-zone { background: #0d1117; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #30363d; }
+.mode-select { margin-top: 10px; width: 100%; padding: 10px; background: #21262d; color: white; border-radius: 4px; }
+video { width: 100%; border-radius: 8px; margin-bottom: 15px; }
+.export-btn { width: 100%; padding: 15px; background: var(--accent); color: white; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; }
+.export-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .hidden { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
