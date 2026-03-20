@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vibe Editor Pro</title>
-    <script src="https://cdn.jsdelivr.net/npm/coi-serviceworker@0.1.7/coi-serviceworker.min.js"></script>
+    <script src="coi-serviceworker.js"></script>
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -20,7 +20,7 @@
     <main>
         <section class="upload-grid">
             <button class="layer-btn" onclick="document.getElementById('vid-up').click()">📁 Video</button>
-            <button class="layer-btn" onclick="document.getElementById('img-up').click()">🖼️ Logo/Img</button>
+            <button class="layer-btn" onclick="document.getElementById('img-up').click()">🖼️ Logo</button>
             <button class="layer-btn" onclick="document.getElementById('bgm-up').click()">🎵 Music</button>
             <button class="layer-btn" onclick="document.getElementById('sfx-up').click()">🔊 SFX</button>
             
@@ -31,13 +31,9 @@
         </section>
 
         <div class="mode-selector-zone">
-            <label for="edit-mode"><strong>Current Edit Mode:</strong></label>
-            <select id="edit-mode" class="mode-select">
-                <option value="trim">Trim (I for Start, O for End)</option>
-                <option value="logo">Logo (Ctrl+I to Place, L to Cycle Corner)</option>
-                <option value="sfx">SFX (M to Place Ding)</option>
-            </select>
-
+            <label><input type="checkbox" id="trim-mode-check"> ✂️ <strong>TRIM MODE</strong> (Keep only the selection)</label>
+            <p style="font-size: 0.8rem; color: #888;">If unchecked, hitting Backspace deletes the selection from the full video.</p>
+            
             <label for="format-mode"><strong>Export Format:</strong></label>
             <select id="format-mode" class="mode-select">
                 <option value="landscape">Landscape (16:9)</option>
@@ -49,8 +45,8 @@
         
         <div class="asset-status-panel">
             <div id="stat-vid">Video: None</div>
+            <div id="stat-selection">Selection: Full Video</div>
             <div id="stat-img">Logo: Not Placed</div>
-            <div id="stat-pos">Logo Position: Top-Right</div>
         </div>
 
         <div class="controls-card">
