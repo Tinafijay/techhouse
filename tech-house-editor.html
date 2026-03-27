@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Accessible Video Editor</title>
-    <!-- Register COI service worker (your existing file) -->
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('coi-serviceworker.js').catch(err => console.warn('COI registration failed:', err));
@@ -19,6 +18,12 @@
             <h1 tabindex="0">🎬 Accessible Video Editor</h1>
             <div id="status-bar" class="status-box" role="status" aria-live="polite">Ready. Upload a video to start.</div>
         </header>
+
+        <!-- Primary file uploads -->
+        <div class="upload-row">
+            <button id="upload-video-btn" class="primary-btn">📁 Select Video</button>
+            <span id="video-filename" class="file-info">No video selected</span>
+        </div>
 
         <!-- Action buttons (for touch) -->
         <div class="action-buttons" aria-label="Editing tools">
@@ -45,8 +50,8 @@
         <video id="player" controls preload="metadata" aria-label="Video preview"></video>
 
         <!-- Settings panels (dynamically shown) -->
-        <div id="logo-settings-panel" class="settings-panel hidden" aria-live="polite">
-            <h3>Logo/Image Overlay</h3>
+        <div id="overlay-settings-panel" class="settings-panel hidden" aria-live="polite">
+            <h3>Image Overlay</h3>
             <div class="setting-group">
                 <label>Image file: <span id="overlay-filename">none</span></label>
                 <button id="change-overlay-image">Change image</button>
@@ -64,6 +69,7 @@
                     <option value="top-right" selected>Top right</option>
                     <option value="bottom-left">Bottom left</option>
                     <option value="bottom-right">Bottom right</option>
+                    <option value="fullscreen">Full screen (cover)</option>
                 </select>
             </div>
             <button id="remove-overlay">Remove overlay</button>
@@ -116,8 +122,8 @@
                 <li><kbd>S</kbd> – Set start marker</li>
                 <li><kbd>E</kbd> – Set end marker</li>
                 <li><kbd>Backspace</kbd> – Apply trim/cut (on export)</li>
-                <li><kbd>Ctrl+O</kbd> – Add logo (image overlay, 5s default)</li>
-                <li><kbd>Ctrl+I</kbd> – Add image overlay (2s default)</li>
+                <li><kbd>Ctrl+O</kbd> – Add logo (image overlay, 5s default, top-right)</li>
+                <li><kbd>Ctrl+I</kbd> – Add image overlay (2s default, full screen)</li>
                 <li><kbd>Ctrl+F</kbd> – Add sound effect (SFX) at current time</li>
                 <li><kbd>Ctrl+M</kbd> – Add background music</li>
                 <li><kbd>Ctrl+X</kbd> – Render / export video</li>
