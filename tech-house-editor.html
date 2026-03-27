@@ -2,70 +2,131 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vibe Editor Pro</title>
-    <script src="coi-serviceworker.js"></script>
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Accessible Video Editor</title>
+    <!-- Register COI service worker (your existing file) -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('coi-serviceworker.js').catch(err => console.warn('COI registration failed:', err));
+        }
+    </script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="editor-container" role="main" aria-label="Video editor">
+        <header>
+            <h1 tabindex="0">🎬 Accessible Video Editor</h1>
+            <div id="status-bar" class="status-box" role="status" aria-live="polite">Ready. Upload a video to start.</div>
+        </header>
 
-<div class="editor-container">
-    <header>
-        <h1>Vibe Editor Pro</h1>
-        <div id="announcer" class="sr-only" aria-live="assertive"></div>
-        <div id="status-bar" class="status-box">Ready. Upload your video.</div>
-    </header>
+        <!-- Action buttons (for touch) -->
+        <div class="action-buttons" aria-label="Editing tools">
+            <button id="set-start-btn" aria-label="Set start marker (S)">Set Start (S)</button>
+            <button id="set-end-btn" aria-label="Set end marker (E)">Set End (E)</button>
+            <button id="add-logo-btn" aria-label="Add logo overlay (Ctrl+O)">Add Logo (Ctrl+O)</button>
+            <button id="add-image-btn" aria-label="Add image overlay (Ctrl+I)">Add Image (Ctrl+I)</button>
+            <button id="add-sfx-btn" aria-label="Add sound effect (Ctrl+F)">Add SFX (Ctrl+F)</button>
+            <button id="add-music-btn" aria-label="Add background music (Ctrl+M)">Add Music (Ctrl+M)</button>
+            <button id="render-btn" aria-label="Render video (Ctrl+X)">Render (Ctrl+X)</button>
+        </div>
 
-    <main>
-        <section class="upload-grid">
-            <button class="layer-btn" onclick="document.getElementById('vid-up').click()">📁 Video</button>
-            <button class="layer-btn" onclick="document.getElementById('img-up').click()">🖼️ Logo</button>
-            <button class="layer-btn" onclick="document.getElementById('bgm-up').click()">🎵 Music</button>
-            <button class="layer-btn" onclick="document.getElementById('sfx-up').click()">🔊 SFX</button>
-            
-            <input type="file" id="vid-up" hidden accept="video/*">
-            <input type="file" id="img-up" hidden accept="image/*">
-            <input type="file" id="bgm-up" hidden accept="audio/*">
-            <input type="file" id="sfx-up" hidden accept="audio/*">
-        </section>
+        <!-- Trim/Cut controls -->
+        <div class="trim-controls">
+            <label class="toggle-switch">
+                <input type="checkbox" id="trim-mode-checkbox">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Trim mode (keep selection)</span>
+            </label>
+            <p class="hint">When unchecked: Cut mode (remove selection). Press Backspace to apply on export.</p>
+        </div>
 
-        <div class="editor-settings">
+        <!-- Video player -->
+        <video id="player" controls preload="metadata" aria-label="Video preview"></video>
+
+        <!-- Settings panels (dynamically shown) -->
+        <div id="logo-settings-panel" class="settings-panel hidden" aria-live="polite">
+            <h3>Logo/Image Overlay</h3>
             <div class="setting-group">
-                <label for="edit-mode"><strong>Action Mode:</strong></label>
-                <select id="edit-mode" class="mode-select">
-                    <option value="trim">Trim (I/O to select area)</option>
-                    <option value="logo">Logo (Ctrl+I to place)</option>
-                    <option value="sfx">SFX (M to place Ding)</option>
+                <label>Image file: <span id="overlay-filename">none</span></label>
+                <button id="change-overlay-image">Change image</button>
+            </div>
+            <div class="setting-group">
+                <label>Start time (s): <input type="number" id="overlay-start" step="0.1" value="0"></label>
+            </div>
+            <div class="setting-group">
+                <label>Duration (s): <input type="number" id="overlay-duration" step="0.1" value="5"></label>
+            </div>
+            <div class="setting-group">
+                <label>Position:</label>
+                <select id="overlay-position">
+                    <option value="top-left">Top left</option>
+                    <option value="top-right" selected>Top right</option>
+                    <option value="bottom-left">Bottom left</option>
+                    <option value="bottom-right">Bottom right</option>
                 </select>
             </div>
+            <button id="remove-overlay">Remove overlay</button>
+        </div>
 
+        <div id="sfx-settings-panel" class="settings-panel hidden" aria-live="polite">
+            <h3>Sound Effect</h3>
             <div class="setting-group">
-                <label><input type="checkbox" id="trim-check"> ✂️ <strong>Keep Selection Only</strong> (Trim)</label>
-                <p class="hint">If unchecked, hitting Backspace deletes the I-O area.</p>
+                <label>Audio file: <span id="sfx-filename">none</span></label>
+                <button id="change-sfx-file">Change SFX</button>
             </div>
+            <div class="setting-group">
+                <label>Start time (s): <input type="number" id="sfx-start" step="0.1" value="0"></label>
+            </div>
+            <div class="setting-group">
+                <label>Volume (0-1): <input type="range" id="sfx-volume" min="0" max="1" step="0.01" value="0.8"></label>
+            </div>
+            <button id="remove-sfx">Remove SFX</button>
         </div>
 
-        <video id="player" controls></video>
-        
-        <div class="status-panel">
-            <div id="stat-vid">Video: None</div>
-            <div id="stat-markers">Markers: Not set</div>
-            <div id="stat-action">Action: Full Video Export</div>
+        <div id="music-settings-panel" class="settings-panel hidden" aria-live="polite">
+            <h3>Background Music</h3>
+            <div class="setting-group">
+                <label>Audio file: <span id="music-filename">none</span></label>
+                <button id="change-music-file">Change music</button>
+            </div>
+            <div class="setting-group">
+                <label>Volume (0-1): <input type="range" id="music-volume" min="0" max="1" step="0.01" value="0.5"></label>
+            </div>
+            <button id="remove-music">Remove music</button>
         </div>
 
-        <div class="render-zone">
-            <label><input type="checkbox" id="denoise-check"> Denoise Audio</label>
-            <button id="export-btn" class="export-btn" disabled>🚀 RENDER (Ctrl+X)</button>
+        <!-- Status panel -->
+        <div class="status-panel" aria-live="polite">
+            <div id="stat-video">Video: none</div>
+            <div id="stat-markers">Markers: none</div>
+            <div id="stat-action">Action: Trim/Cut not set</div>
         </div>
 
+        <!-- Render progress -->
         <div id="progress-container" class="hidden">
-            <progress id="render-prog" value="0" max="100"></progress>
-            <p id="prog-text">0% Rendered</p>
+            <progress id="render-progress" value="0" max="100"></progress>
+            <span id="progress-text">0%</span>
         </div>
-    </main>
-</div>
 
-<script src="script.js"></script>
+        <!-- Help section -->
+        <details class="help-section">
+            <summary>⌨️ Keyboard shortcuts & help</summary>
+            <ul>
+                <li><kbd>S</kbd> – Set start marker</li>
+                <li><kbd>E</kbd> – Set end marker</li>
+                <li><kbd>Backspace</kbd> – Apply trim/cut (on export)</li>
+                <li><kbd>Ctrl+O</kbd> – Add logo (image overlay, 5s default)</li>
+                <li><kbd>Ctrl+I</kbd> – Add image overlay (2s default)</li>
+                <li><kbd>Ctrl+F</kbd> – Add sound effect (SFX) at current time</li>
+                <li><kbd>Ctrl+M</kbd> – Add background music</li>
+                <li><kbd>Ctrl+X</kbd> – Render / export video</li>
+                <li>Trim mode: keep selected segment; Cut mode: remove selected segment.</li>
+                <li>After adding an overlay or SFX, use the settings panel to adjust timing, position, etc.</li>
+            </ul>
+        </details>
+    </div>
+
+    <script src="script.js"></script>
 </body>
 </html>
