@@ -6,7 +6,7 @@
 let ffmpeg = null;
 let files = {
     video: null,
-    overlay: null,      // image file for logo/image overlay
+    overlay: null,
     sfx: null,
     music: null
 };
@@ -47,7 +47,7 @@ const statMarkers = document.getElementById('stat-markers');
 const statAction = document.getElementById('stat-action');
 
 // Settings panels
-const overlayPanel = document.getElementById('logo-settings-panel');
+const overlayPanel = document.getElementById('overlay-settings-panel');
 const overlayStartInput = document.getElementById('overlay-start');
 const overlayDurationInput = document.getElementById('overlay-duration');
 const overlayPositionSelect = document.getElementById('overlay-position');
@@ -249,7 +249,8 @@ removeMusicBtn.onclick = () => {
 };
 
 // --- Video upload ---
-document.getElementById('upload-video-btn')?.addEventListener('click', () => {
+const videoFilenameSpan = document.getElementById('video-filename');
+document.getElementById('upload-video-btn').onclick = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'video/*';
@@ -257,6 +258,7 @@ document.getElementById('upload-video-btn')?.addEventListener('click', () => {
         const file = e.target.files[0];
         if (!file) return;
         files.video = file;
+        videoFilenameSpan.innerText = file.name;
         const url = URL.createObjectURL(file);
         videoPlayer.src = url;
         await new Promise(resolve => {
@@ -271,7 +273,7 @@ document.getElementById('upload-video-btn')?.addEventListener('click', () => {
         });
     };
     input.click();
-});
+};
 
 // --- Keyboard shortcuts ---
 window.addEventListener('keydown', (e) => {
@@ -299,7 +301,7 @@ window.addEventListener('keydown', (e) => {
         notify(`End marker set at ${currentTime.toFixed(1)}s`);
         e.preventDefault();
     }
-    // Backspace = apply trim/cut (but we only mark that it will be used during export)
+    // Backspace = apply trim/cut (we just notify; actual effect happens on export)
     else if (key === 'Backspace') {
         if (markers.start !== markers.end) {
             notify(`Trim/Cut will be applied on export. Current mode: ${trimModeCheck.checked ? 'Trim (keep selection)' : 'Cut (remove selection)'}`);
@@ -309,7 +311,7 @@ window.addEventListener('keydown', (e) => {
         }
         e.preventDefault();
     }
-    // Ctrl+O = add logo (overlay with 5s default)
+    // Ctrl+O = add logo (5s, top-right)
     else if ((e.ctrlKey || e.metaKey) && (key === 'o' || key === 'O')) {
         e.preventDefault();
         const input = document.createElement('input');
@@ -326,11 +328,11 @@ window.addEventListener('keydown', (e) => {
             overlayStartInput.value = overlay.start;
             overlayDurationInput.value = overlay.duration;
             overlayPositionSelect.value = overlay.position;
-            notify(`Logo added at ${overlay.start}s, duration 5s.`);
+            notify(`Logo added at ${overlay.start}s, duration 5s, position top-right.`);
         };
         input.click();
     }
-    // Ctrl+I = add image overlay (2s default)
+    // Ctrl+I = add image overlay (2s, full screen)
     else if ((e.ctrlKey || e.metaKey) && (key === 'i' || key === 'I')) {
         e.preventDefault();
         const input = document.createElement('input');
@@ -342,12 +344,12 @@ window.addEventListener('keydown', (e) => {
             overlay.file = file;
             overlay.start = videoPlayer.currentTime;
             overlay.duration = 2;
-            overlay.position = 'top-right';
+            overlay.position = 'fullscreen';
             showOverlayPanel(true);
             overlayStartInput.value = overlay.start;
             overlayDurationInput.value = overlay.duration;
             overlayPositionSelect.value = overlay.position;
-            notify(`Image overlay added at ${overlay.start}s, duration 2s.`);
+            notify(`Image overlay added at ${overlay.start}s, duration 2s, full screen.`);
         };
         input.click();
     }
@@ -399,21 +401,21 @@ window.addEventListener('keydown', (e) => {
 });
 
 // --- Touch buttons for actions ---
-document.getElementById('set-start-btn')?.addEventListener('click', () => {
+document.getElementById('set-start-btn').addEventListener('click', () => {
     markers.start = videoPlayer.currentTime;
     if (markers.start > markers.end) markers.end = markers.start;
     updateStats();
     playBeep(400);
     notify(`Start marker set at ${markers.start.toFixed(1)}s`);
 });
-document.getElementById('set-end-btn')?.addEventListener('click', () => {
+document.getElementById('set-end-btn').addEventListener('click', () => {
     markers.end = videoPlayer.currentTime;
     if (markers.end < markers.start) markers.start = markers.end;
     updateStats();
     playBeep(600);
     notify(`End marker set at ${markers.end.toFixed(1)}s`);
 });
-document.getElementById('add-logo-btn')?.addEventListener('click', () => {
+document.getElementById('add-logo-btn').addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -428,11 +430,11 @@ document.getElementById('add-logo-btn')?.addEventListener('click', () => {
         overlayStartInput.value = overlay.start;
         overlayDurationInput.value = overlay.duration;
         overlayPositionSelect.value = overlay.position;
-        notify(`Logo added at ${overlay.start}s, duration 5s.`);
+        notify(`Logo added at ${overlay.start}s, duration 5s, position top-right.`);
     };
     input.click();
 });
-document.getElementById('add-image-btn')?.addEventListener('click', () => {
+document.getElementById('add-image-btn').addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -442,16 +444,16 @@ document.getElementById('add-image-btn')?.addEventListener('click', () => {
         overlay.file = file;
         overlay.start = videoPlayer.currentTime;
         overlay.duration = 2;
-        overlay.position = 'top-right';
+        overlay.position = 'fullscreen';
         showOverlayPanel(true);
         overlayStartInput.value = overlay.start;
         overlayDurationInput.value = overlay.duration;
         overlayPositionSelect.value = overlay.position;
-        notify(`Image added at ${overlay.start}s, duration 2s.`);
+        notify(`Image overlay added at ${overlay.start}s, duration 2s, full screen.`);
     };
     input.click();
 });
-document.getElementById('add-sfx-btn')?.addEventListener('click', () => {
+document.getElementById('add-sfx-btn').addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'audio/*';
@@ -468,7 +470,7 @@ document.getElementById('add-sfx-btn')?.addEventListener('click', () => {
     };
     input.click();
 });
-document.getElementById('add-music-btn')?.addEventListener('click', () => {
+document.getElementById('add-music-btn').addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'audio/*';
@@ -483,7 +485,7 @@ document.getElementById('add-music-btn')?.addEventListener('click', () => {
     };
     input.click();
 });
-document.getElementById('render-btn')?.addEventListener('click', () => {
+document.getElementById('render-btn').addEventListener('click', () => {
     if (!files.video) {
         notify("No video loaded.", true);
         return;
@@ -534,24 +536,36 @@ async function runExport() {
         if (overlay.file) {
             const imgData = await fetchFile(overlay.file);
             ff.FS('writeFile', 'overlay.png', imgData);
-            // Determine position coordinates
-            let x = 10, y = 10;
-            switch (overlay.position) {
-                case 'top-right': x = 'W-w-10'; y = 10; break;
-                case 'bottom-left': x = 10; y = 'H-h-10'; break;
-                case 'bottom-right': x = 'W-w-10'; y = 'H-h-10'; break;
-                default: // top-left
-                    x = 10; y = 10;
+            // Build overlay filter
+            let overlayFilter = '';
+            if (overlay.position === 'fullscreen') {
+                // Scale image to exactly match video dimensions (stretch to fill)
+                overlayFilter = `[v0][${inputIndex}:v]scale2ref=iw:ih[ov][vid];[vid][ov]overlay=0:0[outv]`;
+                // But we need to ensure correct linking: we'll use the scale2ref method.
+                // Alternative: scale image to video size and overlay at 0,0.
+                // Let's do: scale2ref to get image scaled to video, then overlay.
+                filterComplex += `;[v0][${inputIndex}:v]scale2ref=iw:ih[img_scaled][v_main];[v_main][img_scaled]overlay=0:0[outv]`;
+            } else {
+                // Determine position coordinates
+                let x = 10, y = 10;
+                switch (overlay.position) {
+                    case 'top-right': x = 'W-w-10'; y = 10; break;
+                    case 'bottom-left': x = 10; y = 'H-h-10'; break;
+                    case 'bottom-right': x = 'W-w-10'; y = 'H-h-10'; break;
+                    default: // top-left
+                        x = 10; y = 10;
+                }
+                const start = overlay.start;
+                const end = overlay.start + overlay.duration;
+                overlayFilter = `[v0][${inputIndex}:v]overlay=${x}:${y}:enable='between(t,${start},${end})'[outv]`;
+                filterComplex += `;${overlayFilter}`;
             }
-            const start = overlay.start;
-            const end = overlay.start + overlay.duration;
-            filterComplex += `;[v0][${inputIndex}:v]overlay=${x}:${y}:enable='between(t,${start},${end})'[v1]`;
             inputs.push('overlay.png');
             hasOverlay = true;
             inputIndex++;
         }
         if (!hasOverlay) {
-            filterComplex += `;[v0]copy[v1]`;
+            filterComplex += `;[v0]copy[outv]`;
         }
 
         // --- Audio processing: original audio, music, SFX ---
@@ -591,7 +605,7 @@ async function runExport() {
         }
 
         // Build ffmpeg arguments
-        const args = [...inputs.flatMap(i => ['-i', i]), '-filter_complex', filterComplex, '-map', '[v1]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', 'output.mp4'];
+        const args = [...inputs.flatMap(i => ['-i', i]), '-filter_complex', filterComplex, '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', 'output.mp4'];
 
         console.log("FFmpeg args:", args);
         await ff.run(...args);
