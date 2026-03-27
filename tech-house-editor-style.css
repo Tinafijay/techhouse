@@ -1,11 +1,274 @@
-:root { --bg: #0d1117; --accent: #58a6ff; --gold: #f2cc60; --text: #c9d1d9; }
-body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; padding: 20px; }
-.editor-container { max-width: 800px; width: 100%; background: #161b22; padding: 25px; border-radius: 12px; border: 1px solid #30363d; }
-.status-box { background: #000; color: #7ee787; padding: 12px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid var(--accent); }
-.mode-selector-zone { background: #0d1117; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #30363d; }
-.mode-select { margin-top: 10px; width: 100%; padding: 10px; background: #21262d; color: white; border-radius: 4px; }
-video { width: 100%; border-radius: 8px; margin-bottom: 15px; }
-.export-btn { width: 100%; padding: 15px; background: var(--accent); color: white; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; }
-.export-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.hidden { display: none; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+:root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --accent: #58a6ff;
+    --accent-hover: #79b8ff;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --border: #30363d;
+    --status-bg: #010409;
+    --status-text: #7ee787;
+    --error: #f85149;
+}
+
+@media (prefers-contrast: high) {
+    :root {
+        --bg: black;
+        --surface: #111;
+        --accent: yellow;
+        --text: white;
+        --border: white;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 16px;
+    line-height: 1.4;
+}
+
+.editor-container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: var(--surface);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+h1 {
+    font-size: 1.8rem;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}
+
+.status-box {
+    background: var(--status-bg);
+    color: var(--status-text);
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border-left: 4px solid var(--accent);
+    font-family: monospace;
+    font-size: 0.9rem;
+    word-break: break-word;
+}
+
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 1rem;
+}
+
+.action-buttons button {
+    background: #21262d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    flex: 1 0 auto;
+}
+
+.action-buttons button:hover, .action-buttons button:focus {
+    background: #2d333b;
+    border-color: var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.trim-controls {
+    background: #0d1117;
+    padding: 0.8rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    width: 0;
+    height: 0;
+    opacity: 0;
+}
+
+.toggle-slider {
+    width: 40px;
+    height: 20px;
+    background: #30363d;
+    border-radius: 20px;
+    position: relative;
+    transition: 0.2s;
+}
+
+.toggle-slider::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-weight: 500;
+}
+
+.hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+video {
+    width: 100%;
+    border-radius: 12px;
+    background: black;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+}
+
+.settings-panel {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.settings-panel h3 {
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+    font-size: 1.2rem;
+}
+
+.setting-group {
+    margin-bottom: 0.8rem;
+}
+
+.setting-group label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+}
+
+.setting-group input, .setting-group select {
+    width: 100%;
+    padding: 6px;
+    background: #21262d;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.setting-group button {
+    background: #21262d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.status-panel {
+    background: #0d1117;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.status-panel > div {
+    background: #161b22;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-family: monospace;
+}
+
+#progress-container {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+progress {
+    flex: 1;
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.help-section {
+    margin-top: 1rem;
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem;
+}
+
+.help-section summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.help-section ul {
+    margin: 0.5rem 0 0 1.5rem;
+}
+
+.help-section kbd {
+    background: #21262d;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.2rem 0.4rem;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .editor-container {
+        padding: 1rem;
+    }
+    .action-buttons button {
+        padding: 8px 10px;
+        font-size: 0.8rem;
+    }
+    .status-panel {
+        flex-direction: column;
+    }
+}
