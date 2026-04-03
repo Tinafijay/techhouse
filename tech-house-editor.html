@@ -2,67 +2,69 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tech House Editor Pro - Accessible</title>
-    <script src="coi-serviceworker.js"></script>
+    <title>Tech House Master - V0.1.1 Stable</title>
+    <!-- COI Service Worker is MANDATORY for ChromeOS 103 -->
+    <script src="https://cdn.jsdelivr.net/npm/coi-serviceworker@0.1.7/coi-serviceworker.min.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="editor-card">
+    <div class="editor-container">
         <header>
-            <h1>🎬 Tech House Editor <span id="mode-badge">TRIM MODE</span></h1>
-            <div id="status-bar" role="status" aria-live="polite" class="status-box">Initializing Engine...</div>
+            <h1>🎬 Tech House Editor <small>V0.1.1 Stable</small></h1>
+            <div id="status-bar" role="status" class="status-box">Engine Initializing...</div>
         </header>
 
         <main>
-            <div class="upload-zone">
-                <button class="main-btn" onclick="document.getElementById('vid-in').click()">📁 Step 1: Load Video</button>
+            <div class="upload-section">
+                <button class="main-btn" onclick="document.getElementById('vid-in').click()">📁 LOAD VIDEO</button>
                 <input type="file" id="vid-in" hidden accept="video/*">
             </div>
 
             <video id="player" controls></video>
-            <div id="time-readout" class="time-readout">00:00.00</div>
+            <div id="time-display" class="time-readout">00:00.00</div>
 
-            <div class="toolbox">
-                <div class="tool-group">
-                    <label for="track-type">➕ Add Layer</label>
-                    <select id="track-type">
-                        <option value="img">🖼️ Image Overlay</option>
+            <div class="layer-controls">
+                <div class="control-box">
+                    <label>Add Layer:</label>
+                    <select id="layer-type">
+                        <option value="logo">🖼️ Permanent Logo (All Time)</option>
+                        <option value="temp">🎨 Illustration (Briefly)</option>
                         <option value="bgm">🎵 Background Music</option>
                         <option value="sfx">🔊 Sound Effect (Ding)</option>
                     </select>
-                    <button onclick="document.getElementById('file-in').click()">Browse</button>
+                    <button id="browse-btn">Browse File</button>
                     <input type="file" id="file-in" hidden>
                 </div>
 
-                <div class="tool-group">
-                    <label><input type="checkbox" id="cut-mode"> ✂️ CUT MODE (Remove Selection)</label>
-                    <p class="hint">Check this to delete the part between S and E markers.</p>
+                <div class="control-box">
+                    <label>Export Format:</label>
+                    <select id="export-format">
+                        <option value="landscape">Horizontal (16:9)</option>
+                        <option value="portrait">Vertical (9:16)</option>
+                    </select>
                 </div>
             </div>
 
-            <div class="asset-list" id="layers-info">
-                <div>Video: <span id="l-vid">None</span></div>
-                <div>Overlay: <span id="l-img">None</span></div>
-                <div>Audio: <span id="l-aud">None</span></div>
+            <div class="asset-grid" id="asset-summary">
+                <div id="info-vid">Video: --</div>
+                <div id="info-trim">Trim: Whole Video</div>
+                <div id="info-layers">Layers: 0</div>
             </div>
 
             <div id="prog-container" class="hidden">
                 <div id="prog-bar"></div>
-                <div id="prog-label">0%</div>
+                <div id="prog-text">Rendering: 0%</div>
             </div>
 
-            <button id="render-btn" class="render-btn" disabled>🚀 RENDER VIDEO (Ctrl + X)</button>
+            <button id="render-btn" class="render-btn" disabled>🚀 EXPORT VIDEO (Ctrl + X)</button>
         </main>
 
-        <footer class="shortcuts">
-            <p><kbd>S</kbd> Start | <kbd>E</kbd> End | <kbd>V</kbd> Speak Time | <kbd>Space</kbd> Pause</p>
-        </footer>
+        <div class="help">
+            <kbd>S</kbd> Set Start | <kbd>E</kbd> Set End | <kbd>V</kbd> Speak Status | <kbd>Space</kbd> Pause
+        </div>
     </div>
 
-    <!-- Load FFmpeg from CDN -->
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.umd.js"></script>
-    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
