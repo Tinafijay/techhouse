@@ -1,175 +1,190 @@
-const { FFmpeg } = window.FFmpegWASM;
-const { fetchFile, toBlobURL } = window.FFmpegUtil;
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({
+    log: true,
+    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+});
 
-let ffmpeg = null;
 const player = document.getElementById('player');
 const status = document.getElementById('status-bar');
-const announcer = document.getElementById('status-bar'); // Accessible live region
+const progBar = document.getElementById('prog-bar');
+const progText = document.getElementById('prog-text');
 
-// Assets State
-let files = { vid: null, img: null, bgm: null, sfx: null };
-let markers = { s: 0, e: 0, sfxAt: 0, imgAt: 0 };
+// Logic State
+let videoFile = null;
+let layers = {
+    logo: null,    // Permanent
+    temp: null,    // 3 seconds
+    bgm: null,     // Music
+    sfx: null      // Ding
+};
+let markers = { s: 0, e: 0, tempAt: 0, sfxAt: 0 };
 
 function notify(msg) {
     status.innerText = msg;
     console.log(msg);
 }
 
-function playBeep(freq) {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.frequency.value = freq;
-    g.gain.value = 0.1;
-    o.connect(g); g.connect(ctx.destination);
-    o.start(); o.stop(ctx.currentTime + 0.1);
-}
-
-// 1. Initialize Engine
+// 1. Initializing FFmpeg 0.11.0
 async function init() {
-    ffmpeg = new FFmpeg();
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-    notify("Downloading Engine...");
-    
-    await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-    
-    notify("Ready. Upload video.");
+    try {
+        notify("Loading Engine (V0.11.0)...");
+        await ffmpeg.load();
+        notify("Ready. Load your video.");
+    } catch (e) {
+        notify("Error: Engine failed. Refresh page.");
+    }
 }
 init();
 
-// 2. Handle Uploads
+// 2. Video Upload
 document.getElementById('vid-in').onchange = (e) => {
-    files.vid = e.target.files[0];
-    player.src = URL.createObjectURL(files.vid);
-    player.onloadedmetadata = () => {
-        markers.e = player.duration;
-        document.getElementById('l-vid').innerText = files.vid.name;
-        document.getElementById('render-btn').disabled = false;
-        notify("Video Ready.");
-    };
-};
-
-document.getElementById('file-in').onchange = (e) => {
-    const type = document.getElementById('track-type').value;
-    const file = e.target.files[0];
-    if(!file) return;
-
-    if(type === 'img') { 
-        files.img = file; 
-        markers.imgAt = player.currentTime;
-        document.getElementById('l-img').innerText = `Logo at ${markers.imgAt.toFixed(1)}s`;
-    } else if(type === 'bgm') {
-        files.bgm = file;
-        document.getElementById('l-aud').innerText = "BGM Added";
-    } else {
-        files.sfx = file;
-        markers.sfxAt = player.currentTime;
-        document.getElementById('l-aud').innerText = `SFX at ${markers.sfxAt.toFixed(1)}s`;
+    videoFile = e.target.files[0];
+    if (videoFile) {
+        player.src = URL.createObjectURL(videoFile);
+        player.onloadedmetadata = () => {
+            markers.e = player.duration;
+            document.getElementById('info-vid').innerText = `Video: ${player.duration.toFixed(1)}s`;
+            document.getElementById('render-btn').disabled = false;
+            notify("Video Loaded.");
+        };
     }
-    notify(`${type.toUpperCase()} layer updated.`);
 };
 
-// 3. Accessibility & Keyboard
+// 3. Layer Uploads
+document.getElementById('browse-btn').onclick = () => document.getElementById('file-in').click();
+document.getElementById('file-in').onchange = (e) => {
+    const type = document.getElementById('layer-type').value;
+    const file = e.target.files[0];
+    if (!file) return;
+
+    layers[type] = file;
+    if (type === 'temp') markers.tempAt = player.currentTime;
+    if (type === 'sfx') markers.sfxAt = player.currentTime;
+
+    notify(`${type.toUpperCase()} layer updated at ${player.currentTime.toFixed(1)}s`);
+    document.getElementById('info-layers').innerText = `Layers: ${Object.values(layers).filter(x => x).length}`;
+};
+
+// 4. Keyboard Navigation
 window.onkeydown = (e) => {
-    if(e.target.tagName === "INPUT") return;
     const k = e.key.toLowerCase();
-    
-    if(k === 's') { markers.s = player.currentTime; playBeep(800); notify(`Start: ${markers.s.toFixed(1)}`); }
-    if(k === 'e') { markers.e = player.currentTime; playBeep(400); notify(`End: ${markers.e.toFixed(1)}`); }
-    if(k === 'v') { notify(`Time: ${player.currentTime.toFixed(1)}. Start: ${markers.s.toFixed(1)}, End: ${markers.e.toFixed(1)}`); }
-    if(k === ' ') { e.preventDefault(); player.paused ? player.play() : player.pause(); }
-    
-    if(e.ctrlKey && k === 'x') runExport();
+    if (k === 's') { markers.s = player.currentTime; notify(`Start Set: ${markers.s.toFixed(1)}`); }
+    if (k === 'e') { markers.e = player.currentTime; notify(`End Set: ${markers.e.toFixed(1)}`); }
+    if (k === 'v') notify(`Status: Trim ${markers.s.toFixed(1)} to ${markers.e.toFixed(1)}`);
+    if (k === ' ') { e.preventDefault(); player.paused ? player.play() : player.pause(); }
+    if (e.ctrlKey && k === 'x') runExport();
 };
 
 player.ontimeupdate = () => {
-    document.getElementById('time-readout').innerText = player.currentTime.toFixed(2);
+    document.getElementById('time-display').innerText = player.currentTime.toFixed(2);
 };
 
-// 4. THE RENDER ENGINE
+// 5. MASTER EXPORT ENGINE
 async function runExport() {
-    notify("Render starting... please wait.");
+    notify("Export started. Preparing files...");
     document.getElementById('prog-container').classList.remove('hidden');
+    document.getElementById('render-btn').disabled = true;
 
-    // Write primary video
-    await ffmpeg.writeFile('input.mp4', await fetchFile(files.vid));
+    // A. Setup File System
+    ffmpeg.FS('writeFile', 'main.mp4', await fetchFile(videoFile));
+    let inputs = ['-ss', markers.s.toString(), '-to', markers.e.toString(), '-i', 'main.mp4'];
+    let inputIdx = 1;
+
+    // Add Inputs and keep track of indices
+    const idx = { logo: -1, temp: -1, bgm: -1, sfx: -1 };
     
-    let filter = '';
-    let inputs = ['-i', 'input.mp4'];
-    let vMap = '[0:v]';
-    let aMap = '[0:a]';
+    if (layers.logo) { 
+        ffmpeg.FS('writeFile', 'logo.png', await fetchFile(layers.logo)); 
+        inputs.push('-i', 'logo.png'); idx.logo = inputIdx++; 
+    }
+    if (layers.temp) { 
+        ffmpeg.FS('writeFile', 'temp.png', await fetchFile(layers.temp)); 
+        inputs.push('-i', 'temp.png'); idx.temp = inputIdx++; 
+    }
+    if (layers.bgm) { 
+        ffmpeg.FS('writeFile', 'bgm.mp3', await fetchFile(layers.bgm)); 
+        inputs.push('-i', 'bgm.mp3'); idx.bgm = inputIdx++; 
+    }
+    if (layers.sfx) { 
+        ffmpeg.FS('writeFile', 'sfx.mp3', await fetchFile(layers.sfx)); 
+        inputs.push('-i', 'sfx.mp3'); idx.sfx = inputIdx++; 
+    }
 
-    // A. TRIM/CUT Logic
-    const isCutMode = document.getElementById('cut-mode').checked;
-    if(isCutMode) {
-        // Remove the middle
-        filter += `[0:v]select='not(between(t,${markers.s},${markers.e}))',setpts=N/FRAME_RATE/TB[v_base];`;
-        filter += `[0:a]aselect='not(between(t,${markers.s},${markers.e}))',asetpts=N/SR/TB[a_base];`;
+    // B. Build Filter Complex
+    let vFilter = '[0:v]';
+    let aFilter = '[0:a]';
+    let aStreams = ['[a0]'];
+
+    // 1. Aspect Ratio (Portrait/Landscape)
+    const format = document.getElementById('export-format').value;
+    if (format === 'portrait') {
+        vFilter += `crop=ih*(9/16):ih,scale=720:1280[vscaled];`;
     } else {
-        // Keep only the selection
-        filter += `[0:v]trim=start=${markers.s}:end=${markers.e},setpts=PTS-STARTPTS[v_base];`;
-        filter += `[0:a]atrim=start=${markers.s}:end=${markers.e},asetpts=PTS-STARTPTS[a_base];`;
+        vFilter += `scale=1280:720[vscaled];`;
     }
-    vMap = '[v_base]';
-    aMap = '[a_base]';
+    vFilter = '[vscaled]';
 
-    // B. IMAGE LAYER
-    if(files.img) {
-        await ffmpeg.writeFile('img.png', await fetchFile(files.img));
-        inputs.push('-i', 'img.png');
-        filter += `${vMap}[1:v]overlay=10:10:enable='between(t,${markers.imgAt},${markers.imgAt+5})'[v_img];`;
-        vMap = '[v_img]';
+    // 2. Logo Overlay (Permanent)
+    if (idx.logo !== -1) {
+        vFilter += `[${idx.logo}:v]scale=150:-1[logo_small];${vFilter}[logo_small]overlay=W-w-20:20[vlogo];`;
+        vFilter = '[vlogo]';
     }
 
-    // C. AUDIO LAYERS (Mixing)
-    let audioInputs = [aMap];
-    if(files.bgm) {
-        await ffmpeg.writeFile('bgm.mp3', await fetchFile(files.bgm));
-        inputs.push('-i', 'bgm.mp3');
-        filter += `[${inputs.length/2 - 0.5}:a]volume=0.3[bgm_v];`;
-        audioInputs.push('[bgm_v]');
+    // 3. Illustration Overlay (Brief 3 seconds)
+    if (idx.temp !== -1) {
+        const start = Math.max(0, markers.tempAt - markers.s);
+        vFilter += `[${idx.temp}:v]scale=400:-1[temp_scaled];${vFilter}[temp_scaled]overlay=(W-w)/2:(H-h)/2:enable='between(t,${start},${start+3})'[vtemp];`;
+        vFilter = '[vtemp]';
     }
-    if(files.sfx) {
-        await ffmpeg.writeFile('sfx.mp3', await fetchFile(files.sfx));
-        inputs.push('-i', 'sfx.mp3');
+
+    // 4. Audio Mixing (BGM and SFX)
+    aFilter = '[0:a]volume=1.0[a0];'; // Initialize base audio
+    if (idx.bgm !== -1) {
+        aFilter += `[${idx.bgm}:a]volume=0.2[abgm];`;
+        aStreams.push('[abgm]');
+    }
+    if (idx.sfx !== -1) {
         const delay = Math.max(0, (markers.sfxAt - markers.s) * 1000);
-        filter += `[${inputs.length/2 - 0.5}:a]adelay=${delay}|${delay}[sfx_v];`;
-        audioInputs.push('[sfx_v]');
+        aFilter += `[${idx.sfx}:a]volume=1.0,adelay=${delay}|${delay}[asfx];`;
+        aStreams.push('[asfx]');
     }
 
-    if(audioInputs.length > 1) {
-        filter += `${audioInputs.join('')}amix=inputs=${audioInputs.length}:duration=first[a_final]`;
-        aMap = '[a_final]';
+    let finalFilter = vFilter + aFilter;
+    if (aStreams.length > 1) {
+        finalFilter += `${aStreams.join('')}amix=inputs=${aStreams.length}:duration=first[aout]`;
+    } else {
+        finalFilter += `[a0]copy[aout]`;
     }
 
-    // D. EXECUTE
-    ffmpeg.on('progress', ({ progress }) => {
-        const p = Math.round(progress * 100);
-        document.getElementById('prog-bar').style.width = p + '%';
-        document.getElementById('prog-label').innerText = p + '%';
+    // C. Run Command
+    ffmpeg.setProgress(({ ratio }) => {
+        const pct = Math.round(ratio * 100);
+        progBar.style.width = pct + '%';
+        progText.innerText = `Rendering: ${pct}%`;
     });
 
     try {
-        await ffmpeg.exec([
+        await ffmpeg.run(
             ...inputs,
-            '-filter_complex', filter,
-            '-map', vMap,
-            '-map', aMap,
+            '-filter_complex', finalFilter,
+            '-map', vFilter.includes('vtemp') ? '[vtemp]' : (vFilter.includes('vlogo') ? '[vlogo]' : '[vscaled]'),
+            '-map', '[aout]',
             '-c:v', 'libx264',
             '-preset', 'ultrafast',
+            '-c:a', 'aac',
             'output.mp4'
-        ]);
+        );
 
-        const data = await ffmpeg.readFile('output.mp4');
-        const url = URL.createObjectURL(new Blob([data.buffer], {type: 'video/mp4'}));
+        const data = ffmpeg.FS('readFile', 'output.mp4');
+        const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
         const a = document.createElement('a');
-        a.href = url; a.download = "tech-house-edit.mp4"; a.click();
-        notify("Export Successful!");
+        a.href = url; a.download = `tech-house-${Date.now()}.mp4`; a.click();
+        notify("EXPORT COMPLETE!");
     } catch (err) {
-        notify("Export Error. Check console.");
+        notify("EXPORT FAILED. Video might be too large.");
         console.error(err);
+    } finally {
+        document.getElementById('render-btn').disabled = false;
+        document.getElementById('prog-container').classList.add('hidden');
     }
 }
