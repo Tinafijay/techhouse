@@ -2,66 +2,70 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tech House Master - V0.1.1 Stable</title>
-    <!-- COI Service Worker is MANDATORY for ChromeOS 103 -->
-    <script src="https://cdn.jsdelivr.net/npm/coi-serviceworker@0.1.7/coi-serviceworker.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech House Video Editor</title>
+    <!-- MANDATORY: This worker script must be in the same folder as this file -->
+    <script src="coi-serviceworker.js"></script>
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="editor-container">
         <header>
-            <h1>🎬 Tech House Editor <small>V0.1.1 Stable</small></h1>
-            <div id="status-bar" role="status" class="status-box">Engine Initializing...</div>
+            <h1>🎬 Tech House Video Editor</h1>
+            <div id="status-bar" class="status-box">Status: Initializing...</div>
         </header>
 
         <main>
-            <div class="upload-section">
-                <button class="main-btn" onclick="document.getElementById('vid-in').click()">📁 LOAD VIDEO</button>
-                <input type="file" id="vid-in" hidden accept="video/*">
+            <!-- Step 1: Upload -->
+            <div class="upload-zone">
+                <button id="main-upload-btn" class="primary-btn">📁 LOAD MAIN VIDEO</button>
+                <input type="file" id="vid-uploader" hidden accept="video/*">
             </div>
 
-            <video id="player" controls></video>
+            <!-- Player -->
+            <video id="player" controls playsinline></video>
             <div id="time-display" class="time-readout">00:00.00</div>
 
-            <div class="layer-controls">
-                <div class="control-box">
-                    <label>Add Layer:</label>
-                    <select id="layer-type">
-                        <option value="logo">🖼️ Permanent Logo (All Time)</option>
-                        <option value="temp">🎨 Illustration (Briefly)</option>
+            <!-- Toolbox -->
+            <div class="toolbox">
+                <div class="tool-card">
+                    <label for="layer-select">Add Extra Layer:</label>
+                    <select id="layer-select">
+                        <option value="logo">🖼️ Logo (Stays All Time)</option>
+                        <option value="illustration">🎨 Illustration (Brief 3s)</option>
                         <option value="bgm">🎵 Background Music</option>
                         <option value="sfx">🔊 Sound Effect (Ding)</option>
                     </select>
-                    <button id="browse-btn">Browse File</button>
-                    <input type="file" id="file-in" hidden>
+                    <button id="browse-layer-btn">Select File</button>
+                    <input type="file" id="layer-uploader" hidden>
                 </div>
 
-                <div class="control-box">
-                    <label>Export Format:</label>
-                    <select id="export-format">
-                        <option value="landscape">Horizontal (16:9)</option>
-                        <option value="portrait">Vertical (9:16)</option>
+                <div class="tool-card">
+                    <label for="aspect-ratio">Final Shape:</label>
+                    <select id="aspect-ratio">
+                        <option value="landscape">Landscape (16:9 Cinema)</option>
+                        <option value="portrait">Portrait (9:16 TikTok/Reels)</option>
                     </select>
                 </div>
             </div>
 
-            <div class="asset-grid" id="asset-summary">
-                <div id="info-vid">Video: --</div>
-                <div id="info-trim">Trim: Whole Video</div>
-                <div id="info-layers">Layers: 0</div>
+            <div class="asset-panel">
+                <p><strong>Markers:</strong> <span id="lbl-markers">Not Set (Full Video)</span></p>
+                <p><strong>Layers:</strong> <span id="lbl-layers">None</span></p>
             </div>
 
+            <!-- Progress -->
             <div id="prog-container" class="hidden">
                 <div id="prog-bar"></div>
-                <div id="prog-text">Rendering: 0%</div>
+                <div id="prog-label">Processing: 0%</div>
             </div>
 
-            <button id="render-btn" class="render-btn" disabled>🚀 EXPORT VIDEO (Ctrl + X)</button>
+            <button id="export-btn" class="export-btn" disabled>🚀 EXPORT VIDEO (Ctrl + X)</button>
         </main>
 
-        <div class="help">
-            <kbd>S</kbd> Set Start | <kbd>E</kbd> Set End | <kbd>V</kbd> Speak Status | <kbd>Space</kbd> Pause
+        <div class="shortcuts-guide">
+            <kbd>S</kbd> Set Start | <kbd>E</kbd> Set End | <kbd>Space</kbd> Play/Pause | <kbd>V</kbd> Speak Status
         </div>
     </div>
 
