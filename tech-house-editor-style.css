@@ -1,24 +1,24 @@
-:root { --bg: #050505; --card: #121212; --accent: #0ea5e9; --gold: #f59e0b; --text: #fff; }
-body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 20px; }
-.editor-container { max-width: 850px; margin: 0 auto; background: var(--card); padding: 25px; border-radius: 15px; border: 1px solid #333; }
+:root { --bg: #050505; --card: #151515; --accent: #38bdf8; --gold: #fbbf24; --text: #f8fafc; }
+body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 15px; margin: 0; display: flex; justify-content: center; }
+.editor-container { max-width: 800px; width: 100%; background: var(--card); padding: 25px; border-radius: 12px; border: 1px solid #334155; }
 
-.status-box { background: #000; color: #4ade80; padding: 15px; border-left: 5px solid var(--accent); margin-bottom: 20px; font-family: monospace; font-size: 1rem; }
-video { width: 100%; border-radius: 10px; border: 1px solid #444; }
-.time-readout { font-size: 3.5rem; text-align: center; color: var(--gold); font-variant-numeric: tabular-nums; margin: 10px 0; }
+.status-box { background: #000; color: #4ade80; padding: 12px; border-radius: 6px; border-left: 5px solid var(--accent); margin-bottom: 20px; font-family: monospace; }
+video { width: 100%; border-radius: 8px; background: #000; border: 2px solid #334155; display: block; }
+.time-readout { font-size: 3rem; text-align: center; color: var(--gold); font-variant-numeric: tabular-nums; margin: 15px 0; font-weight: bold; }
 
-.layer-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
-.control-box { background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; }
-.control-box label { display: block; margin-bottom: 8px; font-weight: bold; color: var(--accent); }
+.toolbox { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+.tool-card { background: #0b1120; padding: 15px; border-radius: 8px; border: 1px solid #1e293b; }
+.tool-card label { display: block; margin-bottom: 10px; font-weight: bold; color: var(--accent); }
 
-select, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #444; background: #222; color: white; cursor: pointer; }
-.main-btn { background: var(--accent); color: #000; font-weight: bold; border: none; font-size: 1.2rem; }
-.render-btn { background: #4ade80; color: #000; border: none; font-size: 1.5rem; font-weight: bold; padding: 20px; border-radius: 10px; cursor: pointer; }
-.render-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+select, button { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white; cursor: pointer; font-size: 1rem; }
+.primary-btn { background: var(--accent); color: #0f172a; font-weight: bold; border: none; font-size: 1.1rem; }
+.export-btn { width: 100%; padding: 18px; background: #22c55e; color: #000; font-weight: bold; font-size: 1.4rem; border-radius: 8px; border: none; margin-top: 10px; }
+.export-btn:disabled { opacity: 0.1; cursor: not-allowed; }
 
-.asset-grid { display: flex; justify-content: space-between; padding: 10px; background: #000; border-radius: 5px; font-size: 0.8rem; color: #888; }
-#prog-container { height: 30px; background: #000; border-radius: 15px; margin: 15px 0; overflow: hidden; position: relative; }
-#prog-bar { height: 100%; width: 0%; background: var(--accent); transition: width 0.3s; }
-#prog-text { position: absolute; width: 100%; text-align: center; top: 5px; font-weight: bold; }
+.asset-panel { background: #000; padding: 15px; border-radius: 8px; font-size: 0.9rem; line-height: 1.6; }
+#prog-container { height: 30px; background: #000; border-radius: 15px; margin: 20px 0; overflow: hidden; position: relative; border: 1px solid #334155; }
+#prog-bar { height: 100%; width: 0%; background: var(--accent); transition: width 0.2s ease-out; }
+#prog-label { position: absolute; width: 100%; text-align: center; top: 5px; font-weight: bold; text-shadow: 1px 1px 2px black; }
 
-kbd { background: #333; color: var(--gold); padding: 3px 6px; border-radius: 4px; }
 .hidden { display: none; }
+kbd { background: #334155; color: var(--gold); padding: 3px 6px; border-radius: 4px; font-family: monospace; }
