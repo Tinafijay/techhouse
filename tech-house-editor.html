@@ -578,7 +578,7 @@ kbd {
 <body>
 
 <a href="#main-content" class="skip-link">Skip to main content</a>
-<div id="live-region" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+<div id="live-region" aria-hidden="true" class="sr-only"></div>
 
 <div class="app" role="application" aria-label="Tech House Video Editor">
 
@@ -598,11 +598,13 @@ kbd {
 
   <main id="main-content">
 
-    <!-- Status Bar -->
-    <div class="status-bar" role="status" aria-live="polite">
+    <!-- Status Bar: visual only. Screen reader uses #live-region-* below -->
+    <div class="status-bar">
       <span class="prefix" aria-hidden="true">SYS&gt;</span>
-      <span id="status-text">Initializing engine…</span>
+      <span id="status-text" aria-hidden="true">Initializing engine…</span>
     </div>
+    <div id="live-region-polite"  aria-live="polite"    aria-atomic="true" class="sr-only"></div>
+    <div id="live-region-urgent"  aria-live="assertive" aria-atomic="true" class="sr-only"></div>
 
     <!-- Upload Zone / Player -->
     <div id="upload-zone" class="upload-zone" tabindex="0" role="button"
@@ -771,8 +773,9 @@ kbd {
 
     </div>
 
+
     <!-- Progress -->
-    <div id="progress-wrap" class="progress-wrap hidden" role="status" aria-live="polite" aria-label="Export progress">
+    <div id="progress-wrap" class="progress-wrap hidden" aria-label="Export progress">
       <div class="progress-meta">
         <span id="progress-phase">Preparing…</span>
         <span class="progress-pct" id="progress-pct">0%</span>
@@ -780,6 +783,19 @@ kbd {
       <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar-role">
         <div class="progress-fill" id="prog-fill"></div>
       </div>
+    </div>
+
+    <!-- Download result — revealed after a successful export -->
+    <div id="download-result" class="hidden"
+         style="background:var(--surface);border:2px solid var(--green);border-radius:var(--radius-lg);
+                padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <span style="color:var(--green);font-weight:600;font-size:0.9rem;" aria-hidden="true">✓ Export complete</span>
+      <a id="download-link" href="#" download="tech-house-export.mp4"
+         style="background:var(--green);color:#000;font-weight:700;font-size:0.85rem;
+                padding:10px 20px;border-radius:var(--radius);text-decoration:none;white-space:nowrap;"
+         aria-label="Download exported video file">
+        ⬇ Download Video
+      </a>
     </div>
 
     <!-- Export Button -->
@@ -824,11 +840,12 @@ const ffmpeg = createFFmpeg({
 });
 
 // ── DOM References ──────────────────────────────────────────
-const player      = document.getElementById('player');
-const uploadZone  = document.getElementById('upload-zone');
-const statusText  = document.getElementById('status-text');
-const liveRegion  = document.getElementById('live-region');
-const engineBadge = document.getElementById('engine-badge');
+const player        = document.getElementById('player');
+const uploadZone    = document.getElementById('upload-zone');
+const statusText    = document.getElementById('status-text');
+const livePolite    = document.getElementById('live-region-polite');
+const liveUrgent    = document.getElementById('live-region-urgent');
+const engineBadge   = document.getElementById('engine-badge');
 
 // ── App State ───────────────────────────────────────────────
 let mainVideoFile = null;
@@ -838,22 +855,29 @@ let aspect = 'landscape';
 let preset = 'ultrafast';
 let pendingLayerType = null;
 let engineReady = false;
-let isDragging = null;
 
-// ── Status & Toast ──────────────────────────────────────────
-function setStatus(msg, announce = true) {
+// ── Announce helpers ─────────────────────────────────────────
+// Screen readers only re-announce when textContent *changes*.
+// We force a change by clearing the node, waiting one frame, then setting.
+function announce(msg, urgent = false) {
+  const region = urgent ? liveUrgent : livePolite;
+  region.textContent = '';
+  requestAnimationFrame(() => { region.textContent = msg; });
+}
+
+function setStatus(msg, urgent = false) {
   statusText.textContent = msg;
-  if (announce) liveRegion.textContent = msg;
   console.log('[STATUS]', msg);
+  announce(msg, urgent);
 }
 
 function toast(msg, type = '') {
   const t = document.createElement('div');
   t.className = 'toast ' + type;
   t.textContent = msg;
-  t.setAttribute('role', 'alert');
+  // Don't add role=alert here — the parent toast-wrap already has aria-live=assertive
   document.getElementById('toast-wrap').appendChild(t);
-  setTimeout(() => t.remove(), 3000);
+  setTimeout(() => t.remove(), 3500);
 }
 
 // ── Engine Init ─────────────────────────────────────────────
@@ -868,7 +892,7 @@ function toast(msg, type = '') {
     toast('FFmpeg engine loaded ✓', 'success');
   } catch(err) {
     engineBadge.textContent = 'ENGINE ERROR';
-    setStatus('Engine failed to load. Please refresh the page.');
+    setStatus('Engine failed to load. Please refresh the page.', true);
     toast('Engine error — please refresh', 'error');
     console.error(err);
   }
@@ -1071,20 +1095,32 @@ document.getElementById('trim-track').addEventListener('click', e => {
 
 // ── Trim Buttons ─────────────────────────────────────────────
 document.getElementById('btn-set-start').onclick = () => {
-  times.s = player.currentTime;
+  const t = player.currentTime;
+  if (t >= times.e) {
+    setStatus(`Cannot set In point at ${fmtTime(t)} — must be before Out point (${fmtTime(times.e)}).`, true);
+    toast('In point must be before Out point', 'error');
+    return;
+  }
+  times.s = t;
   document.getElementById('tc-start').textContent = fmtTime(times.s);
   document.getElementById('tc-start').classList.remove('muted');
   updateTrimBar();
   updateSummary();
-  setStatus(`In point: ${fmtTime(times.s)}`);
+  setStatus(`In point set: ${fmtTime(times.s)}`);
 };
 document.getElementById('btn-set-end').onclick = () => {
-  times.e = player.currentTime;
+  const t = player.currentTime;
+  if (t <= times.s) {
+    setStatus(`Cannot set Out point at ${fmtTime(t)} — must be after In point (${fmtTime(times.s)}).`, true);
+    toast('Out point must be after In point', 'error');
+    return;
+  }
+  times.e = t;
   document.getElementById('tc-end').textContent = fmtTime(times.e);
   document.getElementById('tc-end').classList.remove('muted');
   updateTrimBar();
   updateSummary();
-  setStatus(`Out point: ${fmtTime(times.e)}`);
+  setStatus(`Out point set: ${fmtTime(times.e)}`);
 };
 document.getElementById('btn-reset-trim').onclick = () => {
   times.s = 0;
@@ -1095,7 +1131,7 @@ document.getElementById('btn-reset-trim').onclick = () => {
   document.getElementById('tc-end').classList.remove('muted');
   updateTrimBar();
   updateSummary();
-  setStatus('Trim reset to full video.');
+  setStatus('Trim reset. Full video selected.');
 };
 
 // ── Keyboard Shortcuts ────────────────────────────────────────
@@ -1134,7 +1170,7 @@ window.addEventListener('keydown', e => {
     const step = e.shiftKey ? 1 : 10;
     const dir  = k === 'arrowleft' ? -1 : 1;
     player.currentTime = Math.max(0, Math.min(times.duration, player.currentTime + dir * step));
-    setStatus(`${k === 'arrowleft' ? '←' : '→'} ${step}s  →  ${fmtTime(player.currentTime)}`, false);
+    setStatus(`${k === 'arrowleft' ? '←' : '→'} ${step}s → ${fmtTime(player.currentTime)}`);
   }
 });
 
@@ -1187,6 +1223,7 @@ async function runExport() {
 
   setStatus('Preparing render… please wait.');
   document.getElementById('progress-wrap').classList.remove('hidden');
+  document.getElementById('download-result').classList.add('hidden');
   document.getElementById('export-btn').disabled = true;
   setProgress(0, 'Writing files to memory…');
 
@@ -1296,9 +1333,6 @@ async function runExport() {
     });
 
     // BGM needs -stream_loop so it doesn't go silent if shorter than video
-    const bgmLoopArgs = hasBgm
-      ? ['-stream_loop', '-1']  // inserted before the bgm -i — we rebuild args
-      : [];
 
     // Rebuild args with -stream_loop before bgm input if needed
     if (hasBgm) {
@@ -1327,27 +1361,30 @@ async function runExport() {
     const data = ffmpeg.FS('readFile', 'output.mp4');
     const blob = new Blob([data.buffer], { type: 'video/mp4' });
     const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `tech-house-${Date.now()}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    // Always show the download button (reliable across Chrome versions)
+    const dlLink = document.getElementById('download-link');
+    dlLink.href = url;
+    dlLink.download = `tech-house-${Date.now()}.mp4`;
+    document.getElementById('download-result').classList.remove('hidden');
+    dlLink.focus(); // Move focus to download button so screen reader announces it
+
+    // Also try auto-download as a convenience — may be blocked but harmless
+    try { dlLink.click(); } catch(_) {}
 
     // Cleanup wasm virtual FS
     ['input.mp4','logo.png','illu.png','bgm.mp3','sfx.mp3','output.mp4'].forEach(f => {
       try { ffmpeg.FS('unlink', f); } catch(_) {}
     });
 
-    setStatus('Export complete! File downloaded.');
+    setStatus('Export complete! Download button is now available below the progress bar.');
     toast('Export complete ✓', 'success');
 
   } catch(err) {
     console.error('[EXPORT ERROR]', err);
-    const msg = err.message || String(err);
-    setStatus('Export failed: ' + msg);
-    toast('Export failed — open DevTools console for details', 'error');
+    const msg = 'Export failed: ' + (err.message || String(err));
+    setStatus(msg, true); // urgent — uses assertive live region
+    toast('Export failed — see console for details', 'error');
   } finally {
     document.getElementById('progress-wrap').classList.add('hidden');
     document.getElementById('export-btn').disabled = false;
