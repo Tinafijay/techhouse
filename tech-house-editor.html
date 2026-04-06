@@ -1,74 +1,1303 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tech House Video Editor</title>
-    <!-- MANDATORY: This worker script must be in the same folder as this file -->
-    <script src="coi-serviceworker.js"></script>
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tech House — Video Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- COI ServiceWorker inline — needed for FFmpeg SharedArrayBuffer -->
+<script>
+(function(){
+  if (typeof window !== 'undefined' && typeof ServiceWorkerGlobalScope === 'undefined') {
+    if (!crossOriginIsolated) {
+      const swCode = `
+        self.addEventListener('install', () => self.skipWaiting());
+        self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+        self.addEventListener('fetch', function(e){
+          if(e.request.cache === 'only-if-cached' && e.request.mode !== 'same-origin') return;
+          e.respondWith(
+            fetch(e.request).then(function(r){
+              if(r.status === 0) return r;
+              const h = new Headers(r.headers);
+              h.set('Cross-Origin-Opener-Policy','same-origin');
+              h.set('Cross-Origin-Embedder-Policy','require-corp');
+              return new Response(r.body,{status:r.status,statusText:r.statusText,headers:h});
+            })
+          );
+        });`;
+      const blob = new Blob([swCode], {type:'application/javascript'});
+      const url = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(url).then(()=>{
+        if(!crossOriginIsolated) location.reload();
+      });
+    }
+  }
+})();
+</script>
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
+
+<style>
+/* ============================================================
+   DESIGN SYSTEM — Dark Broadcast Studio
+   ============================================================ */
+:root {
+  --bg:        #080a0e;
+  --surface:   #0f1218;
+  --panel:     #141820;
+  --border:    #1e2535;
+  --border-hi: #2d3a50;
+  --amber:     #f59e0b;
+  --amber-dim: #92600a;
+  --cyan:      #22d3ee;
+  --green:     #34d399;
+  --red:       #f87171;
+  --text:      #e2e8f0;
+  --text-dim:  #64748b;
+  --text-mute: #334155;
+  --mono:      'Space Mono', monospace;
+  --head:      'Syne', sans-serif;
+  --body:      'DM Sans', sans-serif;
+  --radius:    6px;
+  --radius-lg: 10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 14px;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px 60px;
+  background-image:
+    radial-gradient(ellipse 600px 400px at 50% -100px, rgba(245,158,11,0.06) 0%, transparent 70%),
+    repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px),
+    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px);
+}
+
+/* ============ LAYOUT ============ */
+.app {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ============ HEADER ============ */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.app-title {
+  font-family: var(--head);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.app-title .icon { font-size: 1.2rem; }
+.app-title .sub {
+  font-weight: 600;
+  color: var(--amber);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: block;
+  line-height: 1;
+  margin-top: 3px;
+}
+.badge {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  border-radius: 100px;
+  border: 1px solid var(--border-hi);
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+.badge.online { border-color: var(--green); color: var(--green); }
+.badge.online::before { content: '● '; font-size: 0.5rem; vertical-align: middle; }
+
+/* ============ STATUS BAR ============ */
+.status-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.status-bar .prefix { color: var(--amber); flex-shrink: 0; }
+.status-bar #status-text { overflow: hidden; text-overflow: ellipsis; }
+
+/* ============ UPLOAD ZONE ============ */
+.upload-zone {
+  border: 2px dashed var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 36px 20px;
+  text-align: center;
+  transition: all 0.2s;
+  cursor: pointer;
+  background: var(--surface);
+  position: relative;
+}
+.upload-zone.has-video { border-style: solid; border-color: var(--amber); padding: 0; }
+.upload-zone:not(.has-video):hover { border-color: var(--amber); background: rgba(245,158,11,0.04); }
+.upload-zone .upload-hint { color: var(--text-dim); font-size: 0.85rem; margin-top: 8px; }
+.upload-zone .upload-icon { font-size: 2.4rem; margin-bottom: 8px; display: block; }
+.upload-zone h2 { font-family: var(--head); font-size: 1rem; font-weight: 600; }
+
+/* ============ VIDEO PLAYER ============ */
+#player {
+  width: 100%;
+  display: block;
+  border-radius: var(--radius-lg);
+  background: #000;
+  outline: none;
+  max-height: 420px;
+}
+#player:focus { box-shadow: 0 0 0 2px var(--amber); }
+
+/* ============ TIMECODE DISPLAY ============ */
+.timecode-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.tc-block { text-align: center; }
+.tc-label {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.tc-value {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--amber);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.tc-value.muted { color: var(--text-mute); }
+.tc-block.active .tc-value { color: var(--cyan); }
+.tc-divider { width: 1px; background: var(--border); }
+
+/* ============ TRIM BAR ============ */
+.trim-bar-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.trim-label {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.trim-track {
+  position: relative;
+  height: 6px;
+  background: var(--border);
+  border-radius: 100px;
+  cursor: pointer;
+}
+.trim-range {
+  position: absolute;
+  height: 100%;
+  background: var(--amber);
+  border-radius: 100px;
+  transition: left 0.1s, width 0.1s;
+}
+.trim-head {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+  border: 2px solid var(--amber);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  transition: background 0.1s;
+}
+.trim-head:hover { background: var(--amber); }
+.trim-playhead {
+  position: absolute;
+  width: 2px;
+  height: 18px;
+  background: var(--cyan);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 100px;
+  pointer-events: none;
+}
+.trim-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* ============ PANELS ============ */
+.panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+.panel-title {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.panel-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+
+/* ============ LAYER ITEMS ============ */
+.layer-list { display: flex; flex-direction: column; gap: 8px; }
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.layer-item:hover { border-color: var(--border-hi); }
+.layer-item.active { border-color: var(--amber); background: rgba(245,158,11,0.06); }
+.layer-item.loaded { border-color: var(--green); }
+.layer-item.loaded::after {
+  content: '✓';
+  position: absolute;
+  right: 10px;
+  color: var(--green);
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+.layer-icon { font-size: 1.2rem; width: 28px; text-align: center; flex-shrink: 0; }
+.layer-info { flex: 1; min-width: 0; }
+.layer-name { font-weight: 500; font-size: 0.85rem; }
+.layer-desc { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ============ SETTINGS PANEL ============ */
+.setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.setting-row:last-child { margin-bottom: 0; }
+.setting-label {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.seg-control {
+  display: flex;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px;
+  gap: 3px;
+}
+.seg-btn {
+  flex: 1;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--body);
+  font-size: 0.78rem;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.seg-btn.active {
+  background: var(--amber);
+  color: #000;
+  font-weight: 600;
+}
+
+/* ============ BUTTONS ============ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--border-hi); background: var(--border); }
+.btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.btn.btn-sm { padding: 6px 10px; font-size: 0.75rem; }
+.btn.btn-amber {
+  background: var(--amber);
+  color: #000;
+  border-color: var(--amber);
+  font-weight: 600;
+}
+.btn.btn-amber:hover { background: #fbbf24; border-color: #fbbf24; }
+.btn.btn-ghost { background: transparent; color: var(--text-dim); }
+.btn.btn-ghost:hover { color: var(--text); background: var(--panel); }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+/* ============ EXPORT BUTTON ============ */
+.export-wrap {
+  position: relative;
+}
+.export-btn {
+  width: 100%;
+  padding: 18px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #000;
+  font-family: var(--head);
+  font-weight: 800;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 24px rgba(245,158,11,0.25);
+  position: relative;
+  overflow: hidden;
+}
+.export-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+}
+.export-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 32px rgba(245,158,11,0.4);
+}
+.export-btn:active:not(:disabled) { transform: translateY(0); }
+.export-btn:disabled { opacity: 0.2; cursor: not-allowed; transform: none; box-shadow: none; }
+.export-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+
+/* ============ PROGRESS ============ */
+.progress-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.progress-track {
+  height: 8px;
+  background: var(--panel);
+  border-radius: 100px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--amber), var(--cyan));
+  border-radius: 100px;
+  transition: width 0.3s ease-out;
+  position: relative;
+}
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 20px;
+  background: rgba(255,255,255,0.4);
+  filter: blur(4px);
+}
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.progress-pct { color: var(--amber); font-weight: 700; }
+.hidden { display: none !important; }
+
+/* ============ SHORTCUTS ============ */
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+kbd {
+  background: var(--panel);
+  color: var(--amber);
+  border: 1px solid var(--border-hi);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  box-shadow: 0 1px 0 var(--border-hi);
+}
+.sc-item { display: flex; align-items: center; gap: 5px; }
+.sc-sep { color: var(--border-hi); }
+
+/* ============ TOAST ============ */
+.toast-wrap {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--panel);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  animation: toastIn 0.25s ease, toastOut 0.3s ease 2.5s forwards;
+  pointer-events: auto;
+}
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.error { border-color: var(--red); color: var(--red); }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes toastOut {
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+/* ============ ACCESSIBILITY ============ */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--amber);
+  color: #000;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  z-index: 9999;
+  transition: top 0.2s;
+}
+.skip-link:focus { top: 10px; }
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 600px) {
+  .panels { grid-template-columns: 1fr; }
+  .timecode-row { grid-template-columns: 1fr 1fr 1fr; }
+  .tc-value { font-size: 1rem; }
+  .export-btn { font-size: 0.95rem; padding: 15px; }
+}
+</style>
 </head>
 <body>
-    <div class="editor-container">
-        <header>
-            <h1>🎬 Tech House Video Editor</h1>
-            <div id="status-bar" class="status-box">Status: Initializing...</div>
-        </header>
 
-        <main>
-            <!-- Step 1: Upload -->
-            <div class="upload-zone">
-                <button id="main-upload-btn" class="primary-btn">📁 LOAD MAIN VIDEO</button>
-                <input type="file" id="vid-uploader" hidden accept="video/*">
-            </div>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<div id="live-region" aria-live="polite" aria-atomic="true" class="sr-only"></div>
 
-            <!-- Player -->
-            <video id="player" controls playsinline></video>
-            <div id="time-display" class="time-readout">00:00.00</div>
+<div class="app" role="application" aria-label="Tech House Video Editor">
 
-            <!-- Toolbox -->
-            <div class="toolbox">
-                <div class="tool-card">
-                    <label for="layer-select">Add Extra Layer:</label>
-                    <select id="layer-select">
-                        <option value="logo">🖼️ Logo (Stays All Time)</option>
-                        <option value="illustration">🎨 Illustration (Brief 3s)</option>
-                        <option value="bgm">🎵 Background Music</option>
-                        <option value="sfx">🔊 Sound Effect (Ding)</option>
-                    </select>
-                    <button id="browse-layer-btn">Select File</button>
-                    <input type="file" id="layer-uploader" hidden>
-                </div>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="app-title">
+      <span class="icon" aria-hidden="true">🎬</span>
+      <div>
+        TECH HOUSE
+        <span class="sub">Video Editor</span>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <span id="engine-badge" class="badge">Initializing…</span>
+    </div>
+  </header>
 
-                <div class="tool-card">
-                    <label for="aspect-ratio">Final Shape:</label>
-                    <select id="aspect-ratio">
-                        <option value="landscape">Landscape (16:9 Cinema)</option>
-                        <option value="portrait">Portrait (9:16 TikTok/Reels)</option>
-                    </select>
-                </div>
-            </div>
+  <main id="main-content">
 
-            <div class="asset-panel">
-                <p><strong>Markers:</strong> <span id="lbl-markers">Not Set (Full Video)</span></p>
-                <p><strong>Layers:</strong> <span id="lbl-layers">None</span></p>
-            </div>
-
-            <!-- Progress -->
-            <div id="prog-container" class="hidden">
-                <div id="prog-bar"></div>
-                <div id="prog-label">Processing: 0%</div>
-            </div>
-
-            <button id="export-btn" class="export-btn" disabled>🚀 EXPORT VIDEO (Ctrl + X)</button>
-        </main>
-
-        <div class="shortcuts-guide">
-            <kbd>S</kbd> Set Start | <kbd>E</kbd> Set End | <kbd>Space</kbd> Play/Pause | <kbd>V</kbd> Speak Status
-        </div>
+    <!-- Status Bar -->
+    <div class="status-bar" role="status" aria-live="polite">
+      <span class="prefix" aria-hidden="true">SYS&gt;</span>
+      <span id="status-text">Initializing engine…</span>
     </div>
 
-    <script src="script.js"></script>
+    <!-- Upload Zone / Player -->
+    <div id="upload-zone" class="upload-zone" tabindex="0" role="button"
+         aria-label="Click or press Enter to upload a video file"
+         onclick="document.getElementById('vid-uploader').click()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){document.getElementById('vid-uploader').click()}">
+      <span class="upload-icon" aria-hidden="true">📽️</span>
+      <h2>Drop or Click to Load Video</h2>
+      <p class="upload-hint">MP4, MOV, WebM — any resolution</p>
+      <input type="file" id="vid-uploader" hidden accept="video/*" aria-label="Upload main video file">
+    </div>
+
+    <video id="player" controls playsinline class="hidden"
+           aria-label="Video preview player"
+           tabindex="0"></video>
+
+    <!-- Timecode Row -->
+    <div class="timecode-row" role="group" aria-label="Timecode display">
+      <div class="tc-block" id="tc-start-block">
+        <div class="tc-label">In Point</div>
+        <div class="tc-value muted" id="tc-start" aria-label="Start time">00:00.0</div>
+      </div>
+      <div class="tc-block active">
+        <div class="tc-label">Current</div>
+        <div class="tc-value" id="tc-current" aria-live="off" aria-label="Current time">00:00.0</div>
+      </div>
+      <div class="tc-block" id="tc-end-block">
+        <div class="tc-label">Out Point</div>
+        <div class="tc-value muted" id="tc-end" aria-label="End time">00:00.0</div>
+      </div>
+    </div>
+
+    <!-- Trim Bar -->
+    <div class="trim-bar-wrap">
+      <div class="trim-label">
+        <span>Trim Range</span>
+        <span id="trim-duration-label">— no video —</span>
+      </div>
+      <div class="trim-track" id="trim-track" role="slider" aria-label="Trim range scrubber"
+           tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="trim-range" id="trim-range"></div>
+        <div class="trim-head" id="trim-head-s" aria-label="Start handle" tabindex="0" role="slider"></div>
+        <div class="trim-head" id="trim-head-e" aria-label="End handle" tabindex="0" role="slider" style="border-color:var(--cyan)"></div>
+        <div class="trim-playhead" id="trim-playhead"></div>
+      </div>
+      <div class="trim-actions">
+        <button class="btn btn-sm" id="btn-set-start" aria-label="Set start point to current time (S key)">
+          <span aria-hidden="true">◄</span> Set In <kbd aria-hidden="true">S</kbd>
+        </button>
+        <button class="btn btn-sm" id="btn-set-end" aria-label="Set end point to current time (E key)">
+          Set Out <kbd aria-hidden="true">E</kbd> <span aria-hidden="true">►</span>
+        </button>
+        <button class="btn btn-sm btn-ghost" id="btn-reset-trim" aria-label="Reset trim to full video">
+          Reset
+        </button>
+      </div>
+    </div>
+
+    <!-- Side Panels -->
+    <div class="panels">
+
+      <!-- Layer Panel -->
+      <section class="panel" aria-labelledby="layers-heading">
+        <div class="panel-title">
+          <div class="dot" aria-hidden="true"></div>
+          <span id="layers-heading">Overlay Layers</span>
+        </div>
+        <div class="layer-list" role="list" aria-label="Available layers">
+
+          <div class="layer-item" id="layer-logo" role="listitem" tabindex="0"
+               onclick="triggerLayer('logo')"
+               onkeydown="if(event.key==='Enter')triggerLayer('logo')"
+               aria-label="Logo overlay — permanent watermark. Click to upload.">
+            <div class="layer-icon" aria-hidden="true">🖼️</div>
+            <div class="layer-info">
+              <div class="layer-name">Logo</div>
+              <div class="layer-desc" id="desc-logo">Permanent watermark</div>
+            </div>
+          </div>
+
+          <div class="layer-item" id="layer-illustration" role="listitem" tabindex="0"
+               onclick="triggerLayer('illustration')"
+               onkeydown="if(event.key==='Enter')triggerLayer('illustration')"
+               aria-label="Illustration overlay — brief 3 second popup at current time. Click to upload.">
+            <div class="layer-icon" aria-hidden="true">🎨</div>
+            <div class="layer-info">
+              <div class="layer-name">Illustration</div>
+              <div class="layer-desc" id="desc-illustration">Brief 3s popup at current time</div>
+            </div>
+          </div>
+
+          <div class="layer-item" id="layer-bgm" role="listitem" tabindex="0"
+               onclick="triggerLayer('bgm')"
+               onkeydown="if(event.key==='Enter')triggerLayer('bgm')"
+               aria-label="Background music — plays under main audio. Click to upload.">
+            <div class="layer-icon" aria-hidden="true">🎵</div>
+            <div class="layer-info">
+              <div class="layer-name">Background Music</div>
+              <div class="layer-desc" id="desc-bgm">Plays under main audio</div>
+            </div>
+          </div>
+
+          <div class="layer-item" id="layer-sfx" role="listitem" tabindex="0"
+               onclick="triggerLayer('sfx')"
+               onkeydown="if(event.key==='Enter')triggerLayer('sfx')"
+               aria-label="Sound effect — triggered at current time. Click to upload.">
+            <div class="layer-icon" aria-hidden="true">🔊</div>
+            <div class="layer-info">
+              <div class="layer-name">Sound Effect</div>
+              <div class="layer-desc" id="desc-sfx">Triggered at current time</div>
+            </div>
+          </div>
+
+        </div>
+        <input type="file" id="layer-uploader" hidden aria-label="Layer file input">
+      </section>
+
+      <!-- Settings Panel -->
+      <section class="panel" aria-labelledby="settings-heading">
+        <div class="panel-title">
+          <div class="dot" aria-hidden="true"></div>
+          <span id="settings-heading">Output Settings</span>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label" id="aspect-label">Aspect Ratio</div>
+          <div class="seg-control" role="group" aria-labelledby="aspect-label">
+            <button class="seg-btn active" id="seg-landscape" data-val="landscape"
+                    aria-pressed="true" onclick="setAspect('landscape')">
+              16:9 Cinema
+            </button>
+            <button class="seg-btn" id="seg-portrait" data-val="portrait"
+                    aria-pressed="false" onclick="setAspect('portrait')">
+              9:16 Reels
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label" id="quality-label">Encode Speed</div>
+          <div class="seg-control" role="group" aria-labelledby="quality-label">
+            <button class="seg-btn active" id="seg-fast" data-preset="ultrafast"
+                    aria-pressed="true" onclick="setPreset('ultrafast')">
+              Fast
+            </button>
+            <button class="seg-btn" id="seg-balanced" data-preset="veryfast"
+                    aria-pressed="false" onclick="setPreset('veryfast')">
+              Balanced
+            </button>
+            <button class="seg-btn" id="seg-hq" data-preset="medium"
+                    aria-pressed="false" onclick="setPreset('medium')">
+              HQ
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-row" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border)">
+          <div class="setting-label">Summary</div>
+          <div style="font-size:0.75rem; color:var(--text-dim); line-height:1.7; font-family:var(--mono);">
+            <div id="summary-aspect">Format: Landscape 16:9</div>
+            <div id="summary-layers">Layers: none</div>
+            <div id="summary-trim">Trim: full video</div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Progress -->
+    <div id="progress-wrap" class="progress-wrap hidden" role="status" aria-live="polite" aria-label="Export progress">
+      <div class="progress-meta">
+        <span id="progress-phase">Preparing…</span>
+        <span class="progress-pct" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar-role">
+        <div class="progress-fill" id="prog-fill"></div>
+      </div>
+    </div>
+
+    <!-- Export Button -->
+    <button class="export-btn" id="export-btn" disabled
+            aria-label="Export video (keyboard shortcut: Control X)"
+            onclick="runExport()">
+      🚀 &nbsp; EXPORT VIDEO
+    </button>
+
+    <!-- Keyboard Shortcuts -->
+    <div class="shortcuts" role="complementary" aria-label="Keyboard shortcuts">
+      <span class="sc-item"><kbd>S</kbd> Set In</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>E</kbd> Set Out</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Space</kbd> Play/Pause</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>V</kbd> Read Status</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>X</kbd> Export</span>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-wrap" id="toast-wrap" aria-live="assertive" aria-atomic="true"></div>
+
+<script>
+// ============================================================
+// TECH HOUSE VIDEO EDITOR — Complete Script
+// ============================================================
+
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({
+  log: true,
+  corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+});
+
+// ── DOM References ──────────────────────────────────────────
+const player      = document.getElementById('player');
+const uploadZone  = document.getElementById('upload-zone');
+const statusText  = document.getElementById('status-text');
+const liveRegion  = document.getElementById('live-region');
+const engineBadge = document.getElementById('engine-badge');
+
+// ── App State ───────────────────────────────────────────────
+let mainVideoFile = null;
+let assets = { logo: null, illustration: null, bgm: null, sfx: null };
+let times  = { s: 0, e: 0, illuAt: 0, sfxAt: 0, duration: 0 };
+let aspect = 'landscape';
+let preset = 'ultrafast';
+let pendingLayerType = null;
+let engineReady = false;
+let isDragging = null;
+
+// ── Status & Toast ──────────────────────────────────────────
+function setStatus(msg, announce = true) {
+  statusText.textContent = msg;
+  if (announce) liveRegion.textContent = msg;
+  console.log('[STATUS]', msg);
+}
+
+function toast(msg, type = '') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.textContent = msg;
+  t.setAttribute('role', 'alert');
+  document.getElementById('toast-wrap').appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ── Engine Init ─────────────────────────────────────────────
+(async function initEngine() {
+  setStatus('Loading FFmpeg engine…');
+  try {
+    await ffmpeg.load();
+    engineReady = true;
+    engineBadge.textContent = 'ENGINE READY';
+    engineBadge.classList.add('online');
+    setStatus('Engine ready. Load a video to start.');
+    toast('FFmpeg engine loaded ✓', 'success');
+  } catch(err) {
+    engineBadge.textContent = 'ENGINE ERROR';
+    setStatus('Engine failed to load. Please refresh the page.');
+    toast('Engine error — please refresh', 'error');
+    console.error(err);
+  }
+})();
+
+// ── Video Upload ─────────────────────────────────────────────
+document.getElementById('vid-uploader').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  mainVideoFile = file;
+
+  const url = URL.createObjectURL(file);
+  player.src = url;
+  player.load();
+
+  player.onloadedmetadata = () => {
+    times.e = player.duration;
+    times.duration = player.duration;
+
+    // Show player, hide upload zone
+    uploadZone.classList.add('hidden');
+    player.classList.remove('hidden');
+    document.getElementById('export-btn').disabled = false;
+
+    updateTimecodes();
+    updateTrimBar();
+    updateSummary();
+    setStatus(`Loaded: "${file.name}" — ${fmtTime(player.duration)}`);
+    toast('Video loaded ✓', 'success');
+  };
+};
+
+// Drag-and-drop support on upload zone
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--amber)'; });
+uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.style.borderColor = '';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('video/')) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('vid-uploader').files = dt.files;
+    document.getElementById('vid-uploader').dispatchEvent(new Event('change'));
+  }
+});
+
+// ── Layer Uploads ────────────────────────────────────────────
+function triggerLayer(type) {
+  pendingLayerType = type;
+  const input = document.getElementById('layer-uploader');
+  // Accept images for logo/illustration, audio for bgm/sfx
+  if (type === 'logo' || type === 'illustration') {
+    input.accept = 'image/*';
+  } else {
+    input.accept = 'audio/*';
+  }
+  input.click();
+}
+
+document.getElementById('layer-uploader').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file || !pendingLayerType) return;
+  const type = pendingLayerType;
+  assets[type] = file;
+
+  // Capture time for time-specific assets
+  if (type === 'illustration') times.illuAt = player.currentTime || 0;
+  if (type === 'sfx') times.sfxAt = player.currentTime || 0;
+
+  // Update layer item UI
+  const el = document.getElementById('layer-' + type);
+  if (el) {
+    el.classList.add('loaded');
+    const desc = document.getElementById('desc-' + type);
+    if (desc) {
+      const shortName = file.name.length > 22 ? file.name.slice(0, 20) + '…' : file.name;
+      if (type === 'illustration') desc.textContent = `At ${fmtTime(times.illuAt)} — ${shortName}`;
+      else if (type === 'sfx') desc.textContent = `At ${fmtTime(times.sfxAt)} — ${shortName}`;
+      else desc.textContent = shortName;
+    }
+  }
+
+  updateSummary();
+  const label = { logo:'Logo', illustration:'Illustration', bgm:'BGM', sfx:'SFX' }[type];
+  setStatus(`${label} added: ${file.name}`);
+  toast(`${label} added ✓`, 'success');
+
+  // Reset input so same file can be re-selected
+  e.target.value = '';
+  pendingLayerType = null;
+};
+
+// ── Aspect & Preset ──────────────────────────────────────────
+function setAspect(val) {
+  aspect = val;
+  document.querySelectorAll('.seg-control').forEach(group => {
+    // only the first seg-control (aspect)
+  });
+  const btns = document.querySelectorAll('#seg-landscape, #seg-portrait');
+  btns.forEach(b => {
+    const active = b.dataset.val === val;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  updateSummary();
+}
+
+function setPreset(val) {
+  preset = val;
+  const btns = document.querySelectorAll('#seg-fast, #seg-balanced, #seg-hq');
+  btns.forEach(b => {
+    const active = b.dataset.preset === val;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+// ── Trim Bar ─────────────────────────────────────────────────
+function updateTrimBar() {
+  const dur = times.duration;
+  if (!dur) return;
+
+  const sp = times.s / dur;
+  const ep = times.e / dur;
+
+  document.getElementById('trim-range').style.left  = (sp * 100) + '%';
+  document.getElementById('trim-range').style.width = ((ep - sp) * 100) + '%';
+  document.getElementById('trim-head-s').style.left = (sp * 100) + '%';
+  document.getElementById('trim-head-e').style.left = (ep * 100) + '%';
+
+  const trimLen = times.e - times.s;
+  document.getElementById('trim-duration-label').textContent =
+    `${fmtTime(times.s)} → ${fmtTime(times.e)} (${fmtTime(trimLen)})`;
+}
+
+player.ontimeupdate = () => {
+  const t = player.currentTime;
+  document.getElementById('tc-current').textContent = fmtTime(t);
+
+  if (times.duration > 0) {
+    const pct = (t / times.duration) * 100;
+    document.getElementById('trim-playhead').style.left = pct + '%';
+  }
+};
+
+// Trim dragging
+let dragType = null;
+function startDrag(e, type) {
+  dragType = type;
+  e.preventDefault();
+  window.addEventListener('mousemove', onDrag);
+  window.addEventListener('mouseup', stopDrag);
+  window.addEventListener('touchmove', onDrag, { passive: false });
+  window.addEventListener('touchend', stopDrag);
+}
+document.getElementById('trim-head-s').addEventListener('mousedown', e => startDrag(e, 's'));
+document.getElementById('trim-head-e').addEventListener('mousedown', e => startDrag(e, 'e'));
+document.getElementById('trim-head-s').addEventListener('touchstart', e => startDrag(e, 's'), { passive: false });
+document.getElementById('trim-head-e').addEventListener('touchstart', e => startDrag(e, 'e'), { passive: false });
+
+function onDrag(e) {
+  if (!dragType) return;
+  e.preventDefault();
+  const track = document.getElementById('trim-track');
+  const rect = track.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  let pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const t = pct * times.duration;
+
+  if (dragType === 's') {
+    times.s = Math.min(t, times.e - 0.5);
+    player.currentTime = times.s;
+    document.getElementById('tc-start').textContent = fmtTime(times.s);
+    document.getElementById('tc-start').classList.remove('muted');
+  } else {
+    times.e = Math.max(t, times.s + 0.5);
+    player.currentTime = times.e;
+    document.getElementById('tc-end').textContent = fmtTime(times.e);
+    document.getElementById('tc-end').classList.remove('muted');
+  }
+  updateTrimBar();
+  updateSummary();
+}
+function stopDrag() {
+  dragType = null;
+  window.removeEventListener('mousemove', onDrag);
+  window.removeEventListener('mouseup', stopDrag);
+  window.removeEventListener('touchmove', onDrag);
+  window.removeEventListener('touchend', stopDrag);
+}
+
+// Click on track to seek
+document.getElementById('trim-track').addEventListener('click', e => {
+  if (!times.duration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  player.currentTime = pct * times.duration;
+});
+
+// ── Trim Buttons ─────────────────────────────────────────────
+document.getElementById('btn-set-start').onclick = () => {
+  times.s = player.currentTime;
+  document.getElementById('tc-start').textContent = fmtTime(times.s);
+  document.getElementById('tc-start').classList.remove('muted');
+  updateTrimBar();
+  updateSummary();
+  setStatus(`In point: ${fmtTime(times.s)}`);
+};
+document.getElementById('btn-set-end').onclick = () => {
+  times.e = player.currentTime;
+  document.getElementById('tc-end').textContent = fmtTime(times.e);
+  document.getElementById('tc-end').classList.remove('muted');
+  updateTrimBar();
+  updateSummary();
+  setStatus(`Out point: ${fmtTime(times.e)}`);
+};
+document.getElementById('btn-reset-trim').onclick = () => {
+  times.s = 0;
+  times.e = times.duration;
+  document.getElementById('tc-start').textContent = fmtTime(times.s);
+  document.getElementById('tc-end').textContent = fmtTime(times.e);
+  document.getElementById('tc-start').classList.remove('muted');
+  document.getElementById('tc-end').classList.remove('muted');
+  updateTrimBar();
+  updateSummary();
+  setStatus('Trim reset to full video.');
+};
+
+// ── Keyboard Shortcuts ────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  const tag = document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const k = e.key.toLowerCase();
+
+  if (k === 's' && !e.ctrlKey) {
+    e.preventDefault();
+    document.getElementById('btn-set-start').click();
+  }
+  if (k === 'e' && !e.ctrlKey) {
+    e.preventDefault();
+    document.getElementById('btn-set-end').click();
+  }
+  if (k === ' ') {
+    e.preventDefault();
+    if (!mainVideoFile) return;
+    player.paused ? player.play() : player.pause();
+    setStatus(player.paused ? 'Paused' : 'Playing', false);
+  }
+  if (k === 'v') {
+    setStatus(`Current: ${fmtTime(player.currentTime)}  In: ${fmtTime(times.s)}  Out: ${fmtTime(times.e)}`);
+  }
+  if (e.ctrlKey && k === 'x') {
+    e.preventDefault();
+    runExport();
+  }
+});
+
+// ── Helpers ───────────────────────────────────────────────────
+function fmtTime(t) {
+  if (isNaN(t) || t < 0) t = 0;
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  const f = Math.floor((t % 1) * 10);
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${f}`;
+}
+
+function updateTimecodes() {
+  document.getElementById('tc-start').textContent   = fmtTime(times.s);
+  document.getElementById('tc-end').textContent     = fmtTime(times.e);
+  document.getElementById('tc-current').textContent = fmtTime(player.currentTime);
+}
+
+function updateSummary() {
+  const layerNames = Object.entries(assets)
+    .filter(([,v]) => v !== null)
+    .map(([k]) => k)
+    .join(', ') || 'none';
+  document.getElementById('summary-aspect').textContent =
+    'Format: ' + (aspect === 'portrait' ? '9:16 Vertical' : '16:9 Landscape');
+  document.getElementById('summary-layers').textContent = 'Layers: ' + layerNames;
+  if (times.duration > 0) {
+    document.getElementById('summary-trim').textContent =
+      `Trim: ${fmtTime(times.s)} → ${fmtTime(times.e)}`;
+  }
+}
+
+function setProgress(pct, phase) {
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-bar-role').setAttribute('aria-valuenow', pct);
+  if (phase) document.getElementById('progress-phase').textContent = phase;
+}
+
+// ── MASTER RENDER ENGINE ──────────────────────────────────────
+async function runExport() {
+  if (!mainVideoFile) { toast('No video loaded', 'error'); return; }
+  if (!engineReady)   { toast('Engine not ready yet', 'error'); return; }
+
+  setStatus('Preparing render… please wait.');
+  document.getElementById('progress-wrap').classList.remove('hidden');
+  document.getElementById('export-btn').disabled = true;
+  setProgress(0, 'Writing files…');
+
+  try {
+    // Write main video
+    ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(mainVideoFile));
+    setProgress(5, 'Building filter graph…');
+
+    // Base inputs: trim
+    let inputs = ['-ss', times.s.toString(), '-to', times.e.toString(), '-i', 'input.mp4'];
+    let vTag = '[0:v]';
+    let inputCount = 1;
+
+    let filterParts = [];
+
+    // ── Portrait / Landscape crop ──
+    if (aspect === 'portrait') {
+      filterParts.push(`${vTag}crop=ih*(9/16):ih,scale=720:1280[v_sized]`);
+      vTag = '[v_sized]';
+    } else {
+      filterParts.push(`${vTag}scale=1280:720[v_sized]`);
+      vTag = '[v_sized]';
+    }
+
+    // ── Logo overlay ──
+    if (assets.logo) {
+      ffmpeg.FS('writeFile', 'logo.png', await fetchFile(assets.logo));
+      inputs.push('-i', 'logo.png');
+      filterParts.push(`[${inputCount}:v]scale=120:-1,format=rgba[logo_s]`);
+      filterParts.push(`${vTag}[logo_s]overlay=W-w-20:20[v_logo]`);
+      vTag = '[v_logo]';
+      inputCount++;
+    }
+
+    // ── Illustration overlay (3s at illuAt) ──
+    if (assets.illustration) {
+      ffmpeg.FS('writeFile', 'illu.png', await fetchFile(assets.illustration));
+      inputs.push('-i', 'illu.png');
+      const start = Math.max(0, times.illuAt - times.s);
+      const end   = start + 3;
+      filterParts.push(`[${inputCount}:v]scale=400:-1,format=rgba[illu_s]`);
+      filterParts.push(`${vTag}[illu_s]overlay=(W-w)/2:(H-h)/2:enable='between(t,${start.toFixed(2)},${end.toFixed(2)})'[v_illu]`);
+      vTag = '[v_illu]';
+      inputCount++;
+    }
+
+    // ── Audio mixing ──
+    let aOutputs = [];
+    filterParts.push(`[0:a]volume=1.0[a_main]`);
+    aOutputs.push('[a_main]');
+
+    if (assets.bgm) {
+      ffmpeg.FS('writeFile', 'bgm.mp3', await fetchFile(assets.bgm));
+      inputs.push('-i', 'bgm.mp3');
+      // Loop BGM to fill duration, then duck to 20%
+      const dur = times.e - times.s;
+      filterParts.push(`[${inputCount}:a]aloop=loop=-1:size=2e+09,atrim=duration=${dur.toFixed(2)},volume=0.2[a_bgm]`);
+      aOutputs.push('[a_bgm]');
+      inputCount++;
+    }
+
+    if (assets.sfx) {
+      ffmpeg.FS('writeFile', 'sfx.mp3', await fetchFile(assets.sfx));
+      inputs.push('-i', 'sfx.mp3');
+      const delayMs = Math.max(0, Math.round((times.sfxAt - times.s) * 1000));
+      filterParts.push(`[${inputCount}:a]volume=1.0,adelay=${delayMs}|${delayMs}[a_sfx]`);
+      aOutputs.push('[a_sfx]');
+      inputCount++;
+    }
+
+    // Mix all audio streams
+    if (aOutputs.length === 1) {
+      // Only main audio — just rename
+      filterParts.push(`${aOutputs[0]}anull[a_out]`);
+    } else {
+      filterParts.push(`${aOutputs.join('')}amix=inputs=${aOutputs.length}:duration=first:dropout_transition=0[a_out]`);
+    }
+
+    const filterComplex = filterParts.join(';');
+
+    setProgress(10, 'Encoding…');
+
+    // Track progress
+    ffmpeg.setProgress(({ ratio }) => {
+      const pct = Math.min(98, Math.round(10 + ratio * 88));
+      setProgress(pct, `Encoding… ${pct}%`);
+    });
+
+    await ffmpeg.run(
+      ...inputs,
+      '-filter_complex', filterComplex,
+      '-map', vTag,
+      '-map', '[a_out]',
+      '-c:v', 'libx264',
+      '-preset', preset,
+      '-crf', '23',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-movflags', '+faststart',
+      'output.mp4'
+    );
+
+    setProgress(100, 'Finalizing…');
+
+    // Download
+    const data = ffmpeg.FS('readFile', 'output.mp4');
+    const url  = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `tech-house-export-${Date.now()}.mp4`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // Cleanup virtual disk
+    ['input.mp4','logo.png','illu.png','bgm.mp3','sfx.mp3','output.mp4'].forEach(f => {
+      try { ffmpeg.FS('unlink', f); } catch(e) {}
+    });
+
+    setStatus('Export complete! File downloaded.');
+    toast('Export complete ✓', 'success');
+
+  } catch(err) {
+    console.error('[EXPORT ERROR]', err);
+    setStatus('Export failed: ' + (err.message || 'Unknown error'));
+    toast('Export failed — check console', 'error');
+  } finally {
+    document.getElementById('progress-wrap').classList.add('hidden');
+    document.getElementById('export-btn').disabled = false;
+    setProgress(0, 'Preparing…');
+  }
+}
+</script>
 </body>
 </html>
