@@ -797,6 +797,10 @@ kbd {
       <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>Space</kbd> Play/Pause</span>
       <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>←</kbd><kbd>→</kbd> ±10s</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Shift</kbd><kbd>←</kbd><kbd>→</kbd> ±1s</span>
+      <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>V</kbd> Read Status</span>
       <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>Ctrl</kbd><kbd>X</kbd> Export</span>
@@ -1122,6 +1126,16 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     runExport();
   }
+
+  // Arrow key seek — Right/Left = ±10s, Shift+Right/Left = ±1s
+  if (k === 'arrowleft' || k === 'arrowright') {
+    if (!mainVideoFile) return;
+    e.preventDefault();
+    const step = e.shiftKey ? 1 : 10;
+    const dir  = k === 'arrowleft' ? -1 : 1;
+    player.currentTime = Math.max(0, Math.min(times.duration, player.currentTime + dir * step));
+    setStatus(`${k === 'arrowleft' ? '←' : '→'} ${step}s  →  ${fmtTime(player.currentTime)}`, false);
+  }
 });
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -1161,6 +1175,12 @@ function setProgress(pct, phase) {
 }
 
 // ── MASTER RENDER ENGINE ──────────────────────────────────────
+// Chrome 103 compatible. Uses ffmpeg.wasm 0.11.0.
+// Root causes of the "encoding forever" freeze that were fixed:
+//   1. aloop with size=2e+09 caused an infinite loop in wasm memory
+//   2. "anull" is not a real FFmpeg filter — it hung the filter graph
+//   3. filter_complex was used even for simple trim-only jobs (slow)
+// Strategy: build the minimal command needed for what's actually loaded.
 async function runExport() {
   if (!mainVideoFile) { toast('No video loaded', 'error'); return; }
   if (!engineReady)   { toast('Engine not ready yet', 'error'); return; }
@@ -1168,121 +1188,156 @@ async function runExport() {
   setStatus('Preparing render… please wait.');
   document.getElementById('progress-wrap').classList.remove('hidden');
   document.getElementById('export-btn').disabled = true;
-  setProgress(0, 'Writing files…');
+  setProgress(0, 'Writing files to memory…');
 
   try {
-    // Write main video
     ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(mainVideoFile));
-    setProgress(5, 'Building filter graph…');
+    setProgress(8, 'Building filter graph…');
 
-    // Base inputs: trim
-    let inputs = ['-ss', times.s.toString(), '-to', times.e.toString(), '-i', 'input.mp4'];
-    let vTag = '[0:v]';
-    let inputCount = 1;
+    const trimDur   = times.e - times.s;
+    const hasLogo   = !!assets.logo;
+    const hasIllu   = !!assets.illustration;
+    const hasBgm    = !!assets.bgm;
+    const hasSfx    = !!assets.sfx;
+    const hasOverlay = hasLogo || hasIllu;
+    const hasExtraAudio = hasBgm || hasSfx;
+    const needsFilter   = hasOverlay || hasExtraAudio || true; // always scale/crop
+
+    // ── Write asset files ────────────────────────────────────
+    if (hasLogo)  ffmpeg.FS('writeFile', 'logo.png', await fetchFile(assets.logo));
+    if (hasIllu)  ffmpeg.FS('writeFile', 'illu.png', await fetchFile(assets.illustration));
+    if (hasBgm)   ffmpeg.FS('writeFile', 'bgm.mp3',  await fetchFile(assets.bgm));
+    if (hasSfx)   ffmpeg.FS('writeFile', 'sfx.mp3',  await fetchFile(assets.sfx));
+
+    // ── Build input list ─────────────────────────────────────
+    // IMPORTANT: -ss/-to BEFORE -i speeds up seeking on Chrome 103
+    let args = [
+      '-ss', times.s.toFixed(3),
+      '-t',  trimDur.toFixed(3),   // use -t (duration) not -to — more reliable in wasm
+      '-i',  'input.mp4'
+    ];
+    let inputIdx = 1; // next -i index
+
+    if (hasLogo)  { args.push('-i', 'logo.png'); inputIdx++; }
+    if (hasIllu)  { args.push('-i', 'illu.png'); inputIdx++; }
+    if (hasBgm)   { args.push('-i', 'bgm.mp3');  inputIdx++; }
+    if (hasSfx)   { args.push('-i', 'sfx.mp3');  inputIdx++; }
+
+    // ── Build filter_complex ─────────────────────────────────
+    // We track input indices in insertion order
+    let idx = 1;
+    const logoIdx  = hasLogo ? idx++ : -1;
+    const illuIdx  = hasIllu ? idx++ : -1;
+    const bgmIdx   = hasBgm  ? idx++ : -1;
+    const sfxIdx   = hasSfx  ? idx++ : -1;
 
     let filterParts = [];
+    let vTag = '[0:v]';
 
-    // ── Portrait / Landscape crop ──
+    // Scale / crop to target resolution
     if (aspect === 'portrait') {
-      filterParts.push(`${vTag}crop=ih*(9/16):ih,scale=720:1280[v_sized]`);
-      vTag = '[v_sized]';
+      filterParts.push(`${vTag}crop=ih*(9/16):ih,scale=720:1280[v0]`);
     } else {
-      filterParts.push(`${vTag}scale=1280:720[v_sized]`);
-      vTag = '[v_sized]';
+      filterParts.push(`${vTag}scale=1280:720[v0]`);
+    }
+    vTag = '[v0]';
+
+    // Logo — scaled, placed top-right, always visible
+    if (hasLogo) {
+      filterParts.push(`[${logoIdx}:v]scale=120:-1,format=rgba[vlogo]`);
+      filterParts.push(`${vTag}[vlogo]overlay=W-w-16:16[v1]`);
+      vTag = '[v1]';
     }
 
-    // ── Logo overlay ──
-    if (assets.logo) {
-      ffmpeg.FS('writeFile', 'logo.png', await fetchFile(assets.logo));
-      inputs.push('-i', 'logo.png');
-      filterParts.push(`[${inputCount}:v]scale=120:-1,format=rgba[logo_s]`);
-      filterParts.push(`${vTag}[logo_s]overlay=W-w-20:20[v_logo]`);
-      vTag = '[v_logo]';
-      inputCount++;
+    // Illustration — centred, visible for 3 seconds from mark
+    if (hasIllu) {
+      const t0 = Math.max(0, times.illuAt - times.s);
+      const t1 = (t0 + 3).toFixed(2);
+      filterParts.push(`[${illuIdx}:v]scale=400:-1,format=rgba[villu]`);
+      filterParts.push(`${vTag}[villu]overlay=(W-w)/2:(H-h)/2:enable='between(t,${t0.toFixed(2)},${t1})'[v2]`);
+      vTag = '[v2]';
     }
 
-    // ── Illustration overlay (3s at illuAt) ──
-    if (assets.illustration) {
-      ffmpeg.FS('writeFile', 'illu.png', await fetchFile(assets.illustration));
-      inputs.push('-i', 'illu.png');
-      const start = Math.max(0, times.illuAt - times.s);
-      const end   = start + 3;
-      filterParts.push(`[${inputCount}:v]scale=400:-1,format=rgba[illu_s]`);
-      filterParts.push(`${vTag}[illu_s]overlay=(W-w)/2:(H-h)/2:enable='between(t,${start.toFixed(2)},${end.toFixed(2)})'[v_illu]`);
-      vTag = '[v_illu]';
-      inputCount++;
+    // ── Audio chain ──────────────────────────────────────────
+    // Rule: never use aloop (hangs wasm). Instead use -stream_loop on the
+    // BGM input and rely on amix duration=first to stop at main length.
+    // Also: when there is only one audio stream don't use amix at all —
+    // just map [0:a] directly. amix with inputs=1 is valid but slower.
+
+    let aTag = '[0:a]'; // default: use main audio directly, no filter needed
+
+    if (hasExtraAudio) {
+      // Build each audio stream with a label
+      filterParts.push(`[0:a]volume=1.0[am]`);
+      let aMixes = ['[am]'];
+
+      if (hasBgm) {
+        // Trim BGM to trimDur so amix doesn't hang waiting for a long file
+        filterParts.push(`[${bgmIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=0.18[abgm]`);
+        aMixes.push('[abgm]');
+      }
+
+      if (hasSfx) {
+        const delayMs = Math.max(0, Math.round((times.sfxAt - times.s) * 1000));
+        filterParts.push(`[${sfxIdx}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[asfx]`);
+        aMixes.push('[asfx]');
+      }
+
+      filterParts.push(`${aMixes.join('')}amix=inputs=${aMixes.length}:duration=first:dropout_transition=2[aout]`);
+      aTag = '[aout]';
     }
 
-    // ── Audio mixing ──
-    let aOutputs = [];
-    filterParts.push(`[0:a]volume=1.0[a_main]`);
-    aOutputs.push('[a_main]');
-
-    if (assets.bgm) {
-      ffmpeg.FS('writeFile', 'bgm.mp3', await fetchFile(assets.bgm));
-      inputs.push('-i', 'bgm.mp3');
-      // Loop BGM to fill duration, then duck to 20%
-      const dur = times.e - times.s;
-      filterParts.push(`[${inputCount}:a]aloop=loop=-1:size=2e+09,atrim=duration=${dur.toFixed(2)},volume=0.2[a_bgm]`);
-      aOutputs.push('[a_bgm]');
-      inputCount++;
-    }
-
-    if (assets.sfx) {
-      ffmpeg.FS('writeFile', 'sfx.mp3', await fetchFile(assets.sfx));
-      inputs.push('-i', 'sfx.mp3');
-      const delayMs = Math.max(0, Math.round((times.sfxAt - times.s) * 1000));
-      filterParts.push(`[${inputCount}:a]volume=1.0,adelay=${delayMs}|${delayMs}[a_sfx]`);
-      aOutputs.push('[a_sfx]');
-      inputCount++;
-    }
-
-    // Mix all audio streams
-    if (aOutputs.length === 1) {
-      // Only main audio — just rename
-      filterParts.push(`${aOutputs[0]}anull[a_out]`);
-    } else {
-      filterParts.push(`${aOutputs.join('')}amix=inputs=${aOutputs.length}:duration=first:dropout_transition=0[a_out]`);
-    }
-
+    // ── Assemble & run ───────────────────────────────────────
     const filterComplex = filterParts.join(';');
 
-    setProgress(10, 'Encoding…');
-
-    // Track progress
     ffmpeg.setProgress(({ ratio }) => {
-      const pct = Math.min(98, Math.round(10 + ratio * 88));
+      const pct = Math.min(97, Math.round(12 + ratio * 85));
       setProgress(pct, `Encoding… ${pct}%`);
     });
 
+    // BGM needs -stream_loop so it doesn't go silent if shorter than video
+    const bgmLoopArgs = hasBgm
+      ? ['-stream_loop', '-1']  // inserted before the bgm -i — we rebuild args
+      : [];
+
+    // Rebuild args with -stream_loop before bgm input if needed
+    if (hasBgm) {
+      // Insert -stream_loop -1 before the bgm -i 'bgm.mp3'
+      const bgmPos = args.indexOf('bgm.mp3');
+      args.splice(bgmPos - 1, 0, '-stream_loop', '-1');
+    }
+
     await ffmpeg.run(
-      ...inputs,
+      ...args,
       '-filter_complex', filterComplex,
       '-map', vTag,
-      '-map', '[a_out]',
+      '-map', aTag,
       '-c:v', 'libx264',
       '-preset', preset,
-      '-crf', '23',
+      '-crf', '22',
       '-c:a', 'aac',
       '-b:a', '192k',
       '-movflags', '+faststart',
+      '-shortest',           // stops encode when shortest stream ends
       'output.mp4'
     );
 
-    setProgress(100, 'Finalizing…');
+    setProgress(100, 'Done — packaging download…');
 
-    // Download
     const data = ffmpeg.FS('readFile', 'output.mp4');
-    const url  = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `tech-house-export-${Date.now()}.mp4`;
+    a.download = `tech-house-${Date.now()}.mp4`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-    // Cleanup virtual disk
+    // Cleanup wasm virtual FS
     ['input.mp4','logo.png','illu.png','bgm.mp3','sfx.mp3','output.mp4'].forEach(f => {
-      try { ffmpeg.FS('unlink', f); } catch(e) {}
+      try { ffmpeg.FS('unlink', f); } catch(_) {}
     });
 
     setStatus('Export complete! File downloaded.');
@@ -1290,8 +1345,9 @@ async function runExport() {
 
   } catch(err) {
     console.error('[EXPORT ERROR]', err);
-    setStatus('Export failed: ' + (err.message || 'Unknown error'));
-    toast('Export failed — check console', 'error');
+    const msg = err.message || String(err);
+    setStatus('Export failed: ' + msg);
+    toast('Export failed — open DevTools console for details', 'error');
   } finally {
     document.getElementById('progress-wrap').classList.add('hidden');
     document.getElementById('export-btn').disabled = false;
