@@ -8,30 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tech-house-editor-style.css">
 
-<!-- Inline COI ServiceWorker — required for FFmpeg SharedArrayBuffer in Chrome -->
-<script>
-(function(){
-  if (typeof ServiceWorkerGlobalScope !== 'undefined') return;
-  if (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated) return;
-  const sw = `
-    self.addEventListener('install', () => self.skipWaiting());
-    self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-    self.addEventListener('fetch', function(e) {
-      if (e.request.cache === 'only-if-cached' && e.request.mode !== 'same-origin') return;
-      e.respondWith(fetch(e.request).then(function(r) {
-        if (r.status === 0) return r;
-        const h = new Headers(r.headers);
-        h.set('Cross-Origin-Opener-Policy', 'same-origin');
-        h.set('Cross-Origin-Embedder-Policy', 'require-corp');
-        return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
-      }));
-    });`;
-  const blob = new Blob([sw], { type: 'application/javascript' });
-  navigator.serviceWorker.register(URL.createObjectURL(blob)).then(() => {
-    if (!crossOriginIsolated) location.reload();
-  });
-})();
-</script>
+<script src="coi-serviceworker.js"></script>
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
 </head>
 <body>
