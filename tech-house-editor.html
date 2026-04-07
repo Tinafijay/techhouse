@@ -6,574 +6,33 @@
 <title>Tech House — Video Editor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tech-house-editor-style.css">
 
-<!-- COI ServiceWorker inline — needed for FFmpeg SharedArrayBuffer -->
+<!-- Inline COI ServiceWorker — required for FFmpeg SharedArrayBuffer in Chrome -->
 <script>
 (function(){
-  if (typeof window !== 'undefined' && typeof ServiceWorkerGlobalScope === 'undefined') {
-    if (!crossOriginIsolated) {
-      const swCode = `
-        self.addEventListener('install', () => self.skipWaiting());
-        self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-        self.addEventListener('fetch', function(e){
-          if(e.request.cache === 'only-if-cached' && e.request.mode !== 'same-origin') return;
-          e.respondWith(
-            fetch(e.request).then(function(r){
-              if(r.status === 0) return r;
-              const h = new Headers(r.headers);
-              h.set('Cross-Origin-Opener-Policy','same-origin');
-              h.set('Cross-Origin-Embedder-Policy','require-corp');
-              return new Response(r.body,{status:r.status,statusText:r.statusText,headers:h});
-            })
-          );
-        });`;
-      const blob = new Blob([swCode], {type:'application/javascript'});
-      const url = URL.createObjectURL(blob);
-      navigator.serviceWorker.register(url).then(()=>{
-        if(!crossOriginIsolated) location.reload();
-      });
-    }
-  }
+  if (typeof ServiceWorkerGlobalScope !== 'undefined') return;
+  if (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated) return;
+  const sw = `
+    self.addEventListener('install', () => self.skipWaiting());
+    self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+    self.addEventListener('fetch', function(e) {
+      if (e.request.cache === 'only-if-cached' && e.request.mode !== 'same-origin') return;
+      e.respondWith(fetch(e.request).then(function(r) {
+        if (r.status === 0) return r;
+        const h = new Headers(r.headers);
+        h.set('Cross-Origin-Opener-Policy', 'same-origin');
+        h.set('Cross-Origin-Embedder-Policy', 'require-corp');
+        return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
+      }));
+    });`;
+  const blob = new Blob([sw], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).then(() => {
+    if (!crossOriginIsolated) location.reload();
+  });
 })();
 </script>
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
-
-<style>
-/* ============================================================
-   DESIGN SYSTEM — Dark Broadcast Studio
-   ============================================================ */
-:root {
-  --bg:        #080a0e;
-  --surface:   #0f1218;
-  --panel:     #141820;
-  --border:    #1e2535;
-  --border-hi: #2d3a50;
-  --amber:     #f59e0b;
-  --amber-dim: #92600a;
-  --cyan:      #22d3ee;
-  --green:     #34d399;
-  --red:       #f87171;
-  --text:      #e2e8f0;
-  --text-dim:  #64748b;
-  --text-mute: #334155;
-  --mono:      'Space Mono', monospace;
-  --head:      'Syne', sans-serif;
-  --body:      'DM Sans', sans-serif;
-  --radius:    6px;
-  --radius-lg: 10px;
-}
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--body);
-  font-size: 14px;
-  min-height: 100vh;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 24px 16px 60px;
-  background-image:
-    radial-gradient(ellipse 600px 400px at 50% -100px, rgba(245,158,11,0.06) 0%, transparent 70%),
-    repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px),
-    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px);
-}
-
-/* ============ LAYOUT ============ */
-.app {
-  width: 100%;
-  max-width: 860px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* ============ HEADER ============ */
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-.app-title {
-  font-family: var(--head);
-  font-size: 1.35rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.app-title .icon { font-size: 1.2rem; }
-.app-title .sub {
-  font-weight: 600;
-  color: var(--amber);
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  display: block;
-  line-height: 1;
-  margin-top: 3px;
-}
-.badge {
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  padding: 3px 8px;
-  border-radius: 100px;
-  border: 1px solid var(--border-hi);
-  color: var(--text-dim);
-  letter-spacing: 0.08em;
-}
-.badge.online { border-color: var(--green); color: var(--green); }
-.badge.online::before { content: '● '; font-size: 0.5rem; vertical-align: middle; }
-
-/* ============ STATUS BAR ============ */
-.status-bar {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--amber);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--green);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.status-bar .prefix { color: var(--amber); flex-shrink: 0; }
-.status-bar #status-text { overflow: hidden; text-overflow: ellipsis; }
-
-/* ============ UPLOAD ZONE ============ */
-.upload-zone {
-  border: 2px dashed var(--border-hi);
-  border-radius: var(--radius-lg);
-  padding: 36px 20px;
-  text-align: center;
-  transition: all 0.2s;
-  cursor: pointer;
-  background: var(--surface);
-  position: relative;
-}
-.upload-zone.has-video { border-style: solid; border-color: var(--amber); padding: 0; }
-.upload-zone:not(.has-video):hover { border-color: var(--amber); background: rgba(245,158,11,0.04); }
-.upload-zone .upload-hint { color: var(--text-dim); font-size: 0.85rem; margin-top: 8px; }
-.upload-zone .upload-icon { font-size: 2.4rem; margin-bottom: 8px; display: block; }
-.upload-zone h2 { font-family: var(--head); font-size: 1rem; font-weight: 600; }
-
-/* ============ VIDEO PLAYER ============ */
-#player {
-  width: 100%;
-  display: block;
-  border-radius: var(--radius-lg);
-  background: #000;
-  outline: none;
-  max-height: 420px;
-}
-#player:focus { box-shadow: 0 0 0 2px var(--amber); }
-
-/* ============ TIMECODE DISPLAY ============ */
-.timecode-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px;
-}
-.tc-block { text-align: center; }
-.tc-label {
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 4px;
-}
-.tc-value {
-  font-family: var(--mono);
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--amber);
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-.tc-value.muted { color: var(--text-mute); }
-.tc-block.active .tc-value { color: var(--cyan); }
-.tc-divider { width: 1px; background: var(--border); }
-
-/* ============ TRIM BAR ============ */
-.trim-bar-wrap {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-}
-.trim-label {
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  margin-bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-}
-.trim-track {
-  position: relative;
-  height: 6px;
-  background: var(--border);
-  border-radius: 100px;
-  cursor: pointer;
-}
-.trim-range {
-  position: absolute;
-  height: 100%;
-  background: var(--amber);
-  border-radius: 100px;
-  transition: left 0.1s, width 0.1s;
-}
-.trim-head {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 2px solid var(--amber);
-  top: 50%;
-  transform: translate(-50%, -50%);
-  cursor: grab;
-  transition: background 0.1s;
-}
-.trim-head:hover { background: var(--amber); }
-.trim-playhead {
-  position: absolute;
-  width: 2px;
-  height: 18px;
-  background: var(--cyan);
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border-radius: 100px;
-  pointer-events: none;
-}
-.trim-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-/* ============ PANELS ============ */
-.panels {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-}
-.panel-title {
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--amber);
-  margin-bottom: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.panel-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
-
-/* ============ LAYER ITEMS ============ */
-.layer-list { display: flex; flex-direction: column; gap: 8px; }
-.layer-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-  position: relative;
-  overflow: hidden;
-}
-.layer-item:hover { border-color: var(--border-hi); }
-.layer-item.active { border-color: var(--amber); background: rgba(245,158,11,0.06); }
-.layer-item.loaded { border-color: var(--green); }
-.layer-item.loaded::after {
-  content: '✓';
-  position: absolute;
-  right: 10px;
-  color: var(--green);
-  font-size: 0.75rem;
-  font-weight: bold;
-}
-.layer-icon { font-size: 1.2rem; width: 28px; text-align: center; flex-shrink: 0; }
-.layer-info { flex: 1; min-width: 0; }
-.layer-name { font-weight: 500; font-size: 0.85rem; }
-.layer-desc { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* ============ SETTINGS PANEL ============ */
-.setting-row {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 12px;
-}
-.setting-row:last-child { margin-bottom: 0; }
-.setting-label {
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.seg-control {
-  display: flex;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 3px;
-  gap: 3px;
-}
-.seg-btn {
-  flex: 1;
-  padding: 7px 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--body);
-  font-size: 0.78rem;
-  font-weight: 500;
-  transition: all 0.15s;
-}
-.seg-btn.active {
-  background: var(--amber);
-  color: #000;
-  font-weight: 600;
-}
-
-/* ============ BUTTONS ============ */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 9px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  font-family: var(--body);
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-.btn:hover { border-color: var(--border-hi); background: var(--border); }
-.btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
-.btn.btn-sm { padding: 6px 10px; font-size: 0.75rem; }
-.btn.btn-amber {
-  background: var(--amber);
-  color: #000;
-  border-color: var(--amber);
-  font-weight: 600;
-}
-.btn.btn-amber:hover { background: #fbbf24; border-color: #fbbf24; }
-.btn.btn-ghost { background: transparent; color: var(--text-dim); }
-.btn.btn-ghost:hover { color: var(--text); background: var(--panel); }
-.btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
-
-/* ============ EXPORT BUTTON ============ */
-.export-wrap {
-  position: relative;
-}
-.export-btn {
-  width: 100%;
-  padding: 18px;
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #000;
-  font-family: var(--head);
-  font-weight: 800;
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
-  border: none;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 24px rgba(245,158,11,0.25);
-  position: relative;
-  overflow: hidden;
-}
-.export-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
-}
-.export-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 32px rgba(245,158,11,0.4);
-}
-.export-btn:active:not(:disabled) { transform: translateY(0); }
-.export-btn:disabled { opacity: 0.2; cursor: not-allowed; transform: none; box-shadow: none; }
-.export-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
-
-/* ============ PROGRESS ============ */
-.progress-wrap {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.progress-track {
-  height: 8px;
-  background: var(--panel);
-  border-radius: 100px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-.progress-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--amber), var(--cyan));
-  border-radius: 100px;
-  transition: width 0.3s ease-out;
-  position: relative;
-}
-.progress-fill::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  height: 100%;
-  width: 20px;
-  background: rgba(255,255,255,0.4);
-  filter: blur(4px);
-}
-.progress-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  color: var(--text-dim);
-}
-.progress-pct { color: var(--amber); font-weight: 700; }
-.hidden { display: none !important; }
-
-/* ============ SHORTCUTS ============ */
-.shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 0.72rem;
-  color: var(--text-dim);
-}
-kbd {
-  background: var(--panel);
-  color: var(--amber);
-  border: 1px solid var(--border-hi);
-  border-radius: 4px;
-  padding: 2px 7px;
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  font-weight: 700;
-  box-shadow: 0 1px 0 var(--border-hi);
-}
-.sc-item { display: flex; align-items: center; gap: 5px; }
-.sc-sep { color: var(--border-hi); }
-
-/* ============ TOAST ============ */
-.toast-wrap {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-}
-.toast {
-  background: var(--panel);
-  border: 1px solid var(--border-hi);
-  border-radius: var(--radius);
-  padding: 10px 16px;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--text);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-  animation: toastIn 0.25s ease, toastOut 0.3s ease 2.5s forwards;
-  pointer-events: auto;
-}
-.toast.success { border-color: var(--green); color: var(--green); }
-.toast.error { border-color: var(--red); color: var(--red); }
-
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes toastOut {
-  to { opacity: 0; transform: translateY(-6px); }
-}
-
-/* ============ ACCESSIBILITY ============ */
-.sr-only {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden;
-  clip: rect(0,0,0,0);
-  white-space: nowrap;
-  border: 0;
-}
-.skip-link {
-  position: fixed;
-  top: -100px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--amber);
-  color: #000;
-  padding: 8px 16px;
-  border-radius: var(--radius);
-  font-weight: 600;
-  z-index: 9999;
-  transition: top 0.2s;
-}
-.skip-link:focus { top: 10px; }
-
-/* ============ RESPONSIVE ============ */
-@media (max-width: 600px) {
-  .panels { grid-template-columns: 1fr; }
-  .timecode-row { grid-template-columns: 1fr 1fr 1fr; }
-  .tc-value { font-size: 1rem; }
-  .export-btn { font-size: 0.95rem; padding: 15px; }
-}
-</style>
 </head>
 <body>
 
@@ -582,31 +41,23 @@ kbd {
 
 <div class="app" role="application" aria-label="Tech House Video Editor">
 
-  <!-- Header -->
   <header class="app-header">
     <div class="app-title">
       <span class="icon" aria-hidden="true">🎬</span>
-      <div>
-        TECH HOUSE
-        <span class="sub">Video Editor</span>
-      </div>
+      <div>TECH HOUSE<span class="sub">Video Editor</span></div>
     </div>
-    <div style="display:flex; gap:8px; align-items:center;">
-      <span id="engine-badge" class="badge">Initializing…</span>
-    </div>
+    <span id="engine-badge" class="badge">Initializing…</span>
   </header>
 
   <main id="main-content">
 
-    <!-- Status Bar: visual only. Screen reader uses #live-region-* below -->
     <div class="status-bar">
       <span class="prefix" aria-hidden="true">SYS&gt;</span>
       <span id="status-text" aria-hidden="true">Initializing engine…</span>
     </div>
-    <div id="live-region-polite"  aria-live="polite"    aria-atomic="true" class="sr-only"></div>
-    <div id="live-region-urgent"  aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+    <div id="live-region-polite" aria-live="polite"    aria-atomic="true" class="sr-only"></div>
+    <div id="live-region-urgent" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
 
-    <!-- Upload Zone / Player -->
     <div id="upload-zone" class="upload-zone" tabindex="0" role="button"
          aria-label="Click or press Enter to upload a video file"
          onclick="document.getElementById('vid-uploader').click()"
@@ -618,43 +69,43 @@ kbd {
     </div>
 
     <video id="player" controls playsinline class="hidden"
-           aria-label="Video preview player"
-           tabindex="0"></video>
+           aria-label="Video preview player" tabindex="0"></video>
 
-    <!-- Timecode Row -->
     <div class="timecode-row" role="group" aria-label="Timecode display">
-      <div class="tc-block" id="tc-start-block">
+      <div class="tc-block">
         <div class="tc-label">In Point</div>
-        <div class="tc-value muted" id="tc-start" aria-label="Start time">00:00.0</div>
+        <div class="tc-value muted" id="tc-start" aria-label="In point time">00:00.0</div>
       </div>
       <div class="tc-block active">
         <div class="tc-label">Current</div>
         <div class="tc-value" id="tc-current" aria-live="off" aria-label="Current time">00:00.0</div>
       </div>
-      <div class="tc-block" id="tc-end-block">
+      <div class="tc-block">
         <div class="tc-label">Out Point</div>
-        <div class="tc-value muted" id="tc-end" aria-label="End time">00:00.0</div>
+        <div class="tc-value muted" id="tc-end" aria-label="Out point time">00:00.0</div>
       </div>
     </div>
 
-    <!-- Trim Bar -->
     <div class="trim-bar-wrap">
       <div class="trim-label">
         <span>Trim Range</span>
         <span id="trim-duration-label">— no video —</span>
       </div>
-      <div class="trim-track" id="trim-track" role="slider" aria-label="Trim range scrubber"
-           tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="trim-range" id="trim-range"></div>
-        <div class="trim-head" id="trim-head-s" aria-label="Start handle" tabindex="0" role="slider"></div>
-        <div class="trim-head" id="trim-head-e" aria-label="End handle" tabindex="0" role="slider" style="border-color:var(--cyan)"></div>
+      <div class="trim-track" id="trim-track"
+           tabindex="0" role="group" aria-label="Trim range handles">
+        <div class="trim-range"    id="trim-range"></div>
+        <div class="trim-head"     id="trim-head-s" tabindex="0" role="slider"
+             aria-label="In point handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        <div class="trim-head"     id="trim-head-e" tabindex="0" role="slider"
+             aria-label="Out point handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"
+             style="border-color:var(--cyan)"></div>
         <div class="trim-playhead" id="trim-playhead"></div>
       </div>
       <div class="trim-actions">
-        <button class="btn btn-sm" id="btn-set-start" aria-label="Set start point to current time (S key)">
+        <button class="btn btn-sm" id="btn-set-start" aria-label="Set In point to current time — keyboard S">
           <span aria-hidden="true">◄</span> Set In <kbd aria-hidden="true">S</kbd>
         </button>
-        <button class="btn btn-sm" id="btn-set-end" aria-label="Set end point to current time (E key)">
+        <button class="btn btn-sm" id="btn-set-end" aria-label="Set Out point to current time — keyboard E">
           Set Out <kbd aria-hidden="true">E</kbd> <span aria-hidden="true">►</span>
         </button>
         <button class="btn btn-sm btn-ghost" id="btn-reset-trim" aria-label="Reset trim to full video">
@@ -663,107 +114,86 @@ kbd {
       </div>
     </div>
 
-    <!-- Side Panels -->
     <div class="panels">
 
-      <!-- Layer Panel -->
       <section class="panel" aria-labelledby="layers-heading">
         <div class="panel-title">
           <div class="dot" aria-hidden="true"></div>
           <span id="layers-heading">Overlay Layers</span>
         </div>
-        <div class="layer-list" role="list" aria-label="Available layers">
-
+        <div class="layer-list" role="list">
           <div class="layer-item" id="layer-logo" role="listitem" tabindex="0"
                onclick="triggerLayer('logo')"
                onkeydown="if(event.key==='Enter')triggerLayer('logo')"
-               aria-label="Logo overlay — permanent watermark. Click to upload.">
+               aria-label="Logo — permanent watermark. Press Enter to upload.">
             <div class="layer-icon" aria-hidden="true">🖼️</div>
             <div class="layer-info">
               <div class="layer-name">Logo</div>
               <div class="layer-desc" id="desc-logo">Permanent watermark</div>
             </div>
           </div>
-
           <div class="layer-item" id="layer-illustration" role="listitem" tabindex="0"
                onclick="triggerLayer('illustration')"
                onkeydown="if(event.key==='Enter')triggerLayer('illustration')"
-               aria-label="Illustration overlay — brief 3 second popup at current time. Click to upload.">
+               aria-label="Illustration — 3 second popup at current time. Press Enter to upload.">
             <div class="layer-icon" aria-hidden="true">🎨</div>
             <div class="layer-info">
               <div class="layer-name">Illustration</div>
               <div class="layer-desc" id="desc-illustration">Brief 3s popup at current time</div>
             </div>
           </div>
-
           <div class="layer-item" id="layer-bgm" role="listitem" tabindex="0"
                onclick="triggerLayer('bgm')"
                onkeydown="if(event.key==='Enter')triggerLayer('bgm')"
-               aria-label="Background music — plays under main audio. Click to upload.">
+               aria-label="Background Music — plays under main audio. Press Enter to upload.">
             <div class="layer-icon" aria-hidden="true">🎵</div>
             <div class="layer-info">
               <div class="layer-name">Background Music</div>
               <div class="layer-desc" id="desc-bgm">Plays under main audio</div>
             </div>
           </div>
-
           <div class="layer-item" id="layer-sfx" role="listitem" tabindex="0"
                onclick="triggerLayer('sfx')"
                onkeydown="if(event.key==='Enter')triggerLayer('sfx')"
-               aria-label="Sound effect — triggered at current time. Click to upload.">
+               aria-label="Sound Effect — triggered at current time. Press Enter to upload.">
             <div class="layer-icon" aria-hidden="true">🔊</div>
             <div class="layer-info">
               <div class="layer-name">Sound Effect</div>
               <div class="layer-desc" id="desc-sfx">Triggered at current time</div>
             </div>
           </div>
-
         </div>
         <input type="file" id="layer-uploader" hidden aria-label="Layer file input">
       </section>
 
-      <!-- Settings Panel -->
       <section class="panel" aria-labelledby="settings-heading">
         <div class="panel-title">
           <div class="dot" aria-hidden="true"></div>
           <span id="settings-heading">Output Settings</span>
         </div>
-
         <div class="setting-row">
-          <div class="setting-label" id="aspect-label">Aspect Ratio</div>
-          <div class="seg-control" role="group" aria-labelledby="aspect-label">
+          <div class="setting-label" id="lbl-aspect">Aspect Ratio</div>
+          <div class="seg-control" role="group" aria-labelledby="lbl-aspect">
             <button class="seg-btn active" id="seg-landscape" data-val="landscape"
-                    aria-pressed="true" onclick="setAspect('landscape')">
-              16:9 Cinema
-            </button>
+                    aria-pressed="true" onclick="setAspect('landscape')">16:9 Cinema</button>
             <button class="seg-btn" id="seg-portrait" data-val="portrait"
-                    aria-pressed="false" onclick="setAspect('portrait')">
-              9:16 Reels
-            </button>
+                    aria-pressed="false" onclick="setAspect('portrait')">9:16 Reels</button>
           </div>
         </div>
-
         <div class="setting-row">
-          <div class="setting-label" id="quality-label">Encode Speed</div>
-          <div class="seg-control" role="group" aria-labelledby="quality-label">
+          <div class="setting-label" id="lbl-speed">Encode Speed</div>
+          <div class="seg-control" role="group" aria-labelledby="lbl-speed">
             <button class="seg-btn active" id="seg-fast" data-preset="ultrafast"
-                    aria-pressed="true" onclick="setPreset('ultrafast')">
-              Fast
-            </button>
+                    aria-pressed="true" onclick="setPreset('ultrafast')">Fast</button>
             <button class="seg-btn" id="seg-balanced" data-preset="veryfast"
-                    aria-pressed="false" onclick="setPreset('veryfast')">
-              Balanced
-            </button>
+                    aria-pressed="false" onclick="setPreset('veryfast')">Balanced</button>
             <button class="seg-btn" id="seg-hq" data-preset="medium"
-                    aria-pressed="false" onclick="setPreset('medium')">
-              HQ
-            </button>
+                    aria-pressed="false" onclick="setPreset('medium')">HQ</button>
           </div>
         </div>
-
-        <div class="setting-row" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border)">
+        <div class="setting-row summary-row">
           <div class="setting-label">Summary</div>
-          <div style="font-size:0.75rem; color:var(--text-dim); line-height:1.7; font-family:var(--mono);">
+          <div class="summary-body">
             <div id="summary-aspect">Format: Landscape 16:9</div>
             <div id="summary-layers">Layers: none</div>
             <div id="summary-trim">Trim: full video</div>
@@ -773,39 +203,31 @@ kbd {
 
     </div>
 
-
-    <!-- Progress -->
     <div id="progress-wrap" class="progress-wrap hidden" aria-label="Export progress">
       <div class="progress-meta">
         <span id="progress-phase">Preparing…</span>
         <span class="progress-pct" id="progress-pct">0%</span>
       </div>
-      <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar-role">
+      <div class="progress-track" role="progressbar"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar-role">
         <div class="progress-fill" id="prog-fill"></div>
       </div>
     </div>
 
-    <!-- Download result — revealed after a successful export -->
-    <div id="download-result" class="hidden"
-         style="background:var(--surface);border:2px solid var(--green);border-radius:var(--radius-lg);
-                padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-      <span style="color:var(--green);font-weight:600;font-size:0.9rem;" aria-hidden="true">✓ Export complete</span>
+    <div id="download-result" class="download-result hidden">
+      <span class="dl-label" aria-hidden="true">✓ Export complete</span>
       <a id="download-link" href="#" download="tech-house-export.mp4"
-         style="background:var(--green);color:#000;font-weight:700;font-size:0.85rem;
-                padding:10px 20px;border-radius:var(--radius);text-decoration:none;white-space:nowrap;"
-         aria-label="Download exported video file">
+         class="dl-btn" aria-label="Download exported video file">
         ⬇ Download Video
       </a>
     </div>
 
-    <!-- Export Button -->
     <button class="export-btn" id="export-btn" disabled
-            aria-label="Export video (keyboard shortcut: Control X)"
+            aria-label="Export video — keyboard shortcut Control X"
             onclick="runExport()">
       🚀 &nbsp; EXPORT VIDEO
     </button>
 
-    <!-- Keyboard Shortcuts -->
     <div class="shortcuts" role="complementary" aria-label="Keyboard shortcuts">
       <span class="sc-item"><kbd>S</kbd> Set In</span>
       <span class="sc-sep">·</span>
@@ -825,572 +247,8 @@ kbd {
   </main>
 </div>
 
-<!-- Toast Container -->
 <div class="toast-wrap" id="toast-wrap" aria-live="assertive" aria-atomic="true"></div>
 
-<script>
-// ============================================================
-// TECH HOUSE VIDEO EDITOR — Complete Script
-// ============================================================
-
-const { createFFmpeg, fetchFile } = FFmpeg;
-const ffmpeg = createFFmpeg({
-  log: true,
-  corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-});
-
-// ── DOM References ──────────────────────────────────────────
-const player        = document.getElementById('player');
-const uploadZone    = document.getElementById('upload-zone');
-const statusText    = document.getElementById('status-text');
-const livePolite    = document.getElementById('live-region-polite');
-const liveUrgent    = document.getElementById('live-region-urgent');
-const engineBadge   = document.getElementById('engine-badge');
-
-// ── App State ───────────────────────────────────────────────
-let mainVideoFile = null;
-let assets = { logo: null, illustration: null, bgm: null, sfx: null };
-let times  = { s: 0, e: 0, illuAt: 0, sfxAt: 0, duration: 0 };
-let aspect = 'landscape';
-let preset = 'ultrafast';
-let pendingLayerType = null;
-let engineReady = false;
-
-// ── Announce helpers ─────────────────────────────────────────
-// Screen readers only re-announce when textContent *changes*.
-// We force a change by clearing the node, waiting one frame, then setting.
-function announce(msg, urgent = false) {
-  const region = urgent ? liveUrgent : livePolite;
-  region.textContent = '';
-  requestAnimationFrame(() => { region.textContent = msg; });
-}
-
-function setStatus(msg, urgent = false) {
-  statusText.textContent = msg;
-  console.log('[STATUS]', msg);
-  announce(msg, urgent);
-}
-
-function toast(msg, type = '') {
-  const t = document.createElement('div');
-  t.className = 'toast ' + type;
-  t.textContent = msg;
-  // Don't add role=alert here — the parent toast-wrap already has aria-live=assertive
-  document.getElementById('toast-wrap').appendChild(t);
-  setTimeout(() => t.remove(), 3500);
-}
-
-// ── Engine Init ─────────────────────────────────────────────
-(async function initEngine() {
-  setStatus('Loading FFmpeg engine…');
-  try {
-    await ffmpeg.load();
-    engineReady = true;
-    engineBadge.textContent = 'ENGINE READY';
-    engineBadge.classList.add('online');
-    setStatus('Engine ready. Load a video to start.');
-    toast('FFmpeg engine loaded ✓', 'success');
-  } catch(err) {
-    engineBadge.textContent = 'ENGINE ERROR';
-    setStatus('Engine failed to load. Please refresh the page.', true);
-    toast('Engine error — please refresh', 'error');
-    console.error(err);
-  }
-})();
-
-// ── Video Upload ─────────────────────────────────────────────
-document.getElementById('vid-uploader').onchange = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  mainVideoFile = file;
-
-  const url = URL.createObjectURL(file);
-  player.src = url;
-  player.load();
-
-  player.onloadedmetadata = () => {
-    times.e = player.duration;
-    times.duration = player.duration;
-
-    // Show player, hide upload zone
-    uploadZone.classList.add('hidden');
-    player.classList.remove('hidden');
-    document.getElementById('export-btn').disabled = false;
-
-    updateTimecodes();
-    updateTrimBar();
-    updateSummary();
-    setStatus(`Loaded: "${file.name}" — ${fmtTime(player.duration)}`);
-    toast('Video loaded ✓', 'success');
-  };
-};
-
-// Drag-and-drop support on upload zone
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--amber)'; });
-uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault();
-  uploadZone.style.borderColor = '';
-  const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('video/')) {
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    document.getElementById('vid-uploader').files = dt.files;
-    document.getElementById('vid-uploader').dispatchEvent(new Event('change'));
-  }
-});
-
-// ── Layer Uploads ────────────────────────────────────────────
-function triggerLayer(type) {
-  pendingLayerType = type;
-  const input = document.getElementById('layer-uploader');
-  // Accept images for logo/illustration, audio for bgm/sfx
-  if (type === 'logo' || type === 'illustration') {
-    input.accept = 'image/*';
-  } else {
-    input.accept = 'audio/*';
-  }
-  input.click();
-}
-
-document.getElementById('layer-uploader').onchange = (e) => {
-  const file = e.target.files[0];
-  if (!file || !pendingLayerType) return;
-  const type = pendingLayerType;
-  assets[type] = file;
-
-  // Capture time for time-specific assets
-  if (type === 'illustration') times.illuAt = player.currentTime || 0;
-  if (type === 'sfx') times.sfxAt = player.currentTime || 0;
-
-  // Update layer item UI
-  const el = document.getElementById('layer-' + type);
-  if (el) {
-    el.classList.add('loaded');
-    const desc = document.getElementById('desc-' + type);
-    if (desc) {
-      const shortName = file.name.length > 22 ? file.name.slice(0, 20) + '…' : file.name;
-      if (type === 'illustration') desc.textContent = `At ${fmtTime(times.illuAt)} — ${shortName}`;
-      else if (type === 'sfx') desc.textContent = `At ${fmtTime(times.sfxAt)} — ${shortName}`;
-      else desc.textContent = shortName;
-    }
-  }
-
-  updateSummary();
-  const label = { logo:'Logo', illustration:'Illustration', bgm:'BGM', sfx:'SFX' }[type];
-  setStatus(`${label} added: ${file.name}`);
-  toast(`${label} added ✓`, 'success');
-
-  // Reset input so same file can be re-selected
-  e.target.value = '';
-  pendingLayerType = null;
-};
-
-// ── Aspect & Preset ──────────────────────────────────────────
-function setAspect(val) {
-  aspect = val;
-  document.querySelectorAll('.seg-control').forEach(group => {
-    // only the first seg-control (aspect)
-  });
-  const btns = document.querySelectorAll('#seg-landscape, #seg-portrait');
-  btns.forEach(b => {
-    const active = b.dataset.val === val;
-    b.classList.toggle('active', active);
-    b.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
-  updateSummary();
-}
-
-function setPreset(val) {
-  preset = val;
-  const btns = document.querySelectorAll('#seg-fast, #seg-balanced, #seg-hq');
-  btns.forEach(b => {
-    const active = b.dataset.preset === val;
-    b.classList.toggle('active', active);
-    b.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
-}
-
-// ── Trim Bar ─────────────────────────────────────────────────
-function updateTrimBar() {
-  const dur = times.duration;
-  if (!dur) return;
-
-  const sp = times.s / dur;
-  const ep = times.e / dur;
-
-  document.getElementById('trim-range').style.left  = (sp * 100) + '%';
-  document.getElementById('trim-range').style.width = ((ep - sp) * 100) + '%';
-  document.getElementById('trim-head-s').style.left = (sp * 100) + '%';
-  document.getElementById('trim-head-e').style.left = (ep * 100) + '%';
-
-  const trimLen = times.e - times.s;
-  document.getElementById('trim-duration-label').textContent =
-    `${fmtTime(times.s)} → ${fmtTime(times.e)} (${fmtTime(trimLen)})`;
-}
-
-player.ontimeupdate = () => {
-  const t = player.currentTime;
-  document.getElementById('tc-current').textContent = fmtTime(t);
-
-  if (times.duration > 0) {
-    const pct = (t / times.duration) * 100;
-    document.getElementById('trim-playhead').style.left = pct + '%';
-  }
-};
-
-// Trim dragging
-let dragType = null;
-function startDrag(e, type) {
-  dragType = type;
-  e.preventDefault();
-  window.addEventListener('mousemove', onDrag);
-  window.addEventListener('mouseup', stopDrag);
-  window.addEventListener('touchmove', onDrag, { passive: false });
-  window.addEventListener('touchend', stopDrag);
-}
-document.getElementById('trim-head-s').addEventListener('mousedown', e => startDrag(e, 's'));
-document.getElementById('trim-head-e').addEventListener('mousedown', e => startDrag(e, 'e'));
-document.getElementById('trim-head-s').addEventListener('touchstart', e => startDrag(e, 's'), { passive: false });
-document.getElementById('trim-head-e').addEventListener('touchstart', e => startDrag(e, 'e'), { passive: false });
-
-function onDrag(e) {
-  if (!dragType) return;
-  e.preventDefault();
-  const track = document.getElementById('trim-track');
-  const rect = track.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  let pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  const t = pct * times.duration;
-
-  if (dragType === 's') {
-    times.s = Math.min(t, times.e - 0.5);
-    player.currentTime = times.s;
-    document.getElementById('tc-start').textContent = fmtTime(times.s);
-    document.getElementById('tc-start').classList.remove('muted');
-  } else {
-    times.e = Math.max(t, times.s + 0.5);
-    player.currentTime = times.e;
-    document.getElementById('tc-end').textContent = fmtTime(times.e);
-    document.getElementById('tc-end').classList.remove('muted');
-  }
-  updateTrimBar();
-  updateSummary();
-}
-function stopDrag() {
-  dragType = null;
-  window.removeEventListener('mousemove', onDrag);
-  window.removeEventListener('mouseup', stopDrag);
-  window.removeEventListener('touchmove', onDrag);
-  window.removeEventListener('touchend', stopDrag);
-}
-
-// Click on track to seek
-document.getElementById('trim-track').addEventListener('click', e => {
-  if (!times.duration) return;
-  const rect = e.currentTarget.getBoundingClientRect();
-  const pct = (e.clientX - rect.left) / rect.width;
-  player.currentTime = pct * times.duration;
-});
-
-// ── Trim Buttons ─────────────────────────────────────────────
-document.getElementById('btn-set-start').onclick = () => {
-  const t = player.currentTime;
-  if (t >= times.e) {
-    setStatus(`Cannot set In point at ${fmtTime(t)} — must be before Out point (${fmtTime(times.e)}).`, true);
-    toast('In point must be before Out point', 'error');
-    return;
-  }
-  times.s = t;
-  document.getElementById('tc-start').textContent = fmtTime(times.s);
-  document.getElementById('tc-start').classList.remove('muted');
-  updateTrimBar();
-  updateSummary();
-  setStatus(`In point set: ${fmtTime(times.s)}`);
-};
-document.getElementById('btn-set-end').onclick = () => {
-  const t = player.currentTime;
-  if (t <= times.s) {
-    setStatus(`Cannot set Out point at ${fmtTime(t)} — must be after In point (${fmtTime(times.s)}).`, true);
-    toast('Out point must be after In point', 'error');
-    return;
-  }
-  times.e = t;
-  document.getElementById('tc-end').textContent = fmtTime(times.e);
-  document.getElementById('tc-end').classList.remove('muted');
-  updateTrimBar();
-  updateSummary();
-  setStatus(`Out point set: ${fmtTime(times.e)}`);
-};
-document.getElementById('btn-reset-trim').onclick = () => {
-  times.s = 0;
-  times.e = times.duration;
-  document.getElementById('tc-start').textContent = fmtTime(times.s);
-  document.getElementById('tc-end').textContent = fmtTime(times.e);
-  document.getElementById('tc-start').classList.remove('muted');
-  document.getElementById('tc-end').classList.remove('muted');
-  updateTrimBar();
-  updateSummary();
-  setStatus('Trim reset. Full video selected.');
-};
-
-// ── Keyboard Shortcuts ────────────────────────────────────────
-window.addEventListener('keydown', e => {
-  const tag = document.activeElement.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-
-  const k = e.key.toLowerCase();
-
-  if (k === 's' && !e.ctrlKey) {
-    e.preventDefault();
-    document.getElementById('btn-set-start').click();
-  }
-  if (k === 'e' && !e.ctrlKey) {
-    e.preventDefault();
-    document.getElementById('btn-set-end').click();
-  }
-  if (k === ' ') {
-    e.preventDefault();
-    if (!mainVideoFile) return;
-    player.paused ? player.play() : player.pause();
-    setStatus(player.paused ? 'Paused' : 'Playing', false);
-  }
-  if (k === 'v') {
-    setStatus(`Current: ${fmtTime(player.currentTime)}  In: ${fmtTime(times.s)}  Out: ${fmtTime(times.e)}`);
-  }
-  if (e.ctrlKey && k === 'x') {
-    e.preventDefault();
-    runExport();
-  }
-
-  // Arrow key seek — Right/Left = ±10s, Shift+Right/Left = ±1s
-  if (k === 'arrowleft' || k === 'arrowright') {
-    if (!mainVideoFile) return;
-    e.preventDefault();
-    const step = e.shiftKey ? 1 : 10;
-    const dir  = k === 'arrowleft' ? -1 : 1;
-    player.currentTime = Math.max(0, Math.min(times.duration, player.currentTime + dir * step));
-    setStatus(`${k === 'arrowleft' ? '←' : '→'} ${step}s → ${fmtTime(player.currentTime)}`);
-  }
-});
-
-// ── Helpers ───────────────────────────────────────────────────
-function fmtTime(t) {
-  if (isNaN(t) || t < 0) t = 0;
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60);
-  const f = Math.floor((t % 1) * 10);
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${f}`;
-}
-
-function updateTimecodes() {
-  document.getElementById('tc-start').textContent   = fmtTime(times.s);
-  document.getElementById('tc-end').textContent     = fmtTime(times.e);
-  document.getElementById('tc-current').textContent = fmtTime(player.currentTime);
-}
-
-function updateSummary() {
-  const layerNames = Object.entries(assets)
-    .filter(([,v]) => v !== null)
-    .map(([k]) => k)
-    .join(', ') || 'none';
-  document.getElementById('summary-aspect').textContent =
-    'Format: ' + (aspect === 'portrait' ? '9:16 Vertical' : '16:9 Landscape');
-  document.getElementById('summary-layers').textContent = 'Layers: ' + layerNames;
-  if (times.duration > 0) {
-    document.getElementById('summary-trim').textContent =
-      `Trim: ${fmtTime(times.s)} → ${fmtTime(times.e)}`;
-  }
-}
-
-function setProgress(pct, phase) {
-  document.getElementById('prog-fill').style.width = pct + '%';
-  document.getElementById('progress-pct').textContent = pct + '%';
-  document.getElementById('progress-bar-role').setAttribute('aria-valuenow', pct);
-  if (phase) document.getElementById('progress-phase').textContent = phase;
-}
-
-// ── MASTER RENDER ENGINE ──────────────────────────────────────
-// Chrome 103 compatible. Uses ffmpeg.wasm 0.11.0.
-// Root causes of the "encoding forever" freeze that were fixed:
-//   1. aloop with size=2e+09 caused an infinite loop in wasm memory
-//   2. "anull" is not a real FFmpeg filter — it hung the filter graph
-//   3. filter_complex was used even for simple trim-only jobs (slow)
-// Strategy: build the minimal command needed for what's actually loaded.
-async function runExport() {
-  if (!mainVideoFile) { toast('No video loaded', 'error'); return; }
-  if (!engineReady)   { toast('Engine not ready yet', 'error'); return; }
-
-  setStatus('Preparing render… please wait.');
-  document.getElementById('progress-wrap').classList.remove('hidden');
-  document.getElementById('download-result').classList.add('hidden');
-  document.getElementById('export-btn').disabled = true;
-  setProgress(0, 'Writing files to memory…');
-
-  try {
-    ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(mainVideoFile));
-    setProgress(8, 'Building filter graph…');
-
-    const trimDur   = times.e - times.s;
-    const hasLogo   = !!assets.logo;
-    const hasIllu   = !!assets.illustration;
-    const hasBgm    = !!assets.bgm;
-    const hasSfx    = !!assets.sfx;
-    const hasOverlay = hasLogo || hasIllu;
-    const hasExtraAudio = hasBgm || hasSfx;
-    const needsFilter   = hasOverlay || hasExtraAudio || true; // always scale/crop
-
-    // ── Write asset files ────────────────────────────────────
-    if (hasLogo)  ffmpeg.FS('writeFile', 'logo.png', await fetchFile(assets.logo));
-    if (hasIllu)  ffmpeg.FS('writeFile', 'illu.png', await fetchFile(assets.illustration));
-    if (hasBgm)   ffmpeg.FS('writeFile', 'bgm.mp3',  await fetchFile(assets.bgm));
-    if (hasSfx)   ffmpeg.FS('writeFile', 'sfx.mp3',  await fetchFile(assets.sfx));
-
-    // ── Build input list ─────────────────────────────────────
-    // IMPORTANT: -ss/-to BEFORE -i speeds up seeking on Chrome 103
-    let args = [
-      '-ss', times.s.toFixed(3),
-      '-t',  trimDur.toFixed(3),   // use -t (duration) not -to — more reliable in wasm
-      '-i',  'input.mp4'
-    ];
-    let inputIdx = 1; // next -i index
-
-    if (hasLogo)  { args.push('-i', 'logo.png'); inputIdx++; }
-    if (hasIllu)  { args.push('-i', 'illu.png'); inputIdx++; }
-    if (hasBgm)   { args.push('-i', 'bgm.mp3');  inputIdx++; }
-    if (hasSfx)   { args.push('-i', 'sfx.mp3');  inputIdx++; }
-
-    // ── Build filter_complex ─────────────────────────────────
-    // We track input indices in insertion order
-    let idx = 1;
-    const logoIdx  = hasLogo ? idx++ : -1;
-    const illuIdx  = hasIllu ? idx++ : -1;
-    const bgmIdx   = hasBgm  ? idx++ : -1;
-    const sfxIdx   = hasSfx  ? idx++ : -1;
-
-    let filterParts = [];
-    let vTag = '[0:v]';
-
-    // Scale / crop to target resolution
-    if (aspect === 'portrait') {
-      filterParts.push(`${vTag}crop=ih*(9/16):ih,scale=720:1280[v0]`);
-    } else {
-      filterParts.push(`${vTag}scale=1280:720[v0]`);
-    }
-    vTag = '[v0]';
-
-    // Logo — scaled, placed top-right, always visible
-    if (hasLogo) {
-      filterParts.push(`[${logoIdx}:v]scale=120:-1,format=rgba[vlogo]`);
-      filterParts.push(`${vTag}[vlogo]overlay=W-w-16:16[v1]`);
-      vTag = '[v1]';
-    }
-
-    // Illustration — centred, visible for 3 seconds from mark
-    if (hasIllu) {
-      const t0 = Math.max(0, times.illuAt - times.s);
-      const t1 = (t0 + 3).toFixed(2);
-      filterParts.push(`[${illuIdx}:v]scale=400:-1,format=rgba[villu]`);
-      filterParts.push(`${vTag}[villu]overlay=(W-w)/2:(H-h)/2:enable='between(t,${t0.toFixed(2)},${t1})'[v2]`);
-      vTag = '[v2]';
-    }
-
-    // ── Audio chain ──────────────────────────────────────────
-    // Rule: never use aloop (hangs wasm). Instead use -stream_loop on the
-    // BGM input and rely on amix duration=first to stop at main length.
-    // Also: when there is only one audio stream don't use amix at all —
-    // just map [0:a] directly. amix with inputs=1 is valid but slower.
-
-    let aTag = '[0:a]'; // default: use main audio directly, no filter needed
-
-    if (hasExtraAudio) {
-      // Build each audio stream with a label
-      filterParts.push(`[0:a]volume=1.0[am]`);
-      let aMixes = ['[am]'];
-
-      if (hasBgm) {
-        // Trim BGM to trimDur so amix doesn't hang waiting for a long file
-        filterParts.push(`[${bgmIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=0.18[abgm]`);
-        aMixes.push('[abgm]');
-      }
-
-      if (hasSfx) {
-        const delayMs = Math.max(0, Math.round((times.sfxAt - times.s) * 1000));
-        filterParts.push(`[${sfxIdx}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[asfx]`);
-        aMixes.push('[asfx]');
-      }
-
-      filterParts.push(`${aMixes.join('')}amix=inputs=${aMixes.length}:duration=first:dropout_transition=2[aout]`);
-      aTag = '[aout]';
-    }
-
-    // ── Assemble & run ───────────────────────────────────────
-    const filterComplex = filterParts.join(';');
-
-    ffmpeg.setProgress(({ ratio }) => {
-      const pct = Math.min(97, Math.round(12 + ratio * 85));
-      setProgress(pct, `Encoding… ${pct}%`);
-    });
-
-    // BGM needs -stream_loop so it doesn't go silent if shorter than video
-
-    // Rebuild args with -stream_loop before bgm input if needed
-    if (hasBgm) {
-      // Insert -stream_loop -1 before the bgm -i 'bgm.mp3'
-      const bgmPos = args.indexOf('bgm.mp3');
-      args.splice(bgmPos - 1, 0, '-stream_loop', '-1');
-    }
-
-    await ffmpeg.run(
-      ...args,
-      '-filter_complex', filterComplex,
-      '-map', vTag,
-      '-map', aTag,
-      '-c:v', 'libx264',
-      '-preset', preset,
-      '-crf', '22',
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-movflags', '+faststart',
-      '-shortest',           // stops encode when shortest stream ends
-      'output.mp4'
-    );
-
-    setProgress(100, 'Done — packaging download…');
-
-    const data = ffmpeg.FS('readFile', 'output.mp4');
-    const blob = new Blob([data.buffer], { type: 'video/mp4' });
-    const url  = URL.createObjectURL(blob);
-
-    // Always show the download button (reliable across Chrome versions)
-    const dlLink = document.getElementById('download-link');
-    dlLink.href = url;
-    dlLink.download = `tech-house-${Date.now()}.mp4`;
-    document.getElementById('download-result').classList.remove('hidden');
-    dlLink.focus(); // Move focus to download button so screen reader announces it
-
-    // Also try auto-download as a convenience — may be blocked but harmless
-    try { dlLink.click(); } catch(_) {}
-
-    // Cleanup wasm virtual FS
-    ['input.mp4','logo.png','illu.png','bgm.mp3','sfx.mp3','output.mp4'].forEach(f => {
-      try { ffmpeg.FS('unlink', f); } catch(_) {}
-    });
-
-    setStatus('Export complete! Download button is now available below the progress bar.');
-    toast('Export complete ✓', 'success');
-
-  } catch(err) {
-    console.error('[EXPORT ERROR]', err);
-    const msg = 'Export failed: ' + (err.message || String(err));
-    setStatus(msg, true); // urgent — uses assertive live region
-    toast('Export failed — see console for details', 'error');
-  } finally {
-    document.getElementById('progress-wrap').classList.add('hidden');
-    document.getElementById('export-btn').disabled = false;
-    setProgress(0, 'Preparing…');
-  }
-}
-</script>
+<script src="tech-house-editor-script.js"></script>
 </body>
 </html>
