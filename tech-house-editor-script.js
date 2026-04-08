@@ -24,16 +24,21 @@ const overlayLogo = document.getElementById('overlay-logo');
 const overlayIllu = document.getElementById('overlay-illu');
 
 // ── Preview audio elements (for live preview only, not exported) ──
-const bgmAudio = new Audio();
-const sfxAudio = new Audio();
-bgmAudio.loop  = true;   // BGM loops during preview
+const bgmAudio  = new Audio();
+const sfxAudio  = new Audio();
+const swapAudio = new Audio(); // Audio Swap preview
+bgmAudio.loop   = true;
 bgmAudio.volume = 0.18;
-let sfxTriggered = false; // reset on each play()
+swapAudio.loop  = true; // loop swap during preview so it doesn't cut out
+let sfxTriggered = false;
 
 // ── App state ─────────────────────────────────────────────────
 let mainVideoFile = null;
-let assets = { logo: null, illustration: null, bgm: null, sfx: null };
+let assets = { logo: null, illustration: null, bgm: null, sfx: null, audioSwap: null };
 let times  = { s: 0, e: 0, illuAt: 0, sfxAt: 0, duration: 0 };
+
+// audioProcessing: 'swap' | 'noise' | 'mute'
+let audioProcessing = 'swap';
 
 // Segments: array of {s, e} representing parts of the video to KEEP.
 // Initially the whole video. Backspace cuts remove portions.
@@ -141,6 +146,21 @@ function triggerLayer(type) {
   input.click();
 }
 
+// Audio processing mode (for Audio Swap controls)
+function setAudioProcessing(val) {
+  audioProcessing = val;
+  const note = document.getElementById('audio-processing-note');
+  if (val === 'noise') {
+    note.textContent = 'anlmdn noise filter will silence original audio mathematically';
+  } else if (val === 'mute') {
+    note.textContent = 'Original audio muted — no replacement file needed';
+  } else {
+    note.textContent = 'Swap file replaces original audio track entirely';
+  }
+  updateSummary();
+  announce(`Audio processing set to: ${val === 'swap' ? 'use swap file' : val === 'noise' ? 'noise removal' : 'mute original'}.`);
+}
+
 document.getElementById('layer-uploader').onchange = (e) => {
   const file = e.target.files[0];
   if (!file || !pendingLayerType) return;
@@ -153,23 +173,30 @@ document.getElementById('layer-uploader').onchange = (e) => {
   if (type === 'illustration') {
     times.illuAt = player.currentTime || 0;
     document.getElementById('overlay-illu-img').src = objectURL;
-    applyIlluLayout(illuLayout); // set CSS class
+    applyIlluLayout(illuLayout);
     announce(`Illustration loaded. Will appear at ${fmtTime(times.illuAt)} for ${illuDuration} seconds. Live preview active.`);
   }
   if (type === 'logo') {
     document.getElementById('overlay-logo-img').src = objectURL;
     overlayLogo.classList.remove('hidden');
     applyLogoPosition(logoPosition);
-    announce('Logo loaded. Visible in live preview top right by default.');
+    announce('Logo loaded. Visible in live preview. Default position: top right.');
   }
   if (type === 'bgm') {
     bgmAudio.src = objectURL;
-    announce('Background music loaded. Will play during preview.');
+    announce('Background music loaded. Will play during preview and be mixed on export.');
   }
   if (type === 'sfx') {
     times.sfxAt = player.currentTime || 0;
     sfxAudio.src = objectURL;
     announce(`Sound effect loaded. Will trigger at ${fmtTime(times.sfxAt)}.`);
+  }
+  if (type === 'audioSwap') {
+    swapAudio.src = objectURL;
+    swapAudio.load();
+    // Mute the video element so original audio is silenced in preview
+    player.muted = true;
+    announce('Audio Swap loaded. Original video audio is now muted in preview. Swap audio will play instead. On export, the original audio track will be fully replaced.');
   }
 
   const el   = document.getElementById('layer-' + type);
@@ -180,13 +207,14 @@ document.getElementById('layer-uploader').onchange = (e) => {
     if (type === 'illustration') desc.textContent = `At ${fmtTime(times.illuAt)} · ${illuDuration}s · ${short}`;
     else if (type === 'sfx')     desc.textContent = `At ${fmtTime(times.sfxAt)} · ${short}`;
     else if (type === 'bgm')     desc.textContent = `Live preview + export · ${short}`;
+    else if (type === 'audioSwap') desc.textContent = `Replaces original audio · ${short}`;
     else                         desc.textContent = `${logoPosition} · ${short}`;
   }
 
   updateSummary();
-  const label = { logo: 'Logo', illustration: 'Illustration', bgm: 'BGM', sfx: 'SFX' }[type];
-  setStatus(`${label} added: ${file.name}`);
-  toast(`${label} added ✓`, 'success');
+  const labelMap = { logo:'Logo', illustration:'Illustration', bgm:'BGM', sfx:'SFX', audioSwap:'Audio Swap' };
+  setStatus(`${labelMap[type] || type} added: ${file.name}`);
+  toast(`${labelMap[type] || type} added ✓`, 'success');
   e.target.value = '';
 };
 
@@ -196,34 +224,50 @@ player.addEventListener('play', () => {
   previewStage.classList.add('playing');
   sfxTriggered = false;
 
-  // Start BGM at correct offset from start of trimmed range
+  // BGM: start at offset within trimmed range
   if (assets.bgm && bgmAudio.src) {
-    // Offset within BGM = how far into the trimmed video we are
     const videoOffset = player.currentTime - times.s;
     const bgmOffset   = ((videoOffset % (bgmAudio.duration || 1)) + (bgmAudio.duration || 1)) % (bgmAudio.duration || 1);
     bgmAudio.currentTime = isFinite(bgmOffset) ? bgmOffset : 0;
-    bgmAudio.play().catch(() => {}); // user gesture may be needed
+    bgmAudio.play().catch(() => {});
+  }
+
+  // Audio Swap: mute video, play swap file in sync
+  if (assets.audioSwap && swapAudio.src) {
+    player.muted = true; // ensure original audio stays silent
+    const offset = player.currentTime - times.s;
+    const dur    = swapAudio.duration || 0;
+    swapAudio.currentTime = dur > 0 ? Math.max(0, offset % dur) : 0;
+    swapAudio.play().catch(() => {});
   }
 });
 
 player.addEventListener('pause', () => {
   previewStage.classList.remove('playing');
   bgmAudio.pause();
+  swapAudio.pause();
 });
 
 player.addEventListener('seeked', () => {
-  // Re-sync BGM after seeking
+  // Re-sync BGM
   if (assets.bgm && bgmAudio.src && !player.paused) {
     const videoOffset = player.currentTime - times.s;
     const bgmOffset   = ((videoOffset % (bgmAudio.duration || 1)) + (bgmAudio.duration || 1)) % (bgmAudio.duration || 1);
     bgmAudio.currentTime = isFinite(bgmOffset) ? bgmOffset : 0;
   }
-  sfxTriggered = false; // re-arm SFX after seek
+  // Re-sync Audio Swap
+  if (assets.audioSwap && swapAudio.src && !player.paused) {
+    const offset = player.currentTime - times.s;
+    const dur    = swapAudio.duration || 0;
+    swapAudio.currentTime = dur > 0 ? Math.max(0, offset % dur) : 0;
+  }
+  sfxTriggered = false;
 });
 
 player.addEventListener('ended', () => {
   previewStage.classList.remove('playing');
   bgmAudio.pause();
+  swapAudio.pause();
 });
 
 player.ontimeupdate = () => {
@@ -489,37 +533,40 @@ function cutSegment() {
   // Slice each existing segment against the cut range
   const newSegs = [];
   for (const seg of segments) {
-    // Part before the cut
-    if (cutS > seg.s) {
-      newSegs.push({ s: seg.s, e: Math.min(cutS, seg.e) });
-    }
-    // Part after the cut
-    if (cutE < seg.e) {
-      newSegs.push({ s: Math.max(cutE, seg.s), e: seg.e });
-    }
+    if (cutS > seg.s) newSegs.push({ s: seg.s, e: Math.min(cutS, seg.e) });
+    if (cutE < seg.e) newSegs.push({ s: Math.max(cutE, seg.s), e: seg.e });
   }
   segments = newSegs.filter(s => s.e - s.s > 0.05);
 
   if (segments.length === 0) {
-    // Undo immediately — don't allow cutting everything
     undoCut();
     setStatus('Cannot cut the entire video.', true);
     toast('Cannot cut everything', 'error');
     return;
   }
 
-  // Seek to just after the cut
-  player.currentTime = Math.min(cutE, times.duration - 0.1);
+  // FIX: Reset In/Out markers to full range so the next cut can be set freely
+  // without hitting the "In point must be before Out point" guard.
+  times.s = 0;
+  times.e = times.duration;
+  document.getElementById('tc-start').textContent = fmtTime(0);
+  document.getElementById('tc-end').textContent   = fmtTime(times.duration);
+  document.getElementById('tc-start').classList.add('muted');
+  document.getElementById('tc-end').classList.add('muted');
+  updateTrimBar();
+
+  // Seek to just after the cut point
+  player.currentTime = Math.min(cutE + 0.05, times.duration - 0.1);
 
   updateSegmentDisplay();
   updateSummary();
   document.getElementById('undo-btn').disabled = false;
 
   const totalKept = segments.reduce((a, s) => a + (s.e - s.s), 0);
-  const msg = `Cut applied from ${fmtTime(cutS)} to ${fmtTime(cutE)}. ${fmtTime(totalKept)} remaining. Press Control Z to undo.`;
+  const msg = `Cut applied from ${fmtTime(cutS)} to ${fmtTime(cutE)}. ${fmtTime(totalKept)} remaining. In and Out markers reset. Press Control Z to undo.`;
   setStatus(`Cut: ${fmtTime(cutS)} – ${fmtTime(cutE)} removed.`);
   announce(msg);
-  toast(`Cut applied ✂`, 'info');
+  toast('Cut applied ✂', 'info');
 }
 
 // ── UNDO ─────────────────────────────────────────────────────
@@ -559,13 +606,59 @@ function undoCut() {
 window.addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
-  const k = e.key.toLowerCase();
+  const k    = e.key.toLowerCase();
+  const ctrl = e.ctrlKey || e.metaKey;
 
-  if (k === 's' && !e.ctrlKey && !e.metaKey) {
+  // ── Layer upload shortcuts (all with preventDefault) ──────
+  if (ctrl && k === 'l') {
+    e.preventDefault();
+    announce('Opening logo upload dialog.');
+    triggerLayer('logo');
+    return;
+  }
+  if (ctrl && k === 'i') {
+    e.preventDefault();
+    announce('Opening illustration upload dialog.');
+    triggerLayer('illustration');
+    return;
+  }
+  if (ctrl && k === 'b') {
+    e.preventDefault();
+    announce('Opening background music upload dialog.');
+    triggerLayer('bgm');
+    return;
+  }
+  if (ctrl && k === 'f') {
+    e.preventDefault(); // stops browser "Find in Page"
+    announce('Opening sound effect upload dialog.');
+    triggerLayer('sfx');
+    return;
+  }
+  if (ctrl && k === 'u') {
+    e.preventDefault();
+    announce('Opening audio swap upload dialog.');
+    triggerLayer('audioSwap');
+    return;
+  }
+
+  // ── Edit shortcuts ────────────────────────────────────────
+  if (ctrl && k === 'z') {
+    e.preventDefault();
+    undoCut();
+    return;
+  }
+  if (ctrl && k === 'x') {
+    e.preventDefault();
+    runExport();
+    return;
+  }
+
+  // ── Playback / marker shortcuts (no Ctrl) ─────────────────
+  if (k === 's' && !ctrl) {
     e.preventDefault();
     document.getElementById('btn-set-start').click();
   }
-  if (k === 'e' && !e.ctrlKey && !e.metaKey) {
+  if (k === 'e' && !ctrl) {
     e.preventDefault();
     document.getElementById('btn-set-end').click();
   }
@@ -575,20 +668,12 @@ window.addEventListener('keydown', e => {
     if (player.paused) { player.play();  announce('Playing.'); }
     else               { player.pause(); announce('Paused.'); }
   }
-  if (k === 'v') {
+  if (k === 'v' && !ctrl) {
     setStatus(`Current: ${fmtTime(player.currentTime)}  In: ${fmtTime(times.s)}  Out: ${fmtTime(times.e)}`);
   }
   if (k === 'backspace') {
     e.preventDefault();
     cutSegment();
-  }
-  if ((e.ctrlKey || e.metaKey) && k === 'z') {
-    e.preventDefault();
-    undoCut();
-  }
-  if ((e.ctrlKey || e.metaKey) && k === 'x') {
-    e.preventDefault();
-    runExport();
   }
   if (k === 'arrowleft' || k === 'arrowright') {
     if (!mainVideoFile) return;
@@ -621,14 +706,23 @@ function updateSummary() {
   const isCopyMode  = !hasAnyAsset && !hasCuts && segments.length === 1;
 
   const layerNames = Object.entries(assets)
-    .filter(([, v]) => v !== null).map(([k]) => k).join(', ') || 'none';
-  const cutCount = segments.length - 1;
+    .filter(([, v]) => v !== null)
+    .map(([k]) => k === 'audioSwap' ? 'audioSwap' : k)
+    .join(', ') || 'none';
 
+  // Show audio processing mode if audioSwap is involved
+  let audioNote = '';
+  if (assets.audioSwap || audioProcessing === 'noise' || audioProcessing === 'mute') {
+    const modeLabel = { swap: 'swap file', noise: 'noise removal', mute: 'mute original' };
+    audioNote = ` [${modeLabel[audioProcessing] || audioProcessing}]`;
+  }
+
+  const cutCount = segments.length - 1;
   document.getElementById('summary-mode').textContent =
     'Mode: ' + (isCopyMode ? '⚡ Fast Copy (stream copy)' : '🔧 Full Re-encode');
   document.getElementById('summary-aspect').textContent =
     'Format: ' + (aspect === 'portrait' ? '9:16 Vertical' : '16:9 Landscape');
-  document.getElementById('summary-layers').textContent = 'Layers: ' + layerNames;
+  document.getElementById('summary-layers').textContent = 'Layers: ' + layerNames + audioNote;
   if (times.duration > 0) {
     document.getElementById('summary-trim').textContent =
       `Trim: ${fmtTime(times.s)} → ${fmtTime(times.e)}`;
@@ -714,10 +808,17 @@ async function runExport() {
     const hasIllu       = !!assets.illustration;
     const hasBgm        = !!assets.bgm;
     const hasSfx        = !!assets.sfx;
-    const hasAnyAsset   = hasLogo || hasIllu || hasBgm || hasSfx;
+    const hasAudioSwap  = !!assets.audioSwap;
+    // noiseMode: user chose 'noise' or 'mute' instead of swap file
+    const noiseMode     = audioProcessing === 'noise';
+    const muteMode      = audioProcessing === 'mute';
+    // Any audio modification that forces re-encode
+    const hasAudioMod   = hasAudioSwap || noiseMode || muteMode;
+    const hasAnyAsset   = hasLogo || hasIllu || hasBgm || hasSfx || hasAudioMod;
     const hasCuts       = segments.length > 1;
 
     // ── FAST COPY MODE ────────────────────────────────────────
+    // Only valid when: no assets, no cuts, single segment
     if (!hasAnyAsset && !hasCuts && segments.length === 1) {
       const seg     = segments[0];
       const trimDur = seg.e - seg.s;
@@ -743,47 +844,44 @@ async function runExport() {
       setProgress(10, 'Building filter graph…');
 
       // Write asset files
-      if (hasLogo)  ffmpeg.FS('writeFile', 'logo.png', await fetchFile(assets.logo));
-      if (hasIllu)  ffmpeg.FS('writeFile', 'illu.png', await fetchFile(assets.illustration));
-      if (hasBgm)   ffmpeg.FS('writeFile', 'bgm.mp3',  await fetchFile(assets.bgm));
-      if (hasSfx)   ffmpeg.FS('writeFile', 'sfx.mp3',  await fetchFile(assets.sfx));
+      if (hasLogo)       ffmpeg.FS('writeFile', 'logo.png',  await fetchFile(assets.logo));
+      if (hasIllu)       ffmpeg.FS('writeFile', 'illu.png',  await fetchFile(assets.illustration));
+      if (hasBgm)        ffmpeg.FS('writeFile', 'bgm.mp3',   await fetchFile(assets.bgm));
+      if (hasSfx)        ffmpeg.FS('writeFile', 'sfx.mp3',   await fetchFile(assets.sfx));
+      if (hasAudioSwap)  ffmpeg.FS('writeFile', 'swap.mp3',  await fetchFile(assets.audioSwap));
 
-      // Detect audio stream
+      // Detect video audio stream
       const videoHasAudio = (
-        player.mozHasAudio !== undefined            ? player.mozHasAudio
-        : player.webkitAudioDecodedByteCount !== undefined
-          ? player.webkitAudioDecodedByteCount > 0
-          : true
+        player.mozHasAudio !== undefined
+          ? player.mozHasAudio
+          : player.webkitAudioDecodedByteCount !== undefined
+            ? player.webkitAudioDecodedByteCount > 0
+            : true
       );
 
       // ── Build inputs ──────────────────────────────────────
-      // For cut mode: NO -ss/-t on the main input (we trim via filter_complex)
-      // For no-cut mode: fast seek with -ss/-t before -i
       let args = [];
-
       if (hasCuts) {
-        // No pre-seeking — filter_complex handles trim per segment
         args = ['-i', 'input.mp4'];
       } else {
         const seg = segments[0];
-        args = [
-          '-ss', seg.s.toFixed(3),
-          '-t',  (seg.e - seg.s).toFixed(3),
-          '-i',  'input.mp4'
-        ];
+        args = ['-ss', seg.s.toFixed(3), '-t', (seg.e - seg.s).toFixed(3), '-i', 'input.mp4'];
       }
 
       if (hasLogo)  args.push('-i', 'logo.png');
       if (hasIllu)  args.push('-i', 'illu.png');
       if (hasBgm)   args.push('-stream_loop', '-1', '-i', 'bgm.mp3');
       if (hasSfx)   args.push('-i', 'sfx.mp3');
+      // Audio swap: loop it so it covers the whole video if shorter
+      if (hasAudioSwap) args.push('-stream_loop', '-1', '-i', 'swap.mp3');
 
       // ── Assign indices ────────────────────────────────────
       let idx = 1;
-      const logoIdx = hasLogo ? idx++ : -1;
-      const illuIdx = hasIllu ? idx++ : -1;
-      const bgmIdx  = hasBgm  ? idx++ : -1;
-      const sfxIdx  = hasSfx  ? idx++ : -1;
+      const logoIdx  = hasLogo      ? idx++ : -1;
+      const illuIdx  = hasIllu      ? idx++ : -1;
+      const bgmIdx   = hasBgm       ? idx++ : -1;
+      const sfxIdx   = hasSfx       ? idx++ : -1;
+      const swapIdx  = hasAudioSwap ? idx++ : -1;
 
       // ── Build filter_complex ──────────────────────────────
       let filterParts = [];
@@ -922,30 +1020,75 @@ async function runExport() {
           vTag = '[v2]';
         }
 
-        // Audio
-        aTag = videoHasAudio ? '0:a' : null;
+        // ── Audio chain (single-segment) ────────────────────
+        // Priority order:
+        //   1. noiseMode  → apply anlmdn noise-removal filter to original audio
+        //   2. muteMode   → discard audio entirely (no -map audio)
+        //   3. audioSwap  → discard original, map swap file instead
+        //   4. bgm/sfx    → mix with original audio
+        //   5. default    → map original audio direct
 
-        if (hasBgm || hasSfx) {
-          const aMixes = [];
+        aTag = null; // will be set below
+
+        if (muteMode) {
+          // Completely silent — no audio map at all
+          aTag = null;
+          announce('Export: original audio muted, no audio in output.');
+
+        } else if (noiseMode) {
+          // anlmdn = Non-Local Means Denoising — mathematically reduces audio noise
           if (videoHasAudio) {
-            filterParts.push(`[0:a]volume=1.0[am]`);
-            aMixes.push('[am]');
+            filterParts.push(`[0:a]anlmdn=s=7:p=0.002:r=0.002:m=15[anoise]`);
+            aTag = '[anoise]';
           }
-          if (hasBgm) {
-            filterParts.push(`[${bgmIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=0.18[abgm]`);
-            aMixes.push('[abgm]');
-          }
-          if (hasSfx) {
-            const delayMs = Math.max(0, Math.round((times.sfxAt - seg.s) * 1000));
-            filterParts.push(`[${sfxIdx}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[asfx]`);
-            aMixes.push('[asfx]');
-          }
-          if (aMixes.length === 1) {
-            filterParts.push(`${aMixes[0]}acopy[aout]`);
-          } else {
+
+        } else if (hasAudioSwap) {
+          // Discard original audio; trim swap file to exact trimDur
+          filterParts.push(`[${swapIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[aswap]`);
+          // Mix with BGM/SFX if present, otherwise use swap alone
+          if (hasBgm || hasSfx) {
+            const aMixes = ['[aswap]'];
+            if (hasBgm) {
+              filterParts.push(`[${bgmIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=0.18[abgm]`);
+              aMixes.push('[abgm]');
+            }
+            if (hasSfx) {
+              const delayMs = Math.max(0, Math.round((times.sfxAt - seg.s) * 1000));
+              filterParts.push(`[${sfxIdx}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[asfx]`);
+              aMixes.push('[asfx]');
+            }
             filterParts.push(`${aMixes.join('')}amix=inputs=${aMixes.length}:duration=first:dropout_transition=2[aout]`);
+            aTag = '[aout]';
+          } else {
+            filterParts.push(`[aswap]acopy[aout]`);
+            aTag = '[aout]';
           }
-          aTag = '[aout]';
+
+        } else {
+          // Normal: original audio + optional BGM/SFX mix
+          aTag = videoHasAudio ? '0:a' : null;
+          if (hasBgm || hasSfx) {
+            const aMixes = [];
+            if (videoHasAudio) {
+              filterParts.push(`[0:a]volume=1.0[am]`);
+              aMixes.push('[am]');
+            }
+            if (hasBgm) {
+              filterParts.push(`[${bgmIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=0.18[abgm]`);
+              aMixes.push('[abgm]');
+            }
+            if (hasSfx) {
+              const delayMs = Math.max(0, Math.round((times.sfxAt - seg.s) * 1000));
+              filterParts.push(`[${sfxIdx}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[asfx]`);
+              aMixes.push('[asfx]');
+            }
+            if (aMixes.length === 1) {
+              filterParts.push(`${aMixes[0]}acopy[aout]`);
+            } else {
+              filterParts.push(`${aMixes.join('')}amix=inputs=${aMixes.length}:duration=first:dropout_transition=2[aout]`);
+            }
+            aTag = '[aout]';
+          }
         }
       }
 
@@ -988,7 +1131,7 @@ async function runExport() {
     try { dlLink.click(); } catch (_) {}
 
     // Cleanup wasm FS
-    ['input.mp4','logo.png','illu.png','bgm.mp3','sfx.mp3','output.mp4'].forEach(f => {
+    ['input.mp4','logo.png','illu.png','bgm.mp3','sfx.mp3','swap.mp3','output.mp4'].forEach(f => {
       try { ffmpeg.FS('unlink', f); } catch (_) {}
     });
 
