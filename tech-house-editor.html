@@ -7,14 +7,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tech-house-editor-style.css">
-
+<!-- External COI ServiceWorker — place coi-serviceworker.js in the same folder -->
 <script src="coi-serviceworker.js"></script>
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
 </head>
 <body>
 
 <a href="#main-content" class="skip-link">Skip to main content</a>
-<div id="live-region" aria-hidden="true" class="sr-only"></div>
+<div id="live-region-polite" aria-live="polite"    aria-atomic="true" class="sr-only"></div>
+<div id="live-region-urgent" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
 
 <div class="app" role="application" aria-label="Tech House Video Editor">
 
@@ -23,18 +24,23 @@
       <span class="icon" aria-hidden="true">🎬</span>
       <div>TECH HOUSE<span class="sub">Video Editor</span></div>
     </div>
-    <span id="engine-badge" class="badge">Initializing…</span>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-sm btn-ghost" id="undo-btn" disabled
+              aria-label="Undo last cut — keyboard Control Z"
+              onclick="undoCut()">↩ Undo Cut</button>
+      <span id="engine-badge" class="badge">Initializing…</span>
+    </div>
   </header>
 
   <main id="main-content">
 
+    <!-- Status bar (visual only — speech via live regions) -->
     <div class="status-bar">
       <span class="prefix" aria-hidden="true">SYS&gt;</span>
       <span id="status-text" aria-hidden="true">Initializing engine…</span>
     </div>
-    <div id="live-region-polite" aria-live="polite"    aria-atomic="true" class="sr-only"></div>
-    <div id="live-region-urgent" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
 
+    <!-- Upload Zone -->
     <div id="upload-zone" class="upload-zone" tabindex="0" role="button"
          aria-label="Click or press Enter to upload a video file"
          onclick="document.getElementById('vid-uploader').click()"
@@ -45,9 +51,26 @@
       <input type="file" id="vid-uploader" hidden accept="video/*" aria-label="Upload main video file">
     </div>
 
-    <video id="player" controls playsinline class="hidden"
-           aria-label="Video preview player" tabindex="0"></video>
+    <!-- Preview Stage: video + live CSS overlays -->
+    <div class="preview-stage hidden" id="preview-stage" aria-label="Video preview with live overlays">
+      <video id="player" controls playsinline
+             aria-label="Video preview player" tabindex="0"></video>
 
+      <!-- Live logo overlay -->
+      <div class="overlay-logo hidden" id="overlay-logo" aria-hidden="true">
+        <img id="overlay-logo-img" alt="">
+      </div>
+
+      <!-- Live illustration overlay -->
+      <div class="overlay-illu hidden" id="overlay-illu" aria-hidden="true">
+        <img id="overlay-illu-img" alt="">
+      </div>
+
+      <!-- Preview mode badge -->
+      <div class="preview-badge" id="preview-badge" aria-hidden="true">LIVE PREVIEW</div>
+    </div>
+
+    <!-- Timecodes -->
     <div class="timecode-row" role="group" aria-label="Timecode display">
       <div class="tc-block">
         <div class="tc-label">In Point</div>
@@ -63,11 +86,14 @@
       </div>
     </div>
 
+    <!-- Trim + Cut Bar -->
     <div class="trim-bar-wrap">
       <div class="trim-label">
-        <span>Trim Range</span>
+        <span>Trim / Cut Range</span>
         <span id="trim-duration-label">— no video —</span>
       </div>
+      <!-- Segment track (shows kept segments as green bars) -->
+      <div class="segment-track" id="segment-track" aria-hidden="true"></div>
       <div class="trim-track" id="trim-track"
            tabindex="0" role="group" aria-label="Trim range handles">
         <div class="trim-range"    id="trim-range"></div>
@@ -79,26 +105,39 @@
         <div class="trim-playhead" id="trim-playhead"></div>
       </div>
       <div class="trim-actions">
-        <button class="btn btn-sm" id="btn-set-start" aria-label="Set In point to current time — keyboard S">
+        <button class="btn btn-sm" id="btn-set-start"
+                aria-label="Set In point to current time — keyboard S">
           <span aria-hidden="true">◄</span> Set In <kbd aria-hidden="true">S</kbd>
         </button>
-        <button class="btn btn-sm" id="btn-set-end" aria-label="Set Out point to current time — keyboard E">
+        <button class="btn btn-sm" id="btn-set-end"
+                aria-label="Set Out point to current time — keyboard E">
           Set Out <kbd aria-hidden="true">E</kbd> <span aria-hidden="true">►</span>
         </button>
-        <button class="btn btn-sm btn-ghost" id="btn-reset-trim" aria-label="Reset trim to full video">
-          Reset
+        <button class="btn btn-sm btn-danger" id="btn-cut"
+                aria-label="Cut selected range out of video — keyboard Backspace"
+                onclick="cutSegment()">
+          ✂ Cut <kbd aria-hidden="true">⌫</kbd>
+        </button>
+        <button class="btn btn-sm btn-ghost" id="btn-reset-trim"
+                aria-label="Reset trim and cuts to full video">
+          Reset All
         </button>
       </div>
+      <!-- Active cut summary -->
+      <div id="cut-summary" class="cut-summary hidden" aria-live="polite"></div>
     </div>
 
+    <!-- Panels row -->
     <div class="panels">
 
+      <!-- Overlay Layers -->
       <section class="panel" aria-labelledby="layers-heading">
         <div class="panel-title">
           <div class="dot" aria-hidden="true"></div>
           <span id="layers-heading">Overlay Layers</span>
         </div>
         <div class="layer-list" role="list">
+
           <div class="layer-item" id="layer-logo" role="listitem" tabindex="0"
                onclick="triggerLayer('logo')"
                onkeydown="if(event.key==='Enter')triggerLayer('logo')"
@@ -109,45 +148,84 @@
               <div class="layer-desc" id="desc-logo">Permanent watermark</div>
             </div>
           </div>
+
+          <!-- Logo position -->
+          <div class="layer-sub-control" id="logo-pos-row" aria-label="Logo position setting">
+            <label class="sub-label" for="logo-position">Position</label>
+            <select id="logo-position" aria-label="Logo position"
+                    onchange="setLogoPosition(this.value)">
+              <option value="top-right">Top Right</option>
+              <option value="top-left">Top Left</option>
+              <option value="bottom-right">Bottom Right</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="center">Center</option>
+            </select>
+          </div>
+
           <div class="layer-item" id="layer-illustration" role="listitem" tabindex="0"
                onclick="triggerLayer('illustration')"
                onkeydown="if(event.key==='Enter')triggerLayer('illustration')"
-               aria-label="Illustration — 3 second popup at current time. Press Enter to upload.">
+               aria-label="Illustration — timed popup at current playhead. Press Enter to upload.">
             <div class="layer-icon" aria-hidden="true">🎨</div>
             <div class="layer-info">
               <div class="layer-name">Illustration</div>
-              <div class="layer-desc" id="desc-illustration">Brief 3s popup at current time</div>
+              <div class="layer-desc" id="desc-illustration">Timed popup at current time</div>
             </div>
           </div>
+
+          <!-- Illustration controls -->
+          <div class="layer-sub-control" id="illu-controls-row" aria-label="Illustration settings">
+            <label class="sub-label" for="illu-duration">Duration (s)</label>
+            <input type="number" id="illu-duration" value="3" min="0.5" max="60" step="0.5"
+                   list="illu-duration-presets" aria-label="Illustration display duration in seconds"
+                   onchange="setIlluDuration(this.value)">
+            <datalist id="illu-duration-presets">
+              <option value="2"><option value="3"><option value="5"><option value="10">
+            </datalist>
+
+            <label class="sub-label" for="illu-layout" style="margin-top:6px;">Layout</label>
+            <select id="illu-layout" aria-label="Illustration layout"
+                    onchange="setIlluLayout(this.value)">
+              <option value="center">Centered Pop-up</option>
+              <option value="fullscreen">Full Screen</option>
+              <option value="left-third">Left Third</option>
+              <option value="right-third">Right Third</option>
+            </select>
+          </div>
+
           <div class="layer-item" id="layer-bgm" role="listitem" tabindex="0"
                onclick="triggerLayer('bgm')"
                onkeydown="if(event.key==='Enter')triggerLayer('bgm')"
-               aria-label="Background Music — plays under main audio. Press Enter to upload.">
+               aria-label="Background Music — plays live during preview and mixed on export. Press Enter to upload.">
             <div class="layer-icon" aria-hidden="true">🎵</div>
             <div class="layer-info">
               <div class="layer-name">Background Music</div>
-              <div class="layer-desc" id="desc-bgm">Plays under main audio</div>
+              <div class="layer-desc" id="desc-bgm">Live preview + mixed on export</div>
             </div>
           </div>
+
           <div class="layer-item" id="layer-sfx" role="listitem" tabindex="0"
                onclick="triggerLayer('sfx')"
                onkeydown="if(event.key==='Enter')triggerLayer('sfx')"
-               aria-label="Sound Effect — triggered at current time. Press Enter to upload.">
+               aria-label="Sound Effect — triggered live at marked time. Press Enter to upload.">
             <div class="layer-icon" aria-hidden="true">🔊</div>
             <div class="layer-info">
               <div class="layer-name">Sound Effect</div>
-              <div class="layer-desc" id="desc-sfx">Triggered at current time</div>
+              <div class="layer-desc" id="desc-sfx">Triggered live at marked time</div>
             </div>
           </div>
+
         </div>
         <input type="file" id="layer-uploader" hidden aria-label="Layer file input">
       </section>
 
+      <!-- Output Settings -->
       <section class="panel" aria-labelledby="settings-heading">
         <div class="panel-title">
           <div class="dot" aria-hidden="true"></div>
           <span id="settings-heading">Output Settings</span>
         </div>
+
         <div class="setting-row">
           <div class="setting-label" id="lbl-aspect">Aspect Ratio</div>
           <div class="seg-control" role="group" aria-labelledby="lbl-aspect">
@@ -157,6 +235,7 @@
                     aria-pressed="false" onclick="setAspect('portrait')">9:16 Reels</button>
           </div>
         </div>
+
         <div class="setting-row">
           <div class="setting-label" id="lbl-speed">Encode Speed</div>
           <div class="seg-control" role="group" aria-labelledby="lbl-speed">
@@ -168,18 +247,22 @@
                     aria-pressed="false" onclick="setPreset('medium')">HQ</button>
           </div>
         </div>
+
         <div class="setting-row summary-row">
           <div class="setting-label">Summary</div>
           <div class="summary-body">
+            <div id="summary-mode">Mode: —</div>
             <div id="summary-aspect">Format: Landscape 16:9</div>
             <div id="summary-layers">Layers: none</div>
             <div id="summary-trim">Trim: full video</div>
+            <div id="summary-cuts">Cuts: none</div>
           </div>
         </div>
       </section>
 
-    </div>
+    </div><!-- /panels -->
 
+    <!-- Progress -->
     <div id="progress-wrap" class="progress-wrap hidden" aria-label="Export progress">
       <div class="progress-meta">
         <span id="progress-phase">Preparing…</span>
@@ -191,20 +274,21 @@
       </div>
     </div>
 
+    <!-- Download result -->
     <div id="download-result" class="download-result hidden">
       <span class="dl-label" aria-hidden="true">✓ Export complete</span>
       <a id="download-link" href="#" download="tech-house-export.mp4"
-         class="dl-btn" aria-label="Download exported video file">
-        ⬇ Download Video
-      </a>
+         class="dl-btn" aria-label="Download exported video file">⬇ Download Video</a>
     </div>
 
+    <!-- Export button -->
     <button class="export-btn" id="export-btn" disabled
             aria-label="Export video — keyboard shortcut Control X"
             onclick="runExport()">
       🚀 &nbsp; EXPORT VIDEO
     </button>
 
+    <!-- Shortcuts -->
     <div class="shortcuts" role="complementary" aria-label="Keyboard shortcuts">
       <span class="sc-item"><kbd>S</kbd> Set In</span>
       <span class="sc-sep">·</span>
@@ -215,6 +299,10 @@
       <span class="sc-item"><kbd>←</kbd><kbd>→</kbd> ±10s</span>
       <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>Shift</kbd><kbd>←</kbd><kbd>→</kbd> ±1s</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>⌫</kbd> Cut Range</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>Z</kbd> Undo</span>
       <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>V</kbd> Read Status</span>
       <span class="sc-sep">·</span>
