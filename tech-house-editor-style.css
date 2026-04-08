@@ -1,5 +1,6 @@
 /* ============================================================
-   TECH HOUSE VIDEO EDITOR — Stylesheet
+   TECH HOUSE VIDEO EDITOR — Stylesheet v3
+   Fonts: Syne (headings) + Space Mono (code/mono) + DM Sans (body)
    ============================================================ */
 :root {
   --bg:        #080a0e;
@@ -11,6 +12,7 @@
   --cyan:      #22d3ee;
   --green:     #34d399;
   --red:       #f87171;
+  --purple:    #a78bfa;
   --text:      #e2e8f0;
   --text-dim:  #64748b;
   --text-mute: #334155;
@@ -82,17 +84,107 @@ body {
   padding: 36px 20px; text-align: center; transition: all 0.2s;
   cursor: pointer; background: var(--surface);
 }
-.upload-zone:hover { border-color: var(--amber); background: rgba(245,158,11,0.04); }
+.upload-zone:hover,
+.upload-zone:focus { border-color: var(--amber); background: rgba(245,158,11,0.04); outline: none; }
 .upload-zone .upload-hint { color: var(--text-dim); font-size: 0.85rem; margin-top: 8px; }
 .upload-zone .upload-icon { font-size: 2.4rem; margin-bottom: 8px; display: block; }
 .upload-zone h2 { font-family: var(--head); font-size: 1rem; font-weight: 600; }
 
-/* ── Video Player ── */
+/* ── Preview Stage ─────────────────────────────────────────── */
+.preview-stage {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: #000;
+  border: 2px solid var(--border);
+  /* Subtle amber glow when playing */
+  transition: border-color 0.3s;
+}
+.preview-stage.playing { border-color: var(--amber); }
+
 #player {
-  width: 100%; display: block; border-radius: var(--radius-lg);
-  background: #000; outline: none; max-height: 420px;
+  width: 100%;
+  display: block;
+  max-height: 420px;
+  outline: none;
 }
 #player:focus { box-shadow: 0 0 0 2px var(--amber); }
+
+/* Live preview badge */
+.preview-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(245,158,11,0.9);
+  color: #000;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.preview-stage.playing .preview-badge { opacity: 1; }
+
+/* ── Logo overlay ── */
+.overlay-logo {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  transition: all 0.2s;
+}
+.overlay-logo img { height: 48px; width: auto; display: block; opacity: 0.92; }
+
+/* Logo positions */
+.overlay-logo.pos-top-right    { top: 10px;  right: 10px;  }
+.overlay-logo.pos-top-left     { top: 10px;  left: 10px;   }
+.overlay-logo.pos-bottom-right { bottom: 40px; right: 10px; }
+.overlay-logo.pos-bottom-left  { bottom: 40px; left: 10px;  }
+.overlay-logo.pos-center {
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Illustration overlay ── */
+.overlay-illu {
+  position: absolute;
+  pointer-events: none;
+  z-index: 9;
+  transition: opacity 0.15s;
+}
+.overlay-illu.hidden { opacity: 0; pointer-events: none; }
+.overlay-illu:not(.hidden) { opacity: 1; }
+.overlay-illu img { display: block; }
+
+/* Illustration layouts */
+.overlay-illu.layout-center {
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 45%;
+}
+.overlay-illu.layout-center img { width: 100%; height: auto; }
+
+.overlay-illu.layout-fullscreen {
+  inset: 0;
+}
+.overlay-illu.layout-fullscreen img { width: 100%; height: 100%; object-fit: cover; }
+
+.overlay-illu.layout-left-third {
+  top: 50%; left: 0;
+  transform: translateY(-50%);
+  width: 33%;
+}
+.overlay-illu.layout-left-third img { width: 100%; height: auto; }
+
+.overlay-illu.layout-right-third {
+  top: 50%; right: 0;
+  transform: translateY(-50%);
+  width: 33%;
+}
+.overlay-illu.layout-right-third img { width: 100%; height: auto; }
 
 /* ── Timecode Row ── */
 .timecode-row {
@@ -119,16 +211,40 @@ body {
 }
 .trim-label {
   font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em;
-  color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px;
+  color: var(--text-dim); text-transform: uppercase; margin-bottom: 6px;
   display: flex; justify-content: space-between;
 }
+
+/* Segment track — shows kept segments as green bars above the trim track */
+.segment-track {
+  position: relative;
+  height: 4px;
+  background: var(--border);
+  border-radius: 100px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.segment-bar {
+  position: absolute;
+  height: 100%;
+  background: var(--green);
+  border-radius: 100px;
+  opacity: 0.7;
+}
+.cut-bar {
+  position: absolute;
+  height: 100%;
+  background: var(--red);
+  border-radius: 100px;
+  opacity: 0.5;
+}
+
 .trim-track {
   position: relative; height: 6px; background: var(--border);
   border-radius: 100px; cursor: pointer;
 }
 .trim-range {
-  position: absolute; height: 100%; background: var(--amber);
-  border-radius: 100px;
+  position: absolute; height: 100%; background: var(--amber); border-radius: 100px;
 }
 .trim-head {
   position: absolute; width: 14px; height: 14px; border-radius: 50%;
@@ -139,10 +255,14 @@ body {
 .trim-head:hover, .trim-head:focus { background: var(--amber); outline: none; }
 .trim-playhead {
   position: absolute; width: 2px; height: 18px; background: var(--cyan);
-  top: 50%; transform: translate(-50%, -50%);
-  border-radius: 100px; pointer-events: none;
+  top: 50%; transform: translate(-50%, -50%); border-radius: 100px; pointer-events: none;
 }
-.trim-actions { display: flex; gap: 8px; margin-top: 10px; }
+.trim-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+.cut-summary {
+  margin-top: 8px; font-family: var(--mono); font-size: 0.68rem;
+  color: var(--text-dim); line-height: 1.6;
+}
 
 /* ── Panels ── */
 .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -158,7 +278,7 @@ body {
 .panel-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
 
 /* ── Layer Items ── */
-.layer-list { display: flex; flex-direction: column; gap: 8px; }
+.layer-list { display: flex; flex-direction: column; gap: 6px; }
 .layer-item {
   display: flex; align-items: center; gap: 10px;
   background: var(--panel); border: 1px solid var(--border);
@@ -171,29 +291,65 @@ body {
   content: '✓'; position: absolute; right: 10px;
   color: var(--green); font-size: 0.75rem; font-weight: bold;
 }
-.layer-icon { font-size: 1.2rem; width: 28px; text-align: center; flex-shrink: 0; }
+.layer-icon { font-size: 1.1rem; width: 26px; text-align: center; flex-shrink: 0; }
 .layer-info { flex: 1; min-width: 0; }
 .layer-name { font-weight: 500; font-size: 0.85rem; }
 .layer-desc { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Sub-controls under layer items */
+.layer-sub-control {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sub-label {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.layer-sub-control select,
+.layer-sub-control input[type="number"] {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-hi);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.layer-sub-control select:focus,
+.layer-sub-control input[type="number"]:focus {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
 
 /* ── Settings Panel ── */
 .setting-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
 .setting-row:last-child { margin-bottom: 0; }
 .setting-label { font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
-.summary-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
-.summary-body { font-size: 0.75rem; color: var(--text-dim); line-height: 1.7; font-family: var(--mono); }
+.summary-row { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.summary-body { font-size: 0.73rem; color: var(--text-dim); line-height: 1.8; font-family: var(--mono); }
+.summary-body div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .seg-control {
   display: flex; background: var(--panel); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 3px; gap: 3px;
 }
 .seg-btn {
-  flex: 1; padding: 7px 8px; border: none; background: transparent;
+  flex: 1; padding: 7px 6px; border: none; background: transparent;
   color: var(--text-dim); border-radius: 4px; cursor: pointer;
-  font-family: var(--body); font-size: 0.78rem; font-weight: 500; transition: all 0.15s;
+  font-family: var(--body); font-size: 0.75rem; font-weight: 500; transition: all 0.15s;
 }
 .seg-btn.active { background: var(--amber); color: #000; font-weight: 600; }
-.seg-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.seg-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
 
 /* ── Buttons ── */
 .btn {
@@ -207,6 +363,10 @@ body {
 .btn.btn-sm { padding: 6px 10px; font-size: 0.75rem; }
 .btn.btn-ghost { background: transparent; color: var(--text-dim); }
 .btn.btn-ghost:hover { color: var(--text); background: var(--panel); }
+.btn.btn-danger {
+  border-color: rgba(248,113,113,0.4); color: var(--red);
+}
+.btn.btn-danger:hover { background: rgba(248,113,113,0.1); border-color: var(--red); }
 .btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
 
 /* ── Export Button ── */
@@ -229,12 +389,10 @@ body {
 /* ── Progress ── */
 .progress-wrap {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px;
-  display: flex; flex-direction: column; gap: 10px;
+  border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px;
 }
 .progress-track {
-  height: 8px; background: var(--panel); border-radius: 100px;
-  overflow: hidden; border: 1px solid var(--border);
+  height: 8px; background: var(--panel); border-radius: 100px; overflow: hidden; border: 1px solid var(--border);
 }
 .progress-fill {
   height: 100%; width: 0%;
@@ -264,7 +422,7 @@ body {
 }
 .dl-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
-/* ── Shortcuts ── */
+/* ── Shortcuts bar ── */
 .shortcuts {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
   padding: 12px 14px; background: var(--surface); border: 1px solid var(--border);
@@ -275,7 +433,7 @@ kbd {
   border-radius: 4px; padding: 2px 7px; font-family: var(--mono);
   font-size: 0.68rem; font-weight: 700; box-shadow: 0 1px 0 var(--border-hi);
 }
-.sc-item { display: flex; align-items: center; gap: 5px; }
+.sc-item { display: flex; align-items: center; gap: 4px; }
 .sc-sep { color: var(--border-hi); }
 
 /* ── Toast ── */
@@ -287,14 +445,15 @@ kbd {
   background: var(--panel); border: 1px solid var(--border-hi);
   border-radius: var(--radius); padding: 10px 16px; font-family: var(--mono);
   font-size: 0.75rem; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-  animation: toastIn 0.25s ease, toastOut 0.3s ease 2.5s forwards; pointer-events: auto;
+  animation: toastIn 0.25s ease, toastOut 0.3s ease 2.7s forwards; pointer-events: auto;
 }
 .toast.success { border-color: var(--green); color: var(--green); }
 .toast.error   { border-color: var(--red);   color: var(--red);   }
+.toast.info    { border-color: var(--cyan);   color: var(--cyan);  }
 @keyframes toastIn  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toastOut { to   { opacity: 0; transform: translateY(-6px); } }
 
-/* ── Accessibility helpers ── */
+/* ── Accessibility ── */
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
@@ -308,8 +467,10 @@ kbd {
 .hidden { display: none !important; }
 
 /* ── Responsive ── */
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .panels { grid-template-columns: 1fr; }
-  .tc-value { font-size: 1rem; }
+  .tc-value { font-size: 1.1rem; }
   .export-btn { font-size: 0.95rem; padding: 15px; }
+  .trim-actions { gap: 6px; }
+  .btn.btn-sm { padding: 5px 8px; font-size: 0.7rem; }
 }
