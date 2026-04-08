@@ -141,10 +141,10 @@
           <div class="layer-item" id="layer-logo" role="listitem" tabindex="0"
                onclick="triggerLayer('logo')"
                onkeydown="if(event.key==='Enter')triggerLayer('logo')"
-               aria-label="Logo — permanent watermark. Press Enter to upload.">
+               aria-label="Logo — permanent watermark. Press Enter to upload. Keyboard: Control L.">
             <div class="layer-icon" aria-hidden="true">🖼️</div>
             <div class="layer-info">
-              <div class="layer-name">Logo</div>
+              <div class="layer-name">Logo <kbd aria-hidden="true">Ctrl L</kbd></div>
               <div class="layer-desc" id="desc-logo">Permanent watermark</div>
             </div>
           </div>
@@ -165,10 +165,10 @@
           <div class="layer-item" id="layer-illustration" role="listitem" tabindex="0"
                onclick="triggerLayer('illustration')"
                onkeydown="if(event.key==='Enter')triggerLayer('illustration')"
-               aria-label="Illustration — timed popup at current playhead. Press Enter to upload.">
+               aria-label="Illustration — timed popup at current playhead. Press Enter to upload. Keyboard: Control I.">
             <div class="layer-icon" aria-hidden="true">🎨</div>
             <div class="layer-info">
-              <div class="layer-name">Illustration</div>
+              <div class="layer-name">Illustration <kbd aria-hidden="true">Ctrl I</kbd></div>
               <div class="layer-desc" id="desc-illustration">Timed popup at current time</div>
             </div>
           </div>
@@ -196,10 +196,10 @@
           <div class="layer-item" id="layer-bgm" role="listitem" tabindex="0"
                onclick="triggerLayer('bgm')"
                onkeydown="if(event.key==='Enter')triggerLayer('bgm')"
-               aria-label="Background Music — plays live during preview and mixed on export. Press Enter to upload.">
+               aria-label="Background Music — plays live during preview and mixed on export. Press Enter to upload. Keyboard: Control B.">
             <div class="layer-icon" aria-hidden="true">🎵</div>
             <div class="layer-info">
-              <div class="layer-name">Background Music</div>
+              <div class="layer-name">Background Music <kbd aria-hidden="true">Ctrl B</kbd></div>
               <div class="layer-desc" id="desc-bgm">Live preview + mixed on export</div>
             </div>
           </div>
@@ -207,12 +207,39 @@
           <div class="layer-item" id="layer-sfx" role="listitem" tabindex="0"
                onclick="triggerLayer('sfx')"
                onkeydown="if(event.key==='Enter')triggerLayer('sfx')"
-               aria-label="Sound Effect — triggered live at marked time. Press Enter to upload.">
+               aria-label="Sound Effect — triggered live at marked time. Press Enter to upload. Keyboard: Control F.">
             <div class="layer-icon" aria-hidden="true">🔊</div>
             <div class="layer-info">
-              <div class="layer-name">Sound Effect</div>
+              <div class="layer-name">Sound Effect <kbd aria-hidden="true">Ctrl F</kbd></div>
               <div class="layer-desc" id="desc-sfx">Triggered live at marked time</div>
             </div>
+          </div>
+
+          <!-- Audio Swap -->
+          <div class="layer-item" id="layer-audioSwap" role="listitem" tabindex="0"
+               onclick="triggerLayer('audioSwap')"
+               onkeydown="if(event.key==='Enter')triggerLayer('audioSwap')"
+               aria-label="Audio Swap — replaces original video audio entirely. Preview mutes video and plays swap file. Keyboard: Control U.">
+            <div class="layer-icon" aria-hidden="true">🔄</div>
+            <div class="layer-info">
+              <div class="layer-name">Audio Swap <kbd aria-hidden="true">Ctrl U</kbd></div>
+              <div class="layer-desc" id="desc-audioSwap">Replaces original audio on export</div>
+            </div>
+          </div>
+
+          <!-- Audio Swap sub-controls: noise filter option -->
+          <div class="layer-sub-control" id="audio-swap-controls" aria-label="Audio swap settings">
+            <label class="sub-label" for="noise-filter-select">Audio Processing</label>
+            <select id="noise-filter-select" aria-label="Audio processing mode"
+                    onchange="setAudioProcessing(this.value)">
+              <option value="swap">Use Swap File</option>
+              <option value="noise">Noise Removal (mathematical silence)</option>
+              <option value="mute">Mute Original (no replacement)</option>
+            </select>
+            <span class="sub-label" id="audio-processing-note"
+                  style="font-style:italic;color:var(--text-mute);font-size:0.6rem;margin-top:2px;">
+              Noise filter removes audio via anlmdn filter
+            </span>
           </div>
 
         </div>
@@ -300,11 +327,21 @@
       <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>Shift</kbd><kbd>←</kbd><kbd>→</kbd> ±1s</span>
       <span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>⌫</kbd> Cut Range</span>
+      <span class="sc-item"><kbd>⌫</kbd> Cut</span>
       <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>Ctrl</kbd><kbd>Z</kbd> Undo</span>
       <span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>V</kbd> Read Status</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>L</kbd> Logo</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>I</kbd> Illus.</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>B</kbd> BGM</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>F</kbd> SFX</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>U</kbd> Swap</span>
+      <span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>V</kbd> Status</span>
       <span class="sc-sep">·</span>
       <span class="sc-item"><kbd>Ctrl</kbd><kbd>X</kbd> Export</span>
     </div>
