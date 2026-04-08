@@ -474,3 +474,53 @@ kbd {
   .trim-actions { gap: 6px; }
   .btn.btn-sm { padding: 5px 8px; font-size: 0.7rem; }
 }
+
+/* ── Audio processing note text (inside sub-control) ── */
+#audio-processing-note {
+  display: block;
+  font-style: italic;
+  color: var(--text-mute);
+  font-size: 0.6rem;
+  margin-top: 2px;
+  line-height: 1.4;
+  white-space: normal; /* allow wrapping */
+}
+
+/* ── kbd inside layer-name (shortcut hint) ── */
+.layer-name kbd {
+  font-size: 0.55rem;
+  padding: 1px 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0.6;
+  /* Inherit base kbd style but smaller */
+  background: var(--panel);
+  color: var(--amber);
+  border: 1px solid var(--border-hi);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-weight: 700;
+  box-shadow: 0 1px 0 var(--border-hi);
+}
+
+/* ── Audio Swap loaded state — purple accent to distinguish from other layers ── */
+#layer-audioSwap.loaded {
+  border-color: var(--purple);
+}
+#layer-audioSwap.loaded::after {
+  color: var(--purple);
+}
+
+/* ── Noise/mute mode indicator on summary ── */
+.audio-mode-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(167,139,250,0.15);
+  color: var(--purple);
+  border: 1px solid rgba(167,139,250,0.3);
+  margin-left: 4px;
+  vertical-align: middle;
+}
