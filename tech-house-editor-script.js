@@ -6,6 +6,8 @@
 // ============================================================
 'use strict';
 
+<script src="coi-serviceworker.js"></script>
+
 const { createFFmpeg, fetchFile } = FFmpeg;
 const ffmpeg = createFFmpeg({
   log: true,
