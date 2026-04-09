@@ -1,12 +1,24 @@
 // ============================================================
-// TECH HOUSE VIDEO EDITOR — script.js  v3
-// Features: Live Preview, Smart Export, Illustration Layout,
-//           Logo Position, Cut Segments + Undo, Accessibility
+// TECH HOUSE VIDEO EDITOR — script.js  v4
 // FFmpeg.wasm 0.11.0 / Chrome 103+
 // ============================================================
-'use strict';
 
-<script src="coi-serviceworker.js"></script>
+// ── Service Worker (COI) ──────────────────────────────────────
+// coi-serviceworker.js is a PAGE script that handles its own
+// SW registration internally. The correct way to load it from JS
+// (instead of an HTML script tag) is to inject a <script> element.
+// Do NOT use navigator.serviceWorker.register() — that would
+// load it in SW context, not page context, breaking the logic.
+(function () {
+  var s = document.createElement('script');
+  s.src = './coi-serviceworker.js';
+  s.onerror = function () {
+    console.warn('[COI] coi-serviceworker.js not found. Place it in the same folder. SharedArrayBuffer may be unavailable.');
+  };
+  document.head.appendChild(s);
+}());
+
+'use strict';
 
 const { createFFmpeg, fetchFile } = FFmpeg;
 const ffmpeg = createFFmpeg({
@@ -55,6 +67,12 @@ let illuDuration = 3;
 let pendingLayerType = null;
 let engineReady  = false;
 let dragType     = null;
+
+// ── Timeline zoom state ───────────────────────────────────────
+// Pressing Z toggles between 1x (full view) and 4x (zoomed in).
+// zoomStart is the left edge of the visible window as a 0–1 fraction.
+let zoomLevel = 1;   // 1 = full, 4 = zoomed
+let zoomStart = 0;   // left edge fraction
 
 // ── Announce helpers ──────────────────────────────────────────
 // Clears before setting so identical consecutive messages re-fire.
@@ -275,10 +293,27 @@ player.addEventListener('ended', () => {
 player.ontimeupdate = () => {
   const t = player.currentTime;
 
-  // Update timecode display
   document.getElementById('tc-current').textContent = fmtTime(t);
+
+  // Playhead position mapped through zoom window
   if (times.duration > 0) {
-    document.getElementById('trim-playhead').style.left = ((t / times.duration) * 100) + '%';
+    const frac    = t / times.duration;
+    const fracVis = Math.max(0, Math.min(1, (frac - zoomStart) * zoomLevel));
+    document.getElementById('trim-playhead').style.left = (fracVis * 100) + '%';
+
+    // Auto-scroll zoom window when playhead hits an edge (only when playing)
+    if (!player.paused && zoomLevel > 1) {
+      const windowSize = 1 / zoomLevel;
+      if (frac > zoomStart + windowSize - 0.02) {
+        zoomStart = Math.min(1 - windowSize, frac - 0.02);
+        updateTrimBar();
+        updateZoomBar();
+      } else if (frac < zoomStart + 0.02) {
+        zoomStart = Math.max(0, frac - 0.02);
+        updateTrimBar();
+        updateZoomBar();
+      }
+    }
   }
 
   // ── Illustration live preview ──
@@ -380,21 +415,108 @@ function setPreset(val) {
   announce(`Encode speed set to ${label}.`);
 }
 
-// ── Trim bar ──────────────────────────────────────────────────
+// ── Timeline zoom ─────────────────────────────────────────────
+// The trim track always shows a window of the full duration.
+// At zoom 1x the window = full video. At 2x it shows half, etc.
+// zoomStart (0–1) is the left edge of the window as a fraction.
+
+// ── Timeline zoom ─────────────────────────────────────────────
+// Z toggles between 1x (full timeline) and 4x (zoomed in on playhead).
+// At 4x the track shows 25% of the total duration centred on the playhead.
+
+function cycleZoom() {
+  if (!times.duration) return;
+
+  // Toggle between 1x and 4x
+  zoomLevel = (zoomLevel === 1) ? 4 : 1;
+
+  if (zoomLevel === 1) {
+    zoomStart = 0; // full view — window covers 100% of timeline
+  } else {
+    // Centre the 4x window on the current playhead position
+    const playFrac   = player.currentTime / times.duration;
+    const halfWindow = 1 / (2 * zoomLevel); // = 0.125 at 4x
+    zoomStart = Math.max(0, Math.min(1 - 1 / zoomLevel, playFrac - halfWindow));
+  }
+
+  updateTrimBar();
+  updateZoomBar();
+
+  const btn = document.getElementById('btn-zoom');
+  if (zoomLevel === 1) {
+    btn.textContent = '🔍 Zoom';
+    btn.setAttribute('aria-label', 'Zoom in 4x on current time — keyboard Z');
+    announce('Zoom reset. Full timeline visible.');
+  } else {
+    btn.textContent = '🔍 4x';
+    btn.setAttribute('aria-label', 'Zoom out to full timeline — keyboard Z');
+    announce('Zoomed in 4x. Timeline shows 25 percent of video around current time.');
+  }
+}
+
+// The mini zoom-bar above the trim track shows where the zoom window sits
+function updateZoomBar() {
+  const bar = document.getElementById('zoom-bar');
+  const win = document.getElementById('zoom-window');
+  if (!bar || !win) return;
+
+  if (zoomLevel === 1) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'block';
+  const winWidth = (1 / zoomLevel) * 100;
+  const winLeft  = zoomStart * 100;
+  win.style.left  = winLeft + '%';
+  win.style.width = winWidth + '%';
+}
+
+// Convert a full-video fraction to a position within the zoom window (0–1).
+// Returns null if the point is outside the visible window.
+function fracToZoom(frac) {
+  const windowSize = 1 / zoomLevel;
+  const end = zoomStart + windowSize;
+  if (frac < zoomStart || frac > end) return null;
+  return (frac - zoomStart) / windowSize;
+}
+
+// Convert a zoom-window position (0–1) back to a full-video fraction.
+function zoomToFrac(zoomFrac) {
+  const windowSize = 1 / zoomLevel;
+  return zoomStart + zoomFrac * windowSize;
+}
+
+// ── Trim bar (zoom-aware) ─────────────────────────────────────
 function updateTrimBar() {
   const dur = times.duration;
   if (!dur) return;
+
+  // Positions as full-video fractions
   const sp = times.s / dur;
   const ep = times.e / dur;
-  document.getElementById('trim-range').style.left  = (sp * 100) + '%';
-  document.getElementById('trim-range').style.width = ((ep - sp) * 100) + '%';
-  document.getElementById('trim-head-s').style.left = (sp * 100) + '%';
-  document.getElementById('trim-head-e').style.left = (ep * 100) + '%';
+
+  // Map through zoom window
+  const spZ = fracToZoom(Math.max(zoomStart, sp));
+  const epZ = fracToZoom(Math.min(zoomStart + 1 / zoomLevel, ep));
+
+  // Clip handles to visible range
+  const spVis = Math.max(0, Math.min(1, (sp - zoomStart) * zoomLevel));
+  const epVis = Math.max(0, Math.min(1, (ep - zoomStart) * zoomLevel));
+
+  const rangeLeft  = (Math.max(0, sp - zoomStart) * zoomLevel) * 100;
+  const rangeWidth = (Math.max(0, Math.min(ep, zoomStart + 1 / zoomLevel) - Math.max(sp, zoomStart)) * zoomLevel) * 100;
+
+  document.getElementById('trim-range').style.left  = rangeLeft + '%';
+  document.getElementById('trim-range').style.width = Math.max(0, rangeWidth) + '%';
+  document.getElementById('trim-head-s').style.left = (spVis * 100) + '%';
+  document.getElementById('trim-head-e').style.left = (epVis * 100) + '%';
   document.getElementById('trim-head-s').setAttribute('aria-valuenow', Math.round(sp * 100));
   document.getElementById('trim-head-e').setAttribute('aria-valuenow', Math.round(ep * 100));
+
   const len = times.e - times.s;
+  const zoomNote = zoomLevel > 1 ? ` · ${zoomLevel}x zoom` : '';
   document.getElementById('trim-duration-label').textContent =
-    `${fmtTime(times.s)} → ${fmtTime(times.e)} (${fmtTime(len)})`;
+    `${fmtTime(times.s)} → ${fmtTime(times.e)} (${fmtTime(len)})${zoomNote}`;
 }
 
 // Segment display — green bars above the trim track showing kept parts
@@ -444,15 +566,17 @@ function onDrag(e) {
   e.preventDefault();
   const rect = document.getElementById('trim-track').getBoundingClientRect();
   const cx   = e.touches ? e.touches[0].clientX : e.clientX;
-  const pct  = Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
-  const t    = pct * times.duration;
+  // Raw 0–1 within the track element, then map back through zoom window
+  const rawFrac = Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
+  const t = zoomToFrac(rawFrac) * times.duration;
+
   if (dragType === 's') {
-    times.s = Math.min(t, times.e - 0.5);
+    times.s = Math.min(Math.max(0, t), times.e - 0.5);
     player.currentTime = times.s;
     document.getElementById('tc-start').textContent = fmtTime(times.s);
     document.getElementById('tc-start').classList.remove('muted');
   } else {
-    times.e = Math.max(t, times.s + 0.5);
+    times.e = Math.max(Math.min(times.duration, t), times.s + 0.5);
     player.currentTime = times.e;
     document.getElementById('tc-end').textContent = fmtTime(times.e);
     document.getElementById('tc-end').classList.remove('muted');
@@ -471,7 +595,8 @@ function stopDrag() {
 document.getElementById('trim-track').addEventListener('click', e => {
   if (!times.duration || e.target.classList.contains('trim-head')) return;
   const rect = e.currentTarget.getBoundingClientRect();
-  player.currentTime = ((e.clientX - rect.left) / rect.width) * times.duration;
+  const rawFrac = (e.clientX - rect.left) / rect.width;
+  player.currentTime = zoomToFrac(Math.max(0, Math.min(1, rawFrac))) * times.duration;
 });
 
 // ── Trim buttons ──────────────────────────────────────────────
@@ -672,6 +797,10 @@ window.addEventListener('keydown', e => {
   }
   if (k === 'v' && !ctrl) {
     setStatus(`Current: ${fmtTime(player.currentTime)}  In: ${fmtTime(times.s)}  Out: ${fmtTime(times.e)}`);
+  }
+  if (k === 'z' && !ctrl) {
+    e.preventDefault();
+    cycleZoom();
   }
   if (k === 'backspace') {
     e.preventDefault();
@@ -1125,8 +1254,12 @@ async function runExport() {
     const blob   = new Blob([data.buffer], { type: 'video/mp4' });
     const url    = URL.createObjectURL(blob);
     const dlLink = document.getElementById('download-link');
+
+    // Use project name field as filename, sanitised for filesystem safety
+    const rawName   = (document.getElementById('project-name').value || 'tech-house').trim();
+    const safeName  = rawName.replace(/[^a-zA-Z0-9_\-. ]/g, '').replace(/\s+/g, '-') || 'tech-house';
     dlLink.href     = url;
-    dlLink.download = `tech-house-${Date.now()}.mp4`;
+    dlLink.download = `${safeName}.mp4`;
 
     document.getElementById('download-result').classList.remove('hidden');
     dlLink.focus();
