@@ -473,6 +473,49 @@ kbd {
   .export-btn { font-size: 0.95rem; padding: 15px; }
   .trim-actions { gap: 6px; }
   .btn.btn-sm { padding: 5px 8px; font-size: 0.7rem; }
+  .project-name-input { max-width: 120px; }
+}
+
+/* ── Project name input ── */
+.project-name-input {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--amber);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-hi);
+  padding: 4px 6px;
+  max-width: 200px;
+  width: 100%;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s;
+  /* No outline — we use border-bottom as indicator */
+  outline: none;
+}
+.project-name-input:focus {
+  border-bottom-color: var(--amber);
+  color: var(--text);
+}
+.project-name-input::placeholder { color: var(--text-mute); font-weight: 400; }
+
+/* ── Zoom bar (minimap above trim track) ── */
+.zoom-bar {
+  display: none; /* shown by JS when zoom > 1 */
+  position: relative;
+  height: 4px;
+  background: var(--border);
+  border-radius: 100px;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+.zoom-window {
+  position: absolute;
+  height: 100%;
+  background: var(--cyan);
+  border-radius: 100px;
+  opacity: 0.7;
 }
 
 /* ── Audio processing note text (inside sub-control) ── */
