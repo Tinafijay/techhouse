@@ -7,76 +7,112 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="Techhouse_style.css">
 </head>
-<body>
+<body id="body-root">
 
   <header>
     <nav>
-      <div class="logo">
-        <img src="Tech House logo.jpg" alt="Tech House Logo">
-      </div>
+      <div class="logo"><img src="Tech House logo.jpg" alt="Logo"></div>
       <div class="nav-right">
         <ul>
           <li><a href="#home">Home</a></li>
           <li><a href="#apps">Apps</a></li>
           <li><a href="#about">About</a></li>
         </ul>
-
-        <!-- AUTH UI AREA -->
-        <div id="auth-section">
+        <div id="auth-ui">
           <button id="signin-btn">Sign In</button>
-          
-          <div id="user-profile" style="display: none;">
-             <span id="user-greeting">Welcome!</span>
-             <button id="logout-btn">Log Out</button>
+          <div id="user-profile" class="dropdown" style="display:none;">
+            <button id="user-display-name">User</button>
+            <div class="dropdown-content">
+              <a id="logout-link">Log Out</a>
+            </div>
           </div>
         </div>
-
         <button id="theme-toggle">Switch Theme</button>
       </div>
     </nav>
   </header>
 
-  <!-- ... (rest of your main content remains the same) ... -->
-  <main id="home">
+  <main id="main-content">
     <section id="hero">
       <h1>Tech House</h1>
       <p>Innovate. Create. Elevate.</p>
     </section>
-    <!-- Your Apps and About sections go here -->
+
+    <section id="apps">
+      <h2 style="text-align: center;">Our Applications</h2>
+      <div class="app-grid">
+        <a href="tech-house-editor.html" class="app-item">
+          <div class="app-icon">🎬</div>
+          <h3>Tech House Editor</h3>
+          <p>Accessible Video Editing</p>
+        </a>
+        <a href="poisoning detector.html" class="app-item">
+          <div class="app-icon">🍎</div>
+          <h3>Food Poisoning Detector</h3>
+          <p>AI Safety Tool</p>
+        </a>
+        <div class="app-item app-item-placeholder">
+          <div class="app-icon">⭐</div>
+          <h3>T Vision</h3>
+          <p>Coming Soon</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="about">
+      <h2>Our Story</h2>
+      <div class="ceo-container">
+        <img src="tinafi jay.jpg" alt="Tinafi Akawu" class="ceo-photo">
+        <h3>Tinafi Akawu <span class="ceo-alias">(TinafiJay)</span></h3>
+      </div>
+      <p>Tech House grew from a deep curiosity. In JSS2, I started "Young Programmers" with friends. In 2023, I renamed it Tech House to build tools for accessibility.</p>
+      <div id="about-extra">
+        <p>I was always fascinated by how I could be in Abuja and reach someone in Lagos instantly. I want to make sure technology serves everyone, including the visually impaired.</p>
+      </div>
+      <button id="readBtn">Read More</button>
+    </section>
   </main>
 
-  <!-- FULL SCREEN AUTH OVERLAY -->
-  <div id="authOverlay" class="full-page-overlay">
-    <div class="auth-container">
-      <button class="close-overlay" id="authCloseBtn">&times;</button>
-      
-      <div class="auth-card">
-        <div class="auth-brand-side">
-          <h2>Tech House</h2>
-          <p>Join the future of accessible technology.</p>
+  <footer id="footer">
+    <p>&copy; 2026 Tech House. | <a href="https://wa.me/2348057813535" style="color:var(--primary);">Contact on WhatsApp</a></p>
+  </footer>
+
+  <!-- THE FULL SCREEN AUTH OVERLAY -->
+  <div id="authOverlay" class="auth-overlay-fullscreen" role="dialog" aria-modal="true">
+    <button class="auth-exit" id="authCloseBtn" aria-label="Close">&times;</button>
+    
+    <div class="auth-split-container">
+      <!-- Left side: Visuals -->
+      <div class="auth-visual-panel">
+        <div class="auth-visual-content">
+          <div class="auth-logo-large">TH</div>
+          <h1>Welcome to <br> Tech House</h1>
+          <p>Building a future where technology has no barriers.</p>
         </div>
+      </div>
 
-        <div class="auth-form-side">
-          <h1>Sign In</h1>
-          <p class="subtitle">Google is the fastest way to get started.</p>
+      <!-- Right side: Interaction -->
+      <div class="auth-form-panel">
+        <div class="form-inner">
+          <h2>Sign In</h2>
+          <p class="form-subtext">Join our community of innovators.</p>
 
-          <!-- Google First -->
-          <button class="google-login-btn" id="google-signin-btn">
+          <button class="btn-google" id="google-signin-btn">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
             Continue with Google
           </button>
 
-          <div class="form-divider"><span>OR EMAIL</span></div>
+          <div class="auth-separator"><span>OR EMAIL</span></div>
 
-          <div class="input-group">
-            <input type="text" id="fname" placeholder="First Name">
-            <input type="text" id="lname" placeholder="Last Name">
+          <div class="auth-row">
+            <input type="text" id="fname" placeholder="First Name" class="input-styled">
+            <input type="text" id="lname" placeholder="Last Name" class="input-styled">
           </div>
-          <input type="email" id="email" placeholder="Email Address">
-          <input type="password" id="password" placeholder="Password (6+ chars)">
+          <input type="email" id="email" placeholder="Email Address" class="input-styled">
+          <input type="password" id="password" placeholder="Password (6+ chars)" class="input-styled">
           
-          <button class="email-signup-btn" id="email-signup-btn">Create Account</button>
-          <p class="terms">By signing in, you agree to our terms.</p>
+          <button class="btn-primary" id="email-signup-btn">Create Account</button>
+          <p class="auth-fineprint">By continuing, you agree to the Tech House Terms.</p>
         </div>
       </div>
     </div>
