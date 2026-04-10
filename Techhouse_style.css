@@ -1,158 +1,173 @@
+/* --- 1. RESET BROWSER DEFAULTS --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 :root {
-  --primary: #228B22;
-  --bg: #f9fbf9;
-  --text: #1a1a1a;
-  --card: #ffffff;
-  --border: #e0e6e0;
+    --primary: #228B22;
+    --primary-dark: #1a6b1a;
+    --bg: #f9fbf9;
+    --text: #1a1a1a;
+    --header-bg: #ffffff;
+    --card-bg: #ffffff;
 }
 
 [data-theme="dark"] {
-  --bg: #0b0f14;
-  --text: #f0f0f0;
-  --card: #151a21;
-  --border: #2a313a;
+    --bg: #0b0f14;
+    --text: #f0f0f0;
+    --header-bg: #151a21;
+    --card-bg: #151a21;
+    --primary: #4ade80;
 }
 
 body {
-  font-family: 'DM Sans', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  margin: 0;
-  transition: 0.3s;
+    font-family: 'DM Sans', sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    transition: background 0.3s;
 }
 
-/* HEADER & HERO ... (Keeping your existing nav/hero styles) */
-nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 5%; }
-#hero { background: #1a6b1a; color: white; padding: 100px 20px; text-align: center; }
+/* --- 2. HEADER & NAV (The Fix for the List) --- */
+header {
+    background: var(--header-bg);
+    padding: 10px 5%;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
 
-/* FULL SCREEN OVERLAY ENGINE */
+nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Limit Logo Size so it doesn't cover the screen */
+.logo img {
+    height: 50px;
+    width: auto;
+    display: block;
+}
+
+nav ul {
+    display: flex; /* This makes the list horizontal */
+    list-style: none;
+    gap: 30px;
+}
+
+nav ul li a {
+    text-decoration: none;
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* Custom Buttons (No more browser squares) */
+#signin-btn, #theme-toggle, .btn-primary {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: inherit;
+    transition: 0.3s;
+}
+
+#signin-btn:hover { background: var(--primary-dark); }
+
+/* --- 3. HERO SECTION --- */
+#hero {
+    background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), var(--primary);
+    color: white;
+    text-align: center;
+    padding: 100px 20px;
+}
+
+#hero h1 { font-family: 'Syne', sans-serif; font-size: 3rem; }
+
+/* --- 4. APPS GRID --- */
+.app-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 50px 5%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.app-item {
+    background: var(--card-bg);
+    padding: 30px;
+    border-radius: 15px;
+    text-align: center;
+    text-decoration: none;
+    color: var(--text);
+    border: 1px solid rgba(0,0,0,0.1);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+/* --- 5. FULL SCREEN SIGN IN (The "Logic" Fix) --- */
 .auth-overlay-fullscreen {
-  position: fixed;
-  inset: 0;
-  background: var(--bg);
-  z-index: 99999;
-  display: none; /* Controlled by JS */
-  overflow-y: auto;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 99999;
+    display: none; /* Hidden until button click */
+    flex-direction: row;
 }
 
-.auth-split-container {
-  display: flex;
-  min-height: 100vh;
-  width: 100%;
-}
-
-/* LEFT SIDE (VISUAL) */
 .auth-visual-panel {
-  flex: 1;
-  background: linear-gradient(135deg, #1a6b1a 0%, #0a3d0a 100%);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 60px;
+    flex: 1;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px;
 }
 
-.auth-logo-large {
-  font-family: 'Syne', sans-serif;
-  font-size: 3rem;
-  font-weight: 800;
-  background: rgba(255,255,255,0.1);
-  width: 100px;
-  height: 100px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20px;
-  margin-bottom: 20px;
-  border: 2px solid rgba(255,255,255,0.2);
-}
-
-.auth-visual-panel h1 { font-family: 'Syne', sans-serif; font-size: 3.5rem; line-height: 1.1; margin-bottom: 15px; }
-
-/* RIGHT SIDE (FORM) */
 .auth-form-panel {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  background: var(--bg);
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
 }
 
-.form-inner { width: 100%; max-width: 400px; }
-.form-inner h2 { font-size: 2rem; margin-bottom: 8px; }
-.form-subtext { opacity: 0.6; margin-bottom: 30px; }
+.form-inner { width: 100%; max-width: 350px; }
 
-/* STYLED INPUTS */
 .input-styled {
-  width: 100%;
-  padding: 14px;
-  margin-bottom: 12px;
-  border: 2px solid var(--border);
-  background: var(--card);
-  color: var(--text);
-  border-radius: 12px;
-  font-size: 1rem;
-  outline: none;
-  transition: 0.2s;
-}
-.input-styled:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(34,139,34,0.1); }
-
-.auth-row { display: flex; gap: 10px; }
-
-/* BUTTONS */
-.btn-primary {
-  width: 100%;
-  background: var(--primary);
-  color: white;
-  padding: 16px;
-  border: none;
-  border-radius: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: 0.2s;
-}
-.btn-primary:hover { filter: brightness(1.1); transform: translateY(-2px); }
-
-.btn-google {
-  width: 100%;
-  background: white;
-  color: #333;
-  padding: 14px;
-  border: 2px solid #e0e0e0;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-bottom: 20px;
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: white;
 }
 
 .auth-exit {
-  position: fixed;
-  top: 30px;
-  right: 40px;
-  background: none;
-  border: none;
-  font-size: 3rem;
-  color: var(--text);
-  cursor: pointer;
-  z-index: 100000;
-  opacity: 0.5;
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 2.5rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text);
 }
-.auth-exit:hover { opacity: 1; }
 
-.auth-separator {
-  text-align: center;
-  margin: 30px 0;
-  border-bottom: 1px solid var(--border);
-  line-height: 0.1em;
-}
-.auth-separator span { background: var(--bg); padding: 0 15px; font-size: 0.8rem; color: #888; font-weight: bold; }
-
-@media (max-width: 900px) {
-  .auth-visual-panel { display: none; }
+/* FOOTER */
+footer {
+    text-align: center;
+    padding: 40px;
+    background: var(--primary);
+    color: white;
+    margin-top: 50px;
 }
