@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — Tech House</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --primary: #228B22; --bg: #ffffff; --text: #1a1a1a; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: #f4f7f4; height: 100vh; display: flex; }
+    
+    .auth-container { display: flex; width: 100%; height: 100%; }
+    
+    .brand-side { 
+      flex: 1; background: linear-gradient(135deg, #1a6b1a, #0a3d0a); 
+      color: white; display: flex; flex-direction: column; justify-content: center; padding: 60px;
+    }
+    .brand-side h1 { font-family: 'Syne', sans-serif; font-size: 4rem; line-height: 1; margin-bottom: 20px; }
+    .brand-side p { font-size: 1.2rem; opacity: 0.8; }
+
+    .form-side { 
+      flex: 1; background: white; display: flex; align-items: center; justify-content: center; padding: 40px; 
+    }
+    .form-inner { width: 100%; max-width: 400px; }
+    .form-inner h2 { font-size: 2rem; margin-bottom: 10px; }
+    .subtitle { color: #666; margin-bottom: 30px; }
+
+    .google-btn {
+      width: 100%; padding: 14px; border: 2px solid #eee; background: white;
+      border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      gap: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-bottom: 20px;
+    }
+    .google-btn:hover { background: #f9f9f9; }
+
+    .divider { text-align: center; margin: 20px 0; color: #aaa; font-size: 0.8rem; font-weight: bold; }
+
+    .input-row { display: flex; gap: 10px; }
+    input { 
+      width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 10px; 
+      border: 1px solid #ddd; font-size: 1rem; 
+    }
+    .btn-main { 
+      width: 100%; background: var(--primary); color: white; border: none; 
+      padding: 16px; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 1rem;
+    }
+    .back-home { display: block; margin-top: 20px; text-align: center; color: var(--primary); text-decoration: none; font-weight: bold; }
+
+    @media (max-width: 800px) { .brand-side { display: none; } }
+  </style>
+</head>
+<body>
+
+  <div class="auth-container">
+    <div class="brand-side">
+      <h1>Tech <br> House.</h1>
+      <p>Innovate. Create. Elevate.</p>
+    </div>
+
+    <div class="form-side">
+      <div class="form-inner">
+        <h2>Welcome Back</h2>
+        <p class="subtitle">Join our community of innovators</p>
+
+        <button id="google-signin-btn" class="google-btn">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="">
+          Continue with Google
+        </button>
+
+        <div class="divider">OR USE EMAIL</div>
+
+        <div class="input-row">
+          <input type="text" id="fname" placeholder="First Name">
+          <input type="text" id="lname" placeholder="Last Name">
+        </div>
+        <input type="email" id="email" placeholder="Email address">
+        <input type="password" id="password" placeholder="Password (6+ chars)">
+
+        <button id="email-signup-btn" class="btn-main">Create Account</button>
+        
+        <a href="index.html" class="back-home">← Back to Home</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js" type="module"></script>
+</body>
+</html>
