@@ -23,41 +23,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const userDisplayName = document.getElementById('user-display-name');
   const signinBtn = document.getElementById('signin-btn');
 
-  // --- 1. AUTH OBSERVER ---
+  // --- 1. THE TRUTH ENGINE (Auth Observer) ---
   onAuthStateChanged(auth, (user) => {
     if (user) {
+      // User is signed in
       if (signinBtn) signinBtn.style.display = 'none';
       if (userProfile) {
         userProfile.style.display = 'inline-block';
-        userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')[0]}`;
+        userDisplayName.textContent = `Signed in as ${user.displayName || user.email.split('@')[0]}`;
       }
       
-      // FIX: Only redirect if we are on the sign-in page
+      // If user logs in while on sign-in page, teleport them home
       if (window.location.pathname.includes('sign-in.html')) {
-        setTimeout(() => { window.location.href = 'index.html'; }, 500); 
+        window.location.href = 'index.html';
       }
     } else {
+      // No user is signed in
       if (signinBtn) signinBtn.style.display = 'inline-block';
       if (userProfile) userProfile.style.display = 'none';
     }
   });
 
-  // --- 2. SIGN IN PAGE LOGIC ---
+  // --- 2. GOOGLE LOGIN ---
   const googleBtn = document.getElementById('google-signin-btn');
   if (googleBtn) {
     googleBtn.onclick = async () => {
       try {
         await signInWithPopup(auth, provider);
-        // We don't need a redirect here, the Observer above handles it
+        // Page will redirect automatically because of the Observer above
       } catch (err) {
-        // Ignore the "popup closed" error if we are already logged in
-        if (err.code !== 'auth/popup-closed-by-user') {
-          alert(err.message);
-        }
+        if (err.code !== 'auth/popup-closed-by-user') alert(err.message);
       }
     };
   }
 
+  // --- 3. EMAIL SIGNUP ---
   const signupBtn = document.getElementById('email-signup-btn');
   if (signupBtn) {
     signupBtn.onclick = async () => {
@@ -65,25 +65,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const pass = document.getElementById('password').value;
       const fullName = document.getElementById('fname').value + " " + document.getElementById('lname').value;
       
-      if (!email || pass.length < 6) return alert("Enter valid email and 6+ char password");
-
       try {
         const res = await createUserWithEmailAndPassword(auth, email, pass);
         await updateProfile(res.user, { displayName: fullName });
+        window.location.href = 'index.html';
       } catch (err) { alert(err.message); }
     };
   }
 
-  // --- 3. LOGOUT ---
+  // --- 4. LOGOUT ---
   const logoutBtn = document.getElementById('logout-link');
   if (logoutBtn) {
     logoutBtn.onclick = (e) => {
       e.preventDefault();
-      signOut(auth).then(() => { window.location.href = 'index.html'; });
+      signOut(auth).then(() => {
+        window.location.href = 'index.html';
+      });
     };
   }
 
-  // --- 4. THEME & READ MORE ---
+  // --- (Theme and Read More Logic) ---
   const themeBtn = document.getElementById('theme-toggle');
   if (themeBtn) {
     themeBtn.onclick = () => {
@@ -98,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const extra = document.getElementById('about-extra');
   if (readBtn && extra) {
     readBtn.onclick = () => {
-      const isHidden = extra.style.display === 'none';
+      const isHidden = extra.style.display === 'none' || extra.style.display === '';
       extra.style.display = isHidden ? 'block' : 'none';
       readBtn.textContent = isHidden ? 'Read Less' : 'Read My Full Story';
     };
