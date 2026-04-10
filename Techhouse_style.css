@@ -1,16 +1,15 @@
 /* ============================================
-   1. RESET & VARIABLES
+   1. VARIABLES & RESET
    ============================================ */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
   --primary: #228B22;
-  --primary-dark: #1a6b1a;
-  --bg: #f8faf8;
+  --bg: #ffffff;
   --text: #1a1a1a;
-  --card: #ffffff;
+  --card: #f9f9f9;
   --header: #ffffff;
-  --border: #e0e6e0;
+  --border: #eeeeee;
 }
 
 [data-theme="dark"] {
@@ -19,7 +18,7 @@
   --card: #161b22;
   --header: #161b22;
   --primary: #4ade80;
-  --border: #2a313a;
+  --border: #30363d;
 }
 
 body {
@@ -31,7 +30,7 @@ body {
 }
 
 /* ============================================
-   2. NAVIGATION & HEADER
+   2. NAVIGATION & LOGO SIZING
    ============================================ */
 header {
   background: var(--header);
@@ -40,77 +39,78 @@ header {
   position: sticky; top: 0; z-index: 1000;
 }
 
-nav {
-  display: flex; justify-content: space-between; align-items: center;
-  max-width: 1200px; margin: 0 auto;
-}
+nav { display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto; }
 
-.logo img { height: 50px; border-radius: 8px; }
+/* FIX: Logo sizing for Main Nav */
+.logo img { height: 45px; width: auto; border-radius: 5px; }
 
 nav ul { display: flex; list-style: none; gap: 20px; }
 nav ul li a { text-decoration: none; color: var(--text); font-weight: 600; }
 
 .nav-right { display: flex; align-items: center; gap: 15px; }
 
-#theme-toggle, .btn-nav {
+/* SIGN IN BUTTON */
+#signin-btn {
   background: var(--primary); color: white; border: none;
   padding: 8px 18px; border-radius: 50px; cursor: pointer; font-weight: bold;
-}
-
-.btn-logout {
-  background: #ff4d4d; color: white; border: none;
-  padding: 8px 15px; border-radius: 50px; cursor: pointer; font-weight: bold;
+  text-decoration: none; display: inline-block;
 }
 
 /* ============================================
-   3. HERO & APPS
+   3. DROPDOWN USER MENU
    ============================================ */
-#hero {
-  background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), var(--primary);
-  color: white; text-align: center; padding: 80px 20px;
-}
-#hero h1 { font-family: 'Syne', sans-serif; font-size: 3rem; margin-bottom: 10px; }
+.dropdown { position: relative; display: inline-block; }
 
-.app-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 25px; padding: 50px 10%;
+#user-display-name {
+  background: var(--card);
+  border: 1px solid var(--primary);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 50px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
 }
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  right: 0;
+  background: var(--header);
+  min-width: 160px;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  z-index: 2000;
+}
+
+.dropdown-content a {
+  color: var(--text);
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+  font-size: 0.9rem;
+  font-weight: bold;
+}
+
+.dropdown-content a:hover { background: #ff4d4d; color: white; }
+.dropdown:hover .dropdown-content { display: block; }
 
 /* ============================================
-   4. CEO BIO SECTION (Structured for Tinafi)
+   4. SIGN-IN PAGE (SPLIT SCREEN)
    ============================================ */
-#about { max-width: 900px; margin: 0 auto; padding: 60px 20px; text-align: center; }
-
-.ceo-container { margin-bottom: 30px; }
-
-.ceo-photo {
-  width: 220px; height: 220px; border-radius: 50%;
-  border: 5px solid var(--primary); object-fit: cover;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.1); margin-bottom: 15px;
-}
-
-.ceo-caption { font-size: 1.1rem; color: var(--primary); }
-
-.bio-content { text-align: left; background: var(--card); padding: 40px; border-radius: 20px; border: 1px solid var(--border); }
-.bio-content p { margin-bottom: 15px; font-size: 1.1rem; }
-
-.read-more-btn {
-  background: none; border: 2px solid var(--primary); color: var(--primary);
-  padding: 10px 25px; border-radius: 50px; cursor: pointer; font-weight: bold;
-  display: block; margin: 20px auto 0;
-}
-
-/* ============================================
-   5. SIGN-IN PAGE LAYOUT (Split Screen)
-   ============================================ */
-.auth-container { display: flex; width: 100%; min-height: 100vh; }
+.auth-page-container { display: flex; min-height: 100vh; width: 100%; }
 
 .brand-side {
   flex: 1; background: linear-gradient(135deg, #1a6b1a, #0a3d0a);
   color: white; display: flex; flex-direction: column; justify-content: center; padding: 10%;
 }
 
-.brand-side h1 { font-family: 'Syne', sans-serif; font-size: 4.5rem; line-height: 1; margin-bottom: 20px; }
+/* FIX: Logo sizing for Sign-In Page */
+.auth-logo { width: 70px; height: 70px; border-radius: 12px; margin-bottom: 20px; }
+
+.brand-side h1 { font-family: 'Syne', sans-serif; font-size: 4rem; line-height: 1; margin-bottom: 15px; }
 
 .form-side {
   flex: 1.2; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 40px;
@@ -119,57 +119,26 @@ nav ul li a { text-decoration: none; color: var(--text); font-weight: 600; }
 .form-inner { width: 100%; max-width: 400px; }
 
 .google-btn {
-  width: 100%; padding: 14px; border: 2px solid var(--border); background: white;
-  border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  width: 100%; padding: 14px; border: 1px solid var(--border); background: white;
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
   gap: 12px; font-weight: bold; cursor: pointer; color: #333; margin-bottom: 20px;
 }
 
-.divider { text-align: center; margin: 25px 0; color: #888; font-size: 0.8rem; font-weight: bold; position: relative; }
-.divider::before { content: ""; position: absolute; left: 0; top: 50%; width: 40%; height: 1px; background: var(--border); }
-.divider::after { content: ""; position: absolute; right: 0; top: 50%; width: 40%; height: 1px; background: var(--border); }
-
-.input-row { display: flex; gap: 10px; }
-
 input {
-  width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 10px;
+  width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 10px;
   border: 1px solid var(--border); background: var(--card); color: var(--text);
-  font-size: 1rem;
 }
 
 .btn-main {
   width: 100%; background: var(--primary); color: white; border: none;
-  padding: 16px; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 1.1rem;
-}
-
-@media (max-width: 850px) {
-  .brand-side { display: none; }
+  padding: 16px; border-radius: 10px; font-weight: bold; cursor: pointer;
 }
 
 /* ============================================
-   6. FOOTER
+   5. HERO & ABOUT
    ============================================ */
-footer {
-  text-align: center; padding: 50px 20px; background: var(--card);
-  border-top: 1px solid var(--border); margin-top: 50px;
-}/* ... (Keep your other CSS at the top) ... */
+#hero { background: var(--primary); color: white; padding: 80px 20px; text-align: center; }
+#about { max-width: 800px; margin: 0 auto; padding: 60px 20px; text-align: center; }
+.ceo-photo { width: 200px; height: 200px; border-radius: 50%; border: 4px solid var(--primary); margin-bottom: 15px; }
 
-/* BRAND SIDE LOGO FIX */
-.auth-logo {
-  width: 80px;         /* Forced Width */
-  height: 80px;        /* Forced Height */
-  object-fit: cover;   /* Keeps it from stretching */
-  border-radius: 12px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  display: block;
-}
-
-/* Ensure the brand side text doesn't get crushed */
-.brand-side h1 {
-  font-family: 'Syne', sans-serif;
-  font-size: clamp(2.5rem, 5vw, 4rem); /* Responsive size */
-  line-height: 1;
-  margin-bottom: 20px;
-}
-
-/* ... (Rest of your CSS) ... */
+@media (max-width: 850px) { .brand-side { display: none; } }
