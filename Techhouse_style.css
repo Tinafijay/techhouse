@@ -151,4 +151,25 @@ input {
 footer {
   text-align: center; padding: 50px 20px; background: var(--card);
   border-top: 1px solid var(--border); margin-top: 50px;
+}/* ... (Keep your other CSS at the top) ... */
+
+/* BRAND SIDE LOGO FIX */
+.auth-logo {
+  width: 80px;         /* Forced Width */
+  height: 80px;        /* Forced Height */
+  object-fit: cover;   /* Keeps it from stretching */
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  display: block;
 }
+
+/* Ensure the brand side text doesn't get crushed */
+.brand-side h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4rem); /* Responsive size */
+  line-height: 1;
+  margin-bottom: 20px;
+}
+
+/* ... (Rest of your CSS) ... */
