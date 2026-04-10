@@ -1,5 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { 
+  getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, 
+  createUserWithEmailAndPassword, updateProfile, signOut 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB5CZLo-CTT2JZxw6SEVSA_wuxkCuE7aUI",
@@ -16,49 +19,71 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 document.addEventListener('DOMContentLoaded', () => {
-    const modal = document.getElementById('authOverlay');
-    const signinBtn = document.getElementById('signin-btn');
-    const closeBtn = document.getElementById('authCloseBtn');
-    const userProfile = document.getElementById('user-profile');
-    const userDisplayName = document.getElementById('user-display-name');
+  const userProfile = document.getElementById('user-profile');
+  const userDisplayName = document.getElementById('user-display-name');
+  const signinBtn = document.getElementById('signin-btn');
 
-    // 1. Modal Logic
-    if (signinBtn) signinBtn.onclick = () => { modal.style.display = 'flex'; };
-    if (closeBtn) closeBtn.onclick = () => { modal.style.display = 'none'; };
-    window.addEventListener('keydown', (e) => { if (e.key === "Escape") modal.style.display = 'none'; });
+  // --- 1. AUTH OBSERVER ---
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      if (signinBtn) signinBtn.style.display = 'none';
+      if (userProfile) {
+        userProfile.style.display = 'inline-block';
+        userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')[0]}`;
+      }
+      // If we are on sign-in page, go home
+      if (window.location.pathname.includes('sign-in.html')) window.location.href = 'index.html';
+    } else {
+      if (signinBtn) signinBtn.style.display = 'inline-block';
+      if (userProfile) userProfile.style.display = 'none';
+    }
+  });
 
-    // 2. Auth Logic
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            modal.style.display = 'none';
-            signinBtn.style.display = 'none';
-            userProfile.style.display = 'block';
-            userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')[0]}`;
-        } else {
-            signinBtn.style.display = 'block';
-            userProfile.style.display = 'none';
-        }
-    });
+  // --- 2. SIGN IN PAGE LOGIC ---
+  const googleBtn = document.getElementById('google-signin-btn');
+  if (googleBtn) {
+    googleBtn.onclick = () => signInWithPopup(auth, provider).catch(err => alert(err.message));
+  }
 
-    document.getElementById('google-signin-btn').onclick = () => signInWithPopup(auth, provider);
-    document.getElementById('logout-link').onclick = () => signOut(auth).then(() => location.reload());
+  const signupBtn = document.getElementById('email-signup-btn');
+  if (signupBtn) {
+    signupBtn.onclick = async () => {
+      const email = document.getElementById('email').value;
+      const pass = document.getElementById('password').value;
+      const fullName = document.getElementById('fname').value + " " + document.getElementById('lname').value;
+      
+      try {
+        const res = await createUserWithEmailAndPassword(auth, email, pass);
+        await updateProfile(res.user, { displayName: fullName });
+        window.location.href = 'index.html';
+      } catch (err) { alert(err.message); }
+    };
+  }
 
-    // 3. Theme Toggle
-    document.getElementById('theme-toggle').onclick = () => {
-        const isDark = document.body.getAttribute('data-theme') === 'dark';
-        document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
-        localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  // --- 3. LOGOUT ---
+  const logoutBtn = document.getElementById('logout-link');
+  if (logoutBtn) {
+    logoutBtn.onclick = () => signOut(auth).then(() => location.reload());
+  }
+
+  // --- 4. THEME & READ MORE ---
+  const themeBtn = document.getElementById('theme-toggle');
+  if (themeBtn) {
+    themeBtn.onclick = () => {
+      const isDark = document.body.getAttribute('data-theme') === 'dark';
+      document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
     };
     document.body.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+  }
 
-    // 4. Read More
-    const readBtn = document.getElementById('readBtn');
-    const extra = document.getElementById('about-extra');
-    if (readBtn && extra) {
-        readBtn.onclick = () => {
-            const isHidden = extra.style.display === 'none';
-            extra.style.display = isHidden ? 'block' : 'none';
-            readBtn.textContent = isHidden ? 'Read Less' : 'Read More';
-        };
-    }
+  const readBtn = document.getElementById('readBtn');
+  const extra = document.getElementById('about-extra');
+  if (readBtn && extra) {
+    readBtn.onclick = () => {
+      const isHidden = extra.style.display === 'none';
+      extra.style.display = isHidden ? 'block' : 'none';
+      readBtn.textContent = isHidden ? 'Read Less' : 'Read My Full Story';
+    };
+  }
 });
