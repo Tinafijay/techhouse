@@ -31,8 +31,11 @@ document.addEventListener('DOMContentLoaded', () => {
         userProfile.style.display = 'inline-block';
         userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')[0]}`;
       }
-      // If we are on sign-in page, go home
-      if (window.location.pathname.includes('sign-in.html')) window.location.href = 'index.html';
+      
+      // FIX: Only redirect if we are on the sign-in page
+      if (window.location.pathname.includes('sign-in.html')) {
+        setTimeout(() => { window.location.href = 'index.html'; }, 500); 
+      }
     } else {
       if (signinBtn) signinBtn.style.display = 'inline-block';
       if (userProfile) userProfile.style.display = 'none';
@@ -42,7 +45,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- 2. SIGN IN PAGE LOGIC ---
   const googleBtn = document.getElementById('google-signin-btn');
   if (googleBtn) {
-    googleBtn.onclick = () => signInWithPopup(auth, provider).catch(err => alert(err.message));
+    googleBtn.onclick = async () => {
+      try {
+        await signInWithPopup(auth, provider);
+        // We don't need a redirect here, the Observer above handles it
+      } catch (err) {
+        // Ignore the "popup closed" error if we are already logged in
+        if (err.code !== 'auth/popup-closed-by-user') {
+          alert(err.message);
+        }
+      }
+    };
   }
 
   const signupBtn = document.getElementById('email-signup-btn');
@@ -52,10 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const pass = document.getElementById('password').value;
       const fullName = document.getElementById('fname').value + " " + document.getElementById('lname').value;
       
+      if (!email || pass.length < 6) return alert("Enter valid email and 6+ char password");
+
       try {
         const res = await createUserWithEmailAndPassword(auth, email, pass);
         await updateProfile(res.user, { displayName: fullName });
-        window.location.href = 'index.html';
       } catch (err) { alert(err.message); }
     };
   }
@@ -63,7 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- 3. LOGOUT ---
   const logoutBtn = document.getElementById('logout-link');
   if (logoutBtn) {
-    logoutBtn.onclick = () => signOut(auth).then(() => location.reload());
+    logoutBtn.onclick = (e) => {
+      e.preventDefault();
+      signOut(auth).then(() => { window.location.href = 'index.html'; });
+    };
   }
 
   // --- 4. THEME & READ MORE ---
