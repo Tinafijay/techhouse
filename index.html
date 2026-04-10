@@ -6,135 +6,26 @@
     <title>Tech House - Innovate. Create. Elevate.</title>
     <script src="coi-serviceworker.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Techhouse_style.css"> 
     <style>
-        /* --- THEME VARIABLES --- */
-        :root {
-            --bg-color: #ffffff;
-            --text-color: #333333;
-            --card-bg: #f9f9fb;
-            --header-bg: #ffffff;
-            --primary-color: #0066cc;
-            --footer-bg: #1a1a1a;
-            --transition: all 0.3s ease;
-        }
-
-        [data-theme="dark"] {
-            --bg-color: #0f172a;
-            --text-color: #f1f5f9;
-            --card-bg: #1e293b;
-            --header-bg: #1e293b;
-            --primary-color: #38bdf8;
-            --footer-bg: #020617;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            line-height: 1.8;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            transition: var(--transition);
-        }
-
-        header {
-            background: var(--header-bg);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            transition: var(--transition);
-        }
-
-        nav {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-        }
-
-        .nav-right { display: flex; align-items: center; gap: 25px; }
-        .logo img { height: 50px; }
-        nav ul { display: flex; list-style: none; gap: 25px; }
-        nav a { text-decoration: none; color: var(--text-color); font-weight: 600; transition: var(--transition); }
-        nav a:hover { color: var(--primary-color); }
-
-        #theme-toggle {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            font-weight: bold;
-        }
-
-        section { padding: 80px 20px; max-width: 1000px; margin: 0 auto; }
-        
-        #hero {
-            background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), #2c3e50;
-            height: 40vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            text-align: center;
-            max-width: 100%;
-        }
-
-        .app-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 25px;
-            margin-top: 40px;
-        }
-
-        .app-item {
-            background: var(--card-bg);
-            padding: 30px;
-            text-align: center;
-            border-radius: 12px;
-            text-decoration: none;
-            color: var(--text-color);
-            border: 1px solid rgba(128,128,128,0.1);
-            transition: var(--transition);
-        }
-
-        .app-item:hover { transform: translateY(-5px); border-color: var(--primary-color); }
-
-        .ceo-photo {
-            width: 250px;
-            height: 250px;
-            border-radius: 15px;
-            object-fit: cover;
-            margin-bottom: 15px;
-            border: 5px solid var(--primary-color);
-        }
-
-        #about-extra { display: none; margin-top: 20px; }
-
-        .read-more-btn {
-            background: none;
-            border: 2px solid var(--primary-color);
-            color: var(--primary-color);
-            padding: 8px 20px;
-            cursor: pointer;
-            font-weight: bold;
-            border-radius: 5px;
-            margin: 20px auto;
-            display: block;
-        }
-
-        footer { background: var(--footer-bg); color: white; text-align: center; padding: 40px 20px; }
+        /* ADDING ONLY MODAL STYLES HERE TO KEEP EXTERNAL CSS CLEAN */
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
+        .modal-content { background: var(--card-bg); margin: 10% auto; padding: 30px; border-radius: 15px; width: 90%; max-width: 400px; text-align: center; color: var(--text-color); }
+        .google-btn { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; background: white; color: #444; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; margin-bottom: 20px; }
+        .separator { margin: 20px 0; border-bottom: 1px solid #ddd; line-height: 0.1em; }
+        .separator span { background: var(--card-bg); padding: 0 10px; color: #888; }
+        #email-form input { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; background: var(--bg-color); color: var(--text-color); }
+        .name-row { display: flex; gap: 10px; }
+        .password-container { position: relative; }
+        #togglePassword { position: absolute; right: 10px; top: 12px; background: none; border: none; color: var(--primary-color); cursor: pointer; }
+        .continue-btn { width: 100%; padding: 12px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-content { display: none; position: absolute; right: 0; background-color: var(--card-bg); min-width: 160px; box-shadow: 0px 8px 16px rgba(0,0,0,0.2); z-index: 1; border-radius: 8px; }
+        .dropdown-content a { color: var(--text-color); padding: 12px 16px; text-decoration: none; display: block; cursor: pointer; }
+        .dropdown:hover .dropdown-content { display: block; }
     </style>
 </head>
-<body>
-
-    <header>
+<body data-theme="light"> <header>
         <nav>
             <div class="logo">
                 <img src="Tech House logo.jpg" alt="Tech House Logo">
@@ -143,10 +34,19 @@
                 <ul>
                     <li><a href="#home">Home</a></li>
                     <li><a href="#apps">Apps</a></li>
-                    <li><a href="#about">About</a></li>
                     <li><a href="blog.html">Blog</a></li>
-                    <li><a href="#contact">Contact</a></li>
                 </ul>
+                
+                <div id="auth-ui">
+                    <button id="signin-btn" class="read-more-btn" style="margin:0; padding: 5px 15px;" onclick="openModal()">Sign In</button>
+                    <div id="user-profile" style="display: none;" class="dropdown">
+                        <button class="dropbtn" id="user-display-name" style="background: var(--primary-color); color: white; border: none; padding: 8px 15px; border-radius: 20px; cursor: pointer;">Loading...</button>
+                        <div class="dropdown-content">
+                            <a onclick="handleLogout()">Log Out</a>
+                        </div>
+                    </div>
+                </div>
+
                 <button id="theme-toggle">Switch Theme</button>
             </div>
         </nav>
@@ -161,67 +61,48 @@
         <section id="apps">
             <h2>Our Applications</h2>
             <div class="app-grid">
-                <a href="tech-house-editor.html" class="app-item"><h3>🎬 Fast Video Editor</h3></a>
+                <a href="tech-house-editor.html" class="app-item"><h3>🎬 Tech House Editor</h3></a>
                 <a href="poisoning detector.html" class="app-item"><h3>🍎 Food Poisoning Detector</h3></a>
                 <div class="app-item" onclick="alert('Coming Soon!')" style="cursor:pointer"><h3>⭐ T Vision</h3></div>
                 <div class="app-item" onclick="alert('Coming Soon!')" style="cursor:pointer"><h3>🎶 Music Producer</h3></div>
             </div>
         </section>
+        </main>
 
-        <section id="about">
-            <h2>About Tech House</h2>
-            <p>At Tech House, we're driven by a simple yet powerful mission: to make technology accessible, intuitive, and genuinely helpful for everyone.</p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-                <img src="tinafi jay.jpg" alt="CEO Tinafi Akawu" class="ceo-photo">
-                <h3>Meet Our CEO: Tinafi Akawu</h3>
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <span style="float:right; cursor:pointer;" onclick="closeModal()">&times;</span>
+            <h2 style="margin-bottom: 20px;">Join Tech House</h2>
+            <button class="google-btn" onclick="loginWithGoogle()">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18">
+                Continue with Google
+            </button>
+            <div class="separator"><span>OR</span></div>
+            <div id="email-form">
+                <div class="name-row">
+                    <input type="text" id="fname" placeholder="First Name">
+                    <input type="text" id="lname" placeholder="Last Name">
+                </div>
+                <input type="email" id="email" placeholder="Email">
+                <div class="password-container">
+                    <input type="password" id="password" placeholder="Password">
+                    <button type="button" id="togglePassword" onclick="togglePassView()">Show</button>
+                </div>
+                <button class="continue-btn" onclick="handleEmailSignUp()">Continue</button>
             </div>
+        </div>
+    </div>
 
-            <p>Behind Tech House is Tinafi Akawu, a fifteen-year-old artist and tech enthusiast whose fascination with technology began at a very young age...</p>
-
-            <div id="about-extra">
-                <p>Recognizing the universal need for technological understanding, Tinafi founded Tech House in 2023. What began as a dedicated WhatsApp group quickly expanded its reach to prominent social media platforms like YouTube and Facebook.</p>
-                <p>Tinafi's driving force is a desire to reshape the world through better and more accessible technology. This vision is actively taking shape through ambitious app development projects like T Vision and Music Producer.</p>
-            </div>
-            <button class="read-more-btn" onclick="toggleAbout()" id="readBtn">Read More</button>
-        </section>
-
-        <section id="contact">
-            <div style="background: var(--card-bg); padding: 40px; border-radius: 15px; text-align: center;">
-                <h2>Get In Touch</h2>
-                <p>Call or WhatsApp: <a href="tel:+2348057813535" style="color: var(--primary-color); font-weight: bold;">08057813535</a></p>
-            </div>
-        </section>
-    </main>
-
-    <footer>
-        <p>&copy; 2026 Tech House. All rights reserved.</p>
-    </footer>
-
+    <script src="script.js"></script> 
     <script>
-        const toggleBtn = document.getElementById('theme-toggle');
-        const body = document.body;
-
-        toggleBtn.addEventListener('click', () => {
-            if (body.getAttribute('data-theme') === 'dark') {
-                body.removeAttribute('data-theme');
-                toggleBtn.innerText = "Switch to Dark";
-            } else {
-                body.setAttribute('data-theme', 'dark');
-                toggleBtn.innerText = "Switch to Light";
-            }
-        });
-
-        function toggleAbout() {
-            const extra = document.getElementById('about-extra');
-            const btn = document.getElementById('readBtn');
-            if (extra.style.display === 'block') {
-                extra.style.display = 'none';
-                btn.innerText = 'Read More';
-            } else {
-                extra.style.display = 'block';
-                btn.innerText = 'Read Less';
-            }
+        // Modal UI Helpers
+        function openModal() { document.getElementById('authModal').style.display = 'block'; }
+        function closeModal() { document.getElementById('authModal').style.display = 'none'; }
+        function togglePassView() {
+            const p = document.getElementById('password');
+            const b = document.getElementById('togglePassword');
+            p.type = p.type === "password" ? "text" : "password";
+            b.innerText = p.type === "password" ? "Show" : "Hide";
         }
     </script>
 </body>
