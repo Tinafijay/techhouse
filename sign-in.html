@@ -6,7 +6,7 @@
   <title>Sign In — Tech House</title>
   <link rel="stylesheet" href="Techhouse_style.css">
 </head>
-<body>
+<body class="auth-body">
   <div class="auth-page-container">
     <div class="brand-side">
       <img src="Tech House logo.jpg" alt="Logo" class="auth-logo">
@@ -15,20 +15,31 @@
     </div>
     <div class="form-side">
       <div class="form-inner">
-        <h2>Welcome Back</h2>
+        <h2 id="auth-title">Welcome Back</h2>
+        <p id="auth-subtitle" style="margin-bottom: 20px; opacity: 0.7;">Sign in to continue to Tech House</p>
+
         <button id="google-signin-btn" class="google-btn">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="">
           Continue with Google
         </button>
-        <div style="text-align:center; margin-bottom:20px; color:#888;">OR USE EMAIL</div>
-        <div style="display:flex; gap:10px;">
+
+        <div class="auth-divider">OR</div>
+
+        <div id="name-fields" style="display:none; gap:10px;">
           <input type="text" id="fname" placeholder="First Name">
           <input type="text" id="lname" placeholder="Last Name">
         </div>
         <input type="email" id="email" placeholder="Email">
         <input type="password" id="password" placeholder="Password (6+ chars)">
-        <button id="email-signup-btn" class="btn-main">Create Account</button>
-        <a href="index.html" style="display:block; text-align:center; margin-top:20px; color:var(--primary); text-decoration:none; font-weight:bold;">← Back to Home</a>
+        
+        <button id="submit-auth-btn" class="btn-main">Sign In</button>
+
+        <p class="toggle-text" style="text-align:center; margin-top:20px;">
+          <span id="toggle-msg">Don't have an account?</span> 
+          <a href="#" id="auth-toggle-link" style="color:var(--primary); font-weight:bold; text-decoration:none;">Create one</a>
+        </p>
+
+        <a href="index.html" class="back-home">← Back to Home</a>
       </div>
     </div>
   </div>
