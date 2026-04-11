@@ -18,23 +18,49 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Auth State Observer (Updates Nav Bar)
-    onAuthStateChanged(auth, (user) => {
-        const signinBtn = document.getElementById('signin-btn');
-        const userProfile = document.getElementById('user-profile');
-        const userDisplayName = document.getElementById('user-display-name');
+    const signinBtn = document.getElementById('signin-btn');
+    const userProfile = document.getElementById('user-profile');
+    const userDisplayName = document.getElementById('user-display-name');
 
-        if (user && userDisplayName) {
-            if(signinBtn) signinBtn.style.display = 'none';
-            if(userProfile) userProfile.style.display = 'flex';
-            userDisplayName.textContent = `Signed in as ${user.displayName || user.email.split('@')}`;
-        } else if (signinBtn) {
-            signinBtn.style.display = 'inline-block';
-            if(userProfile) userProfile.style.display = 'none';
+    // --- 1. THE OBSERVER (The "Guard") ---
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            console.log("User detected:", user.displayName);
+            if (signinBtn) signinBtn.style.display = 'none';
+            if (userProfile) userProfile.style.display = 'flex';
+            if (userDisplayName) {
+                userDisplayName.textContent = `Signed in as ${user.displayName || user.email.split('@')}`;
+            }
+
+            // ONLY redirect if we are currently stuck on the sign-in page
+            if (window.location.pathname.includes('sign-in.html')) {
+                window.location.replace('index.html'); 
+            }
+        } else {
+            console.log("No user signed in.");
+            if (signinBtn) signinBtn.style.display = 'inline-block';
+            if (userProfile) userProfile.style.display = 'none';
         }
     });
 
-    // 2. Toggle Login/Signup Mode
+    // --- 2. GOOGLE SIGN IN (The Fix) ---
+    const googleBtn = document.getElementById('google-signin-btn');
+    if (googleBtn) {
+        googleBtn.onclick = async () => {
+            try {
+                // Using 'replace' to ensure we don't create a "back button" loop
+                const result = await signInWithPopup(auth, provider);
+                if (result.user) {
+                    window.location.replace('index.html');
+                }
+            } catch (err) {
+                console.error("Auth Error:", err.code);
+                alert("Google Sign-in failed: " + err.message);
+            }
+        };
+    }
+
+    // --- 3. LOGIN/SIGNUP TOGGLE (Your Specific Request) ---
     let isSignUp = false;
     const toggleLink = document.getElementById('auth-toggle-link');
     const nameFields = document.getElementById('name-fields');
@@ -45,60 +71,47 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleLink.onclick = (e) => {
             e.preventDefault();
             isSignUp = !isSignUp;
+            
+            // Toggle Fields
             nameFields.style.display = isSignUp ? 'flex' : 'none';
+            
+            // Toggle Text
             authTitle.textContent = isSignUp ? 'Create Account' : 'Sign In';
             submitBtn.textContent = isSignUp ? 'Register' : 'Login to Tech House';
-            document.getElementById('toggle-text').textContent = isSignUp ? 'Already have an account?' : 'New to Tech House?';
             toggleLink.textContent = isSignUp ? 'Sign In' : 'Create Account';
+            document.getElementById('toggle-text').textContent = isSignUp ? 'Already have an account?' : 'New to Tech House?';
         };
     }
 
-    // 3. Form Submission (Login vs Register)
+    // --- 4. EMAIL AUTH (Login vs Signup) ---
     if (submitBtn) {
         submitBtn.onclick = async () => {
             const email = document.getElementById('email').value;
             const pass = document.getElementById('password').value;
+            
+            if(!email || !pass) return alert("Please fill all fields");
+
             try {
                 if (isSignUp) {
-                    const name = document.getElementById('fname').value + " " + document.getElementById('lname').value;
+                    const fname = document.getElementById('fname').value;
+                    const lname = document.getElementById('lname').value;
                     const res = await createUserWithEmailAndPassword(auth, email, pass);
-                    await updateProfile(res.user, { displayName: name });
+                    await updateProfile(res.user, { displayName: `${fname} ${lname}` });
                 } else {
                     await signInWithEmailAndPassword(auth, email, pass);
                 }
-                window.location.href = 'index.html'; // REDIRECT BACK HOME
+                window.location.replace('index.html');
             } catch (err) { alert(err.message); }
         };
     }
 
-    // 4. Google Login
-    const googleBtn = document.getElementById('google-signin-btn');
-    if (googleBtn) {
-        googleBtn.onclick = async () => {
-            try {
-                await signInWithPopup(auth, provider);
-                window.location.href = 'index.html'; // REDIRECT BACK HOME
-            } catch (err) { console.error(err); }
-        };
-    }
-
-    // 5. Logout
+    // --- 5. LOGOUT ---
     const logoutBtn = document.getElementById('logout-link');
     if (logoutBtn) {
         logoutBtn.onclick = () => {
-            signOut(auth).then(() => { window.location.href = 'index.html'; });
+            signOut(auth).then(() => {
+                window.location.replace('index.html');
+            });
         };
-    }
-
-    // 6. Theme Toggle (Restored)
-    const themeBtn = document.getElementById('theme-toggle');
-    if (themeBtn) {
-        themeBtn.onclick = () => {
-            const body = document.body;
-            const isDark = body.getAttribute('data-theme') === 'dark';
-            body.setAttribute('data-theme', isDark ? 'light' : 'dark');
-            localStorage.setItem('theme', isDark ? 'light' : 'dark');
-        };
-        if(localStorage.getItem('theme') === 'dark') document.body.setAttribute('data-theme', 'dark');
     }
 });
