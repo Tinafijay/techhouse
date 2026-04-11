@@ -1,48 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In — Tech House</title>
-  <link rel="stylesheet" href="Techhouse_style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - Tech House</title>
+    <link rel="stylesheet" href="Techhouse_style.css">
+    <style>
+        .auth-container { max-width: 400px; margin: 80px auto; padding: 30px; background: var(--card-bg); border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .auth-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 20px; }
+        .input-group { margin-bottom: 15px; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+        .btn-main { width: 100%; padding: 12px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .google-btn { width: 100%; padding: 12px; border: 1px solid #ddd; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; margin-bottom: 20px; }
+        .toggle-link { text-align: center; margin-top: 15px; font-size: 0.9rem; }
+        .toggle-link a { color: var(--primary-color); text-decoration: none; font-weight: bold; }
+    </style>
 </head>
-<body class="auth-body">
-  <div class="auth-page-container">
-    <div class="brand-side">
-      <img src="Tech House logo.jpg" alt="Logo" class="auth-logo">
-      <h1>Tech <br> House.</h1>
-      <p>Innovate. Create. Elevate.</p>
-    </div>
-    <div class="form-side">
-      <div class="form-inner">
-        <h2 id="auth-title">Welcome Back</h2>
-        <p id="auth-subtitle" style="margin-bottom: 20px; opacity: 0.7;">Sign in to continue to Tech House</p>
-
+<body>
+    <div class="auth-container">
+        <h2 id="auth-title">Sign In</h2>
+        
         <button id="google-signin-btn" class="google-btn">
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="">
-          Continue with Google
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"> Continue with Google
         </button>
 
-        <div class="auth-divider">OR</div>
+        <div style="text-align:center; margin-bottom:15px; color:#888;">OR</div>
 
-        <div id="name-fields" style="display:none; gap:10px;">
-          <input type="text" id="fname" placeholder="First Name">
-          <input type="text" id="lname" placeholder="Last Name">
+        <div id="name-fields" style="display:none; gap:10px; margin-bottom:15px;">
+            <input type="text" id="fname" placeholder="First Name">
+            <input type="text" id="lname" placeholder="Last Name">
         </div>
-        <input type="email" id="email" placeholder="Email">
-        <input type="password" id="password" placeholder="Password (6+ chars)">
+
+        <div class="input-group">
+            <input type="email" id="email" placeholder="Email Address">
+        </div>
+        <div class="input-group">
+            <input type="password" id="password" placeholder="Password">
+        </div>
+
+        <button id="submit-auth-btn" class="btn-main">Login to Tech House</button>
+
+        <div class="toggle-link">
+            <span id="toggle-text">New to Tech House?</span> 
+            <a href="#" id="auth-toggle-link">Create Account</a>
+        </div>
         
-        <button id="submit-auth-btn" class="btn-main">Sign In</button>
-
-        <p class="toggle-text" style="text-align:center; margin-top:20px;">
-          <span id="toggle-msg">Don't have an account?</span> 
-          <a href="#" id="auth-toggle-link" style="color:var(--primary); font-weight:bold; text-decoration:none;">Create one</a>
-        </p>
-
-        <a href="index.html" class="back-home">← Back to Home</a>
-      </div>
+        <div style="text-align:center; margin-top:20px;">
+            <a href="index.html" style="color:#888; text-decoration:none;">← Back to Home</a>
+        </div>
     </div>
-  </div>
-  <script src="script.js" type="module"></script>
+
+    <script src="script.js" type="module"></script>
 </body>
 </html>
