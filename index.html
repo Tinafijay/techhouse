@@ -1,97 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tech House — Innovate. Create. Elevate.</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="Techhouse_style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech House - Innovate. Create. Elevate.</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Techhouse_style.css">
 </head>
 <body>
 
-  <header>
-    <nav>
-      <div class="logo">
-        <img src="Tech House logo.jpg" alt="Tech House Logo">
-      </div>
-      <div class="nav-right">
-        <ul>
-          <li><a href="index.html">Home</a></li>
-          <li><a href="#apps">Apps</a></li>
-          <li><a href="#about">About</a></li>
-        </ul>
-        
-        <div id="auth-ui">
-          <a href="sign-in.html" id="signin-btn">Sign In</a>
-          
-          <div id="user-profile" class="dropdown" style="display:none;">
-            <button id="user-display-name" aria-haspopup="true" aria-expanded="false">User</button>
-            <div class="dropdown-content" id="user-dropdown">
-              <a href="#" id="logout-link">Log Out</a>
+    <header>
+        <nav>
+            <div class="logo"><img src="Tech House logo.jpg" alt="Tech House Logo" style="height: 50px;"></div>
+            <div class="nav-right">
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="#apps">Apps</a></li>
+                    <li><a href="#about">About</a></li>
+                </ul>
+                <div id="auth-ui">
+                    <a href="sign-in.html" id="signin-btn" class="main-btn">Sign In</a>
+                    
+                    <div id="user-profile" style="display:none; align-items: center; gap: 10px;">
+                        <span id="user-display-name" style="font-weight: bold; color: var(--primary-color);">User</span>
+                        <button id="logout-link" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">Log Out</button>
+                    </div>
+                </div>
+                <button id="theme-toggle">Switch Theme</button>
             </div>
-          </div>
-        </div>
-        
-        <button id="theme-toggle">Switch Theme</button>
-      </div>
-    </nav>
-  </header>
+        </nav>
+    </header>
 
-  <main id="home">
-    <section id="hero">
-      <h1>Tech House</h1>
-      <p>Innovate. Create. Elevate.</p>
-    </section>
+    <main id="home">
+        <section id="hero">
+            <h1>Welcome to Tech House</h1>
+            <p>Innovate. Create. Elevate.</p>
+        </section>
 
-    <section id="apps">
-      <h2 style="text-align: center; margin-bottom: 40px;">Our Applications</h2>
-      <div class="app-grid">
-        <a href="tech-house-editor.html" class="app-item">
-          <div class="app-icon">🎬</div>
-          <h3>Tech House Editor</h3>
-          <p>Accessible Video Editing</p>
-        </a>
-        <a href="poisoning detector.html" class="app-item">
-          <div class="app-icon">🍎</div>
-          <h3>Food Poisoning Detector</h3>
-          <p>AI-Powered Safety Tool</p>
-        </a>
-        <div class="app-item app-item-placeholder">
-          <div class="app-icon">⭐</div>
-          <h3>T Vision</h3>
-          <p>Coming Soon</p>
-        </div>
-      </div>
-    </section>
+        <section id="apps">
+            <h2>Our Applications</h2>
+            <div class="app-grid">
+                <a href="tech-house-editor.html" class="app-item"><h3>🎬 Tech House Editor</h3></a>
+                <a href="poisoning detector.html" class="app-item"><h3>🍎 Food Poisoning Detector</h3></a>
+                <div class="app-item" onclick="alert('Coming Soon!')"><h3>⭐ T Vision</h3></div>
+            </div>
+        </section>
 
-    <section id="about">
-      <h2>About the Founder</h2>
-      <div class="ceo-container">
-        <img src="tinafi jay.jpg" alt="Tinafi Akawu" class="ceo-photo">
-        <p class="ceo-caption"><strong>CEO of Tech House — Tinafi Akawu</strong></p>
-      </div>
-      
-      <div class="bio-content">
-        <p>My name is Tinafi Akawu. I am a fifteen-year-old tech enthusiast, artist, and innovator. Tech House was born from my passion for making technology accessible to everyone through tools like screen readers and AI.</p>
-        
-        <div id="about-extra" style="display:none;">
-          <p>Starting as a WhatsApp group, Tech House expanded to YouTube and Facebook. Today, I am focused on making technology truly accessible with projects like T-Vision and the Music Producer app.</p>
-        </div>
-        
-        <button id="readBtn" class="read-more-btn">Read My Full Story</button>
-      </div>
-    </section>
-  </main>
+        <section id="about">
+            <h2>About Tech House</h2>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="tinafi jay.jpg" alt="CEO" style="width: 200px; border-radius: 15px; border: 3px solid var(--primary-color);">
+            </div>
+            <p>At Tech House, we make technology accessible for everyone.</p>
+            <div id="about-extra" style="display:none;">
+                <p>Founded by Tinafi Akawu in 2023, we focus on AI and accessibility tools.</p>
+            </div>
+            <button class="read-more-btn" id="readBtn">Read More</button>
+        </section>
+    </main>
 
-  <footer>
-    <div class="footer-content">
-      <p>&copy; 2026 Tech House. Built for accessibility.</p>
-      <div class="contact-info">
-        <a href="https://wa.me/2348057813535" class="whatsapp-btn">Call or WhatsApp: 08057813535</a>
-      </div>
-    </div>
-  </footer>
-
-  <script src="script.js" type="module"></script>
+    <script src="script.js" type="module"></script>
 </body>
 </html>
