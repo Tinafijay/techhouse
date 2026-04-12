@@ -1,12 +1,20 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
-  getAuth, GoogleAuthProvider, signInWithRedirect, 
+  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, 
   onAuthStateChanged, signInWithEmailAndPassword, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+// --- THE MAGIC FIX: DYNAMIC AUTH DOMAIN ---
+// This automatically matches the authDomain to the URL you are using, 
+// preventing Chromebooks, iPhones, and Safari from blocking the login session.
+const currentDomain = window.location.hostname;
+const dynamicAuthDomain = (currentDomain === 'localhost' || currentDomain === '127.0.0.1') 
+    ? "techhouse-87e28.firebaseapp.com" 
+    : currentDomain;
+
 const firebaseConfig = {
   apiKey: "AIzaSyB5CZLo-CTT2JZxw6SEVSA_wuxkCuE7aUI",
-  authDomain: "techhouse-87e28.firebaseapp.com",
+  authDomain: dynamicAuthDomain, // <-- This changes based on your current link
   projectId: "techhouse-87e28",
   storageBucket: "techhouse-87e28.firebasestorage.app",
   messagingSenderId: "249148429400",
@@ -19,7 +27,17 @@ const provider = new GoogleAuthProvider();
 
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- 1. THE OBSERVER (Handles all routing automatically) ---
+    // --- 1. CATCH THE REDIRECT (Fires right after you pick your Google account) ---
+    getRedirectResult(auth).then((result) => {
+        if (result?.user) {
+            window.location.replace('index.html');
+        }
+    }).catch((error) => {
+        console.error("Google Auth Error:", error.message);
+        alert("Login failed: " + error.message);
+    });
+
+    // --- 2. THE TRUTH ENGINE (Updates Navbar UI) ---
     onAuthStateChanged(auth, (user) => {
         const signinBtn = document.getElementById('signin-btn');
         const userProfile = document.getElementById('user-profile');
@@ -27,23 +45,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const isSignInPage = window.location.pathname.includes('sign-in.html');
 
         if (user) {
-            // User is officially logged in
             if (signinBtn) signinBtn.style.display = 'none';
             if (userProfile) userProfile.style.display = 'flex';
             if (userDisplayName) userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')}`;
             
-            // If they are stuck on the sign-in page, boot them to the homepage
+            // If they are on the sign-in page, push them to the homepage
             if (isSignInPage) {
-                window.location.href = 'index.html';
+                window.location.replace('index.html');
             }
         } else {
-            // No user
             if (signinBtn) signinBtn.style.display = 'inline-block';
             if (userProfile) userProfile.style.display = 'none';
         }
     });
 
-    // --- 2. GOOGLE LOGIN ---
+    // --- 3. GOOGLE LOGIN BUTTON ---
     const googleBtn = document.getElementById('google-signin-btn');
     if (googleBtn) {
         googleBtn.onclick = (e) => {
@@ -52,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // --- 3. EMAIL LOGIN ---
+    // --- 4. EMAIL LOGIN BUTTON ---
     const emailSigninBtn = document.getElementById('email-signin-btn');
     if (emailSigninBtn) {
         emailSigninBtn.onclick = async (e) => {
@@ -62,22 +78,21 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!email || !pass) return alert("Enter email and password.");
             try {
                 await signInWithEmailAndPassword(auth, email, pass);
-                // The observer above will instantly handle the redirect!
             } catch (err) { alert(err.message); }
         };
     }
 
-    // --- 4. LOGOUT ---
+    // --- 5. LOGOUT BUTTON ---
     const logoutBtn = document.getElementById('logout-link');
     if (logoutBtn) {
         logoutBtn.onclick = () => {
             signOut(auth).then(() => {
-                window.location.reload(); 
+                window.location.replace('index.html'); 
             });
         };
     }
 
-    // --- 5. THEME TOGGLE (Works across all pages) ---
+    // --- 6. THEME TOGGLE ---
     const themeBtn = document.getElementById('theme-toggle');
     const applyTheme = (theme) => {
         document.body.setAttribute('data-theme', theme);
@@ -90,6 +105,5 @@ document.addEventListener('DOMContentLoaded', () => {
             applyTheme(current === 'dark' ? 'light' : 'dark');
         };
     }
-    // Set theme on initial load
     applyTheme(localStorage.getItem('theme') || 'light');
 });
