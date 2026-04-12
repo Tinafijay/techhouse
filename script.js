@@ -1,20 +1,13 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
-  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, 
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, 
   onAuthStateChanged, signInWithEmailAndPassword, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// --- THE MAGIC FIX: DYNAMIC AUTH DOMAIN ---
-// This automatically matches the authDomain to the URL you are using, 
-// preventing Chromebooks, iPhones, and Safari from blocking the login session.
-const currentDomain = window.location.hostname;
-const dynamicAuthDomain = (currentDomain === 'localhost' || currentDomain === '127.0.0.1') 
-    ? "techhouse-87e28.firebaseapp.com" 
-    : currentDomain;
-
+// --- 1. BACK TO THE ORIGINAL SAFE CONFIG ---
 const firebaseConfig = {
   apiKey: "AIzaSyB5CZLo-CTT2JZxw6SEVSA_wuxkCuE7aUI",
-  authDomain: dynamicAuthDomain, // <-- This changes based on your current link
+  authDomain: "techhouse-87e28.firebaseapp.com", // Strict default domain
   projectId: "techhouse-87e28",
   storageBucket: "techhouse-87e28.firebasestorage.app",
   messagingSenderId: "249148429400",
@@ -27,17 +20,16 @@ const provider = new GoogleAuthProvider();
 
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- 1. CATCH THE REDIRECT (Fires right after you pick your Google account) ---
+    // --- 2. CATCH REDIRECT RESULTS (If the fallback was used) ---
     getRedirectResult(auth).then((result) => {
         if (result?.user) {
             window.location.replace('index.html');
         }
     }).catch((error) => {
-        console.error("Google Auth Error:", error.message);
-        alert("Login failed: " + error.message);
+        console.error("Redirect Error:", error.message);
     });
 
-    // --- 2. THE TRUTH ENGINE (Updates Navbar UI) ---
+    // --- 3. THE TRUTH ENGINE (Updates Navbar UI) ---
     onAuthStateChanged(auth, (user) => {
         const signinBtn = document.getElementById('signin-btn');
         const userProfile = document.getElementById('user-profile');
@@ -49,26 +41,35 @@ document.addEventListener('DOMContentLoaded', () => {
             if (userProfile) userProfile.style.display = 'flex';
             if (userDisplayName) userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')}`;
             
-            // If they are on the sign-in page, push them to the homepage
-            if (isSignInPage) {
-                window.location.replace('index.html');
-            }
+            if (isSignInPage) window.location.replace('index.html');
         } else {
             if (signinBtn) signinBtn.style.display = 'inline-block';
             if (userProfile) userProfile.style.display = 'none';
         }
     });
 
-    // --- 3. GOOGLE LOGIN BUTTON ---
+    // --- 4. THE HYBRID GOOGLE LOGIN (The Magic Fix) ---
     const googleBtn = document.getElementById('google-signin-btn');
     if (googleBtn) {
-        googleBtn.onclick = (e) => {
+        googleBtn.onclick = async (e) => {
             e.preventDefault();
-            signInWithRedirect(auth, provider); 
+            try {
+                // Try Popup first (Works great on PCs)
+                await signInWithPopup(auth, provider);
+                window.location.replace('index.html');
+            } catch (error) {
+                // If Chromebook/iPhone blocks it and says "closed by user", use Redirect!
+                if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                    console.log("Popup blocked! Falling back to redirect...");
+                    signInWithRedirect(auth, provider);
+                } else {
+                    alert("Google Login Error: " + error.message);
+                }
+            }
         };
     }
 
-    // --- 4. EMAIL LOGIN BUTTON ---
+    // --- 5. EMAIL LOGIN BUTTON ---
     const emailSigninBtn = document.getElementById('email-signin-btn');
     if (emailSigninBtn) {
         emailSigninBtn.onclick = async (e) => {
@@ -82,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // --- 5. LOGOUT BUTTON ---
+    // --- 6. LOGOUT BUTTON ---
     const logoutBtn = document.getElementById('logout-link');
     if (logoutBtn) {
         logoutBtn.onclick = () => {
@@ -92,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // --- 6. THEME TOGGLE ---
+    // --- 7. THEME TOGGLE ---
     const themeBtn = document.getElementById('theme-toggle');
     const applyTheme = (theme) => {
         document.body.setAttribute('data-theme', theme);
