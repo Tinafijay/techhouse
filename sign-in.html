@@ -4,50 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In - Tech House</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="Techhouse_style.css">
-    <style>
-        .auth-container { max-width: 400px; margin: 80px auto; padding: 30px; background: var(--card-bg); border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .auth-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 20px; }
-        .input-group { margin-bottom: 15px; }
-        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
-        .btn-main { width: 100%; padding: 12px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .google-btn { width: 100%; padding: 12px; border: 1px solid #ddd; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; margin-bottom: 20px; }
-        .toggle-link { text-align: center; margin-top: 15px; font-size: 0.9rem; }
-        .toggle-link a { color: var(--primary-color); text-decoration: none; font-weight: bold; }
-    </style>
 </head>
-<body>
-    <div class="auth-container">
-        <h2 id="auth-title">Sign In</h2>
+<body style="display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+    
+    <div style="background: var(--card); padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; border: 1px solid var(--border);">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="Tech House logo.jpg" alt="Logo" style="max-height: 60px; border-radius: 8px;">
+        </div>
+        <h2 style="text-align: center; color: var(--primary); margin-bottom: 20px;">Welcome to Tech House</h2>
         
-        <button id="google-signin-btn" class="google-btn">
+        <button id="google-signin-btn" style="width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid var(--border); background: var(--header); color: var(--text); border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"> Continue with Google
         </button>
 
-        <div style="text-align:center; margin-bottom:15px; color:#888;">OR</div>
+        <div style="text-align: center; color: #888; margin-bottom: 20px; font-size: 0.9rem;">OR USE EMAIL</div>
 
-        <div id="name-fields" style="display:none; gap:10px; margin-bottom:15px;">
-            <input type="text" id="fname" placeholder="First Name">
-            <input type="text" id="lname" placeholder="Last Name">
-        </div>
-
-        <div class="input-group">
-            <input type="email" id="email" placeholder="Email Address">
-        </div>
-        <div class="input-group">
-            <input type="password" id="password" placeholder="Password">
-        </div>
-
-        <button id="submit-auth-btn" class="btn-main">Login to Tech House</button>
-
-        <div class="toggle-link">
-            <span id="toggle-text">New to Tech House?</span> 
-            <a href="#" id="auth-toggle-link">Create Account</a>
-        </div>
+        <input type="email" id="email" placeholder="Email Address" style="width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);">
+        <input type="password" id="password" placeholder="Password" style="width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);">
         
-        <div style="text-align:center; margin-top:20px;">
-            <a href="index.html" style="color:#888; text-decoration:none;">← Back to Home</a>
-        </div>
+        <button id="email-signin-btn" style="width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Sign In</button>
+        
+        <p style="text-align: center; margin-top: 25px;">
+            <a href="index.html" style="color: var(--primary); text-decoration: none; font-weight: bold;">← Back to Home</a>
+        </p>
     </div>
 
     <script src="script.js" type="module"></script>
