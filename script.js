@@ -4,10 +4,10 @@ import {
   onAuthStateChanged, signInWithEmailAndPassword, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// --- 1. BACK TO THE ORIGINAL SAFE CONFIG ---
+// --- 1. FIXED CONFIG - Changed to .web.app domain ---
 const firebaseConfig = {
   apiKey: "AIzaSyB5CZLo-CTT2JZxw6SEVSA_wuxkCuE7aUI",
-  authDomain: "techhouse-87e28.firebaseapp.com", // Strict default domain
+  authDomain: "techhouse-87e28.web.app", // ✅ CHANGED: Match your preferred domain
   projectId: "techhouse-87e28",
   storageBucket: "techhouse-87e28.firebasestorage.app",
   messagingSenderId: "249148429400",
@@ -39,7 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user) {
             if (signinBtn) signinBtn.style.display = 'none';
             if (userProfile) userProfile.style.display = 'flex';
-            if (userDisplayName) userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')}`;
+            // ✅ FIXED: Added [0] to properly extract email username
+            if (userDisplayName) userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')[0]}`;
             
             if (isSignInPage) window.location.replace('index.html');
         } else {
@@ -79,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!email || !pass) return alert("Enter email and password.");
             try {
                 await signInWithEmailAndPassword(auth, email, pass);
+                // ✅ FIXED: Added redirect after successful email login
+                window.location.replace('index.html');
             } catch (err) { alert(err.message); }
         };
     }
