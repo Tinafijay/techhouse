@@ -4,10 +4,10 @@ import {
   onAuthStateChanged, signInWithEmailAndPassword, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// --- 1. FIXED CONFIG - Changed to .web.app domain ---
+// --- 1. CONFIG - Using .firebaseapp.com (already configured) ---
 const firebaseConfig = {
   apiKey: "AIzaSyB5CZLo-CTT2JZxw6SEVSA_wuxkCuE7aUI",
-  authDomain: "techhouse-87e28.web.app", // ✅ CHANGED: Match your preferred domain
+  authDomain: "techhouse-87e28.firebaseapp.com", // Using the pre-configured domain
   projectId: "techhouse-87e28",
   storageBucket: "techhouse-87e28.firebasestorage.app",
   messagingSenderId: "249148429400",
