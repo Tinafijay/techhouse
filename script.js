@@ -4,10 +4,10 @@ import {
   onAuthStateChanged, signInWithEmailAndPassword, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// --- 1. CONFIG - Using .firebaseapp.com (already configured) ---
+// --- 1. CONFIG - Using .web.app (now properly configured!) ---
 const firebaseConfig = {
   apiKey: "AIzaSyB5CZLo-CTT2JZxw6SEVSA_wuxkCuE7aUI",
-  authDomain: "techhouse-87e28.firebaseapp.com", // Using the pre-configured domain
+  authDomain: "techhouse-87e28.web.app", // ✅ Configured in Google Cloud Console
   projectId: "techhouse-87e28",
   storageBucket: "techhouse-87e28.firebasestorage.app",
   messagingSenderId: "249148429400",
