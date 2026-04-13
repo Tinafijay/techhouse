@@ -1,13 +1,20 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
-  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, 
+  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, 
   onAuthStateChanged, signInWithEmailAndPassword, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// --- 1. CONFIG - Using .web.app (now properly configured!) ---
+// --- 1. DYNAMIC CONFIGURATION (The Final Fix) ---
+// This ensures the authDomain matches EXACTLY what the browser address bar says.
+// Since you added .web.app to Google Cloud, this will now work perfectly.
+const currentDomain = window.location.hostname;
+const dynamicAuthDomain = (currentDomain === 'localhost' || currentDomain === '127.0.0.1') 
+    ? "techhouse-87e28.firebaseapp.com" 
+    : currentDomain;
+
 const firebaseConfig = {
   apiKey: "AIzaSyB5CZLo-CTT2JZxw6SEVSA_wuxkCuE7aUI",
-  authDomain: "techhouse-87e28.web.app", // ✅ Configured in Google Cloud Console
+  authDomain: dynamicAuthDomain, 
   projectId: "techhouse-87e28",
   storageBucket: "techhouse-87e28.firebasestorage.app",
   messagingSenderId: "249148429400",
@@ -20,7 +27,7 @@ const provider = new GoogleAuthProvider();
 
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- 2. CATCH REDIRECT RESULTS (If the fallback was used) ---
+    // --- 2. CATCH REDIRECT RESULTS ---
     getRedirectResult(auth).then((result) => {
         if (result?.user) {
             window.location.replace('index.html');
@@ -29,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Redirect Error:", error.message);
     });
 
-    // --- 3. THE TRUTH ENGINE (Updates Navbar UI) ---
+    // --- 3. THE TRUTH ENGINE ---
     onAuthStateChanged(auth, (user) => {
         const signinBtn = document.getElementById('signin-btn');
         const userProfile = document.getElementById('user-profile');
@@ -39,8 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user) {
             if (signinBtn) signinBtn.style.display = 'none';
             if (userProfile) userProfile.style.display = 'flex';
-            // ✅ FIXED: Added [0] to properly extract email username
-            if (userDisplayName) userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')[0]}`;
+            if (userDisplayName) userDisplayName.textContent = `Hi, ${user.displayName || user.email.split('@')}`;
             
             if (isSignInPage) window.location.replace('index.html');
         } else {
@@ -49,24 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- 4. THE HYBRID GOOGLE LOGIN (The Magic Fix) ---
+    // --- 4. GOOGLE LOGIN - REDIRECT MODE ---
     const googleBtn = document.getElementById('google-signin-btn');
     if (googleBtn) {
         googleBtn.onclick = async (e) => {
             e.preventDefault();
-            try {
-                // Try Popup first (Works great on PCs)
-                await signInWithPopup(auth, provider);
-                window.location.replace('index.html');
-            } catch (error) {
-                // If Chromebook/iPhone blocks it and says "closed by user", use Redirect!
-                if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-                    console.log("Popup blocked! Falling back to redirect...");
-                    signInWithRedirect(auth, provider);
-                } else {
-                    alert("Google Login Error: " + error.message);
-                }
-            }
+            signInWithRedirect(auth, provider);
         };
     }
 
@@ -80,7 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!email || !pass) return alert("Enter email and password.");
             try {
                 await signInWithEmailAndPassword(auth, email, pass);
-                // ✅ FIXED: Added redirect after successful email login
                 window.location.replace('index.html');
             } catch (err) { alert(err.message); }
         };
