@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
-  getAuth, GoogleAuthProvider, signInWithPopup, 
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, 
   onAuthStateChanged, signInWithEmailAndPassword, signOut 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -20,7 +20,16 @@ const provider = new GoogleAuthProvider();
 
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- 2. THE TRUTH ENGINE (Updates Navbar UI) ---
+    // --- 2. CATCH REDIRECT RESULTS (If the fallback was used) ---
+    getRedirectResult(auth).then((result) => {
+        if (result?.user) {
+            window.location.replace('index.html');
+        }
+    }).catch((error) => {
+        console.error("Redirect Error:", error.message);
+    });
+
+    // --- 3. THE TRUTH ENGINE (Updates Navbar UI) ---
     onAuthStateChanged(auth, (user) => {
         const signinBtn = document.getElementById('signin-btn');
         const userProfile = document.getElementById('user-profile');
@@ -40,21 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- 4. GOOGLE LOGIN - POPUP MODE (Avoids blank screen) ---
+    // --- 4. GOOGLE LOGIN - REDIRECT MODE (More reliable) ---
     const googleBtn = document.getElementById('google-signin-btn');
     if (googleBtn) {
         googleBtn.onclick = async (e) => {
             e.preventDefault();
-            try {
-                // Use popup mode - cleaner, no blank screens
-                const result = await signInWithPopup(auth, provider);
-                if (result.user) {
-                    window.location.replace('index.html');
-                }
-            } catch (error) {
-                console.error("Login error:", error);
-                alert("Sign-in failed: " + error.message + "\nPlease try again or allow popups in your browser.");
-            }
+            // Use redirect mode directly - works everywhere
+            signInWithRedirect(auth, provider);
         };
     }
 
