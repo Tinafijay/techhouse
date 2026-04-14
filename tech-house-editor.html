@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tech House — Video Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tech-house-editor-style.css">
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<div id="live-region-polite"  aria-live="polite"    aria-atomic="true" class="sr-only"></div>
+<div id="live-region-urgent"  aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+
+<!-- ═══════════════════════════════════════════════════════ SIDEBAR -->
+<aside id="sidebar" class="sidebar" aria-label="Tech House navigation and account">
+  <div class="sidebar-header">
+    <span class="sidebar-logo">TH</span>
+    <button class="sidebar-close-btn" id="sidebar-close" aria-label="Close sidebar">×</button>
+  </div>
+
+  <!-- Auth panel -->
+  <div class="sidebar-auth" id="sidebar-auth">
+    <!-- Logged-in state (hidden by default) -->
+    <div id="sb-user-info" class="sb-user-info hidden">
+      <img id="sb-avatar" src="" alt="Profile picture" class="sb-avatar">
+      <div class="sb-user-text">
+        <div class="sb-signed-label">Signed in as</div>
+        <div id="sb-display-name" class="sb-display-name">—</div>
+        <div id="sb-email" class="sb-email">—</div>
+      </div>
+    </div>
+    <!-- Logged-out state -->
+    <div id="sb-signin-area" class="sb-signin-area">
+      <p class="sb-signin-prompt">Sign in to sync across all Tech House apps</p>
+      <button id="sb-google-btn" class="sb-google-btn" aria-label="Sign in with Google">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="16" alt="">
+        Sign in with Google
+      </button>
+    </div>
+    <button id="sb-logout-btn" class="sb-logout-btn hidden" aria-label="Log out of Tech House">Log Out</button>
+  </div>
+
+  <!-- Nav links -->
+  <nav class="sidebar-nav" aria-label="App navigation">
+    <div class="sidebar-nav-label">Tech House Apps</div>
+    <a href="index.html" class="sidebar-nav-item">🏠 Home</a>
+    <a href="tech-house-editor.html" class="sidebar-nav-item active" aria-current="page">🎬 Video Editor</a>
+    <a href="poisoning detector.html" class="sidebar-nav-item">🍎 Food Detector</a>
+    <div class="sidebar-nav-item coming-soon">⭐ T Vision <span class="soon-badge">Soon</span></div>
+    <div class="sidebar-nav-item coming-soon">🎶 Music Producer <span class="soon-badge">Soon</span></div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-footer-text">Tech House © 2026</div>
+  </div>
+</aside>
+<!-- Sidebar backdrop -->
+<div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+<!-- ═══════════════════════════════════════════════════ APP SHELL -->
+<div class="app" role="application" aria-label="Tech House Video Editor">
+
+  <header class="app-header">
+    <div class="header-left">
+      <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation sidebar">☰</button>
+      <div class="app-title">
+        <span class="icon" aria-hidden="true">🎬</span>
+        <div>TECH HOUSE<span class="sub">Video Editor</span></div>
+      </div>
+    </div>
+
+    <input type="text" id="project-name" class="project-name-input"
+           value="my-project" maxlength="60" spellcheck="false"
+           aria-label="Project name — used as the exported video filename"
+           placeholder="project-name">
+
+    <div class="header-right">
+      <button class="btn btn-sm" id="silence-btn" disabled title="Auto-detect and cut silent gaps"
+              aria-label="Auto-detect silence and cut gaps — keyboard Ctrl+D"
+              onclick="detectSilence()">🔇 Auto-Cut Silence</button>
+      <button class="btn btn-sm btn-ghost" id="undo-btn" disabled
+              aria-label="Undo — keyboard Control Z" onclick="doUndo()">↩ Undo</button>
+      <span id="engine-badge" class="badge">Initializing…</span>
+    </div>
+  </header>
+
+  <main id="main-content">
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span class="prefix" aria-hidden="true">SYS&gt;</span>
+      <span id="status-text" aria-hidden="true">Initializing engine…</span>
+      <span class="status-scrub-indicator hidden" id="scrub-indicator" aria-hidden="true">◉ SCRUBBING</span>
+    </div>
+
+    <!-- Upload Zone -->
+    <div id="upload-zone" class="upload-zone" tabindex="0" role="button"
+         aria-label="Click or press Enter to upload a video file"
+         onclick="document.getElementById('vid-uploader').click()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){document.getElementById('vid-uploader').click()}">
+      <span class="upload-icon" aria-hidden="true">📽️</span>
+      <h2>Drop or Click to Load Video</h2>
+      <p class="upload-hint">MP4, MOV, WebM — any resolution</p>
+      <input type="file" id="vid-uploader" hidden accept="video/*" aria-label="Upload main video file">
+    </div>
+
+    <!-- Preview Stage -->
+    <div class="preview-stage hidden" id="preview-stage" aria-label="Video preview with live overlays">
+      <video id="player" controls playsinline aria-label="Video preview player" tabindex="0"></video>
+
+      <!-- Live logo overlay -->
+      <div class="overlay-logo hidden" id="overlay-logo" aria-hidden="true">
+        <img id="overlay-logo-img" alt="">
+      </div>
+
+      <!-- Illustration overlays (rendered by JS) -->
+      <div id="illu-overlay-container" aria-hidden="true"></div>
+
+      <!-- B-Roll overlay -->
+      <div class="overlay-broll hidden" id="overlay-broll" aria-hidden="true">
+        <video id="broll-player" muted playsinline></video>
+      </div>
+
+      <div class="preview-badge" id="preview-badge" aria-hidden="true">LIVE PREVIEW</div>
+    </div>
+
+    <!-- Timecodes -->
+    <div class="timecode-row" role="group" aria-label="Timecode display">
+      <div class="tc-block">
+        <div class="tc-label">In Point</div>
+        <div class="tc-value muted" id="tc-start" aria-label="In point time">00:00.0</div>
+      </div>
+      <div class="tc-block active">
+        <div class="tc-label">Current</div>
+        <div class="tc-value" id="tc-current" aria-live="off" aria-label="Current time">00:00.0</div>
+      </div>
+      <div class="tc-block">
+        <div class="tc-label">Out Point</div>
+        <div class="tc-value muted" id="tc-end" aria-label="Out point time">00:00.0</div>
+      </div>
+    </div>
+
+    <!-- Trim + Cut Bar -->
+    <div class="trim-bar-wrap">
+      <div class="trim-label">
+        <span>Trim / Cut Range</span>
+        <span id="trim-duration-label">— no video —</span>
+      </div>
+      <div class="zoom-bar" id="zoom-bar" aria-hidden="true">
+        <div class="zoom-window" id="zoom-window"></div>
+      </div>
+      <div class="segment-track" id="segment-track" aria-hidden="true"></div>
+      <div class="trim-track" id="trim-track" tabindex="0" role="group" aria-label="Trim range handles">
+        <div class="trim-range"    id="trim-range"></div>
+        <div class="trim-head"     id="trim-head-s" tabindex="0" role="slider"
+             aria-label="In point handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        <div class="trim-head"     id="trim-head-e" tabindex="0" role="slider"
+             aria-label="Out point handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"
+             style="border-color:var(--cyan)"></div>
+        <div class="trim-playhead" id="trim-playhead"></div>
+        <!-- SFX markers are inserted here by JS -->
+        <div id="sfx-markers-layer" style="position:absolute;inset:0;pointer-events:none;"></div>
+      </div>
+      <div class="trim-actions">
+        <button class="btn btn-sm" id="btn-set-start" aria-label="Set In point — keyboard S">
+          <span aria-hidden="true">◄</span> Set In <kbd aria-hidden="true">S</kbd>
+        </button>
+        <button class="btn btn-sm" id="btn-set-end" aria-label="Set Out point — keyboard E">
+          Set Out <kbd aria-hidden="true">E</kbd> <span aria-hidden="true">►</span>
+        </button>
+        <button class="btn btn-sm btn-danger" id="btn-cut" aria-label="Cut range — keyboard Backspace" onclick="cutSegment()">
+          ✂ Cut <kbd aria-hidden="true">⌫</kbd>
+        </button>
+        <button class="btn btn-sm" id="btn-zoom" onclick="cycleZoom()"
+                aria-label="Zoom timeline — keyboard Z">🔍 Zoom <kbd aria-hidden="true">Z</kbd></button>
+        <button class="btn btn-sm btn-ghost" id="btn-reset-trim" aria-label="Reset all trims and cuts">Reset All</button>
+      </div>
+      <div id="cut-summary" class="cut-summary hidden" aria-live="polite"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════ PANELS -->
+    <div class="panels">
+
+      <!-- LEFT: Layer Stack Panel -->
+      <section class="panel panel-layers" aria-labelledby="layers-heading">
+        <div class="panel-title">
+          <div class="dot" aria-hidden="true"></div>
+          <span id="layers-heading">Layer Stack</span>
+        </div>
+
+        <!-- ─ Logo ─ -->
+        <div class="stack-section">
+          <div class="stack-section-header">
+            <div class="layer-item-row" id="layer-logo" tabindex="0" role="button"
+                 onclick="triggerLayer('logo')"
+                 onkeydown="if(event.key==='Enter')triggerLayer('logo')"
+                 aria-label="Logo — watermark. Ctrl+L">
+              <span class="layer-icon">🖼️</span>
+              <div class="layer-info">
+                <div class="layer-name">Logo <kbd aria-hidden="true">Ctrl L</kbd></div>
+                <div class="layer-desc" id="desc-logo">Permanent watermark</div>
+              </div>
+            </div>
+          </div>
+          <div class="layer-sub-control">
+            <label class="sub-label" for="logo-position">Position</label>
+            <select id="logo-position" aria-label="Logo position" onchange="setLogoPosition(this.value)">
+              <option value="top-right">Top Right</option>
+              <option value="top-left">Top Left</option>
+              <option value="bottom-right">Bottom Right</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="center">Center</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- ─ Illustrations (multi-stack) ─ -->
+        <div class="stack-section">
+          <div class="stack-section-header">
+            <span class="stack-title">🎨 Illustrations</span>
+            <button class="btn btn-sm" onclick="triggerAddIllu()"
+                    aria-label="Add illustration overlay — keyboard Ctrl+I">
+              + Add <kbd aria-hidden="true">Ctrl I</kbd>
+            </button>
+          </div>
+          <div id="illu-stack" class="asset-stack" aria-label="Illustration layers"></div>
+        </div>
+
+        <!-- ─ BGM Playlist (multi-stack) ─ -->
+        <div class="stack-section">
+          <div class="stack-section-header">
+            <span class="stack-title">🎵 BGM Playlist</span>
+            <button class="btn btn-sm" onclick="triggerAddBGM()"
+                    aria-label="Add background music track — keyboard Ctrl+B">
+              + Add <kbd aria-hidden="true">Ctrl B</kbd>
+            </button>
+          </div>
+          <div id="bgm-stack" class="asset-stack" aria-label="Background music tracks"></div>
+        </div>
+
+        <!-- ─ SFX Stack (multi-stack) ─ -->
+        <div class="stack-section">
+          <div class="stack-section-header">
+            <span class="stack-title">🔊 Sound Effects</span>
+            <button class="btn btn-sm" onclick="triggerAddSFX()"
+                    aria-label="Add sound effect — keyboard Ctrl+F">
+              + Add <kbd aria-hidden="true">Ctrl F</kbd>
+            </button>
+          </div>
+          <div id="sfx-stack" class="asset-stack" aria-label="Sound effects"></div>
+          <p class="stack-hint">Select an SFX item, then use Shift+Ctrl+←/→ to nudge 0.1s</p>
+        </div>
+
+        <!-- ─ B-Roll (multi-stack) ─ -->
+        <div class="stack-section">
+          <div class="stack-section-header">
+            <span class="stack-title">🎥 B-Roll Videos</span>
+            <button class="btn btn-sm" onclick="triggerAddBRoll()"
+                    aria-label="Add B-Roll video — keyboard Ctrl+R">
+              + Add <kbd aria-hidden="true">Ctrl R</kbd>
+            </button>
+          </div>
+          <div id="broll-stack" class="asset-stack" aria-label="B-Roll video clips"></div>
+        </div>
+
+        <!-- ─ Audio Swap ─ -->
+        <div class="stack-section">
+          <div class="stack-section-header">
+            <div class="layer-item-row" id="layer-audioSwap" tabindex="0" role="button"
+                 onclick="triggerLayer('audioSwap')"
+                 onkeydown="if(event.key==='Enter')triggerLayer('audioSwap')"
+                 aria-label="Audio Swap — replaces original audio. Ctrl+U">
+              <span class="layer-icon">🔄</span>
+              <div class="layer-info">
+                <div class="layer-name">Audio Swap <kbd aria-hidden="true">Ctrl U</kbd></div>
+                <div class="layer-desc" id="desc-audioSwap">Replaces original audio</div>
+              </div>
+            </div>
+          </div>
+          <div class="layer-sub-control">
+            <label class="sub-label" for="noise-filter-select">Audio Processing</label>
+            <select id="noise-filter-select" aria-label="Audio processing mode" onchange="setAudioProcessing(this.value)">
+              <option value="swap">Use Swap File</option>
+              <option value="noise">Noise Removal (gentle)</option>
+              <option value="mute">Mute Original</option>
+            </select>
+            <span id="audio-processing-note" class="sub-label" style="font-style:italic;color:var(--text-mute);font-size:0.58rem;margin-top:2px;">
+              Gentle anlmdn denoising preserves voice clarity
+            </span>
+          </div>
+        </div>
+
+        <!-- Hidden file inputs -->
+        <input type="file" id="layer-uploader"   hidden aria-label="Layer file input">
+        <input type="file" id="illu-uploader"    hidden accept="image/*" aria-label="Illustration file">
+        <input type="file" id="bgm-uploader"     hidden accept="audio/*" aria-label="BGM file">
+        <input type="file" id="sfx-uploader"     hidden accept="audio/*" aria-label="SFX file">
+        <input type="file" id="broll-uploader"   hidden accept="video/*" aria-label="B-Roll file">
+      </section>
+
+      <!-- RIGHT: Output Settings -->
+      <section class="panel" aria-labelledby="settings-heading">
+        <div class="panel-title">
+          <div class="dot" aria-hidden="true"></div>
+          <span id="settings-heading">Output Settings</span>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label" id="lbl-aspect">Aspect Ratio & Mode</div>
+          <div class="seg-control" role="group" aria-labelledby="lbl-aspect" style="flex-wrap:wrap;">
+            <button class="seg-btn active" id="seg-landscape" data-val="landscape"
+                    aria-pressed="true" onclick="setAspect('landscape')">16:9</button>
+            <button class="seg-btn" id="seg-portrait" data-val="portrait"
+                    aria-pressed="false" onclick="setAspect('portrait')">9:16</button>
+            <button class="seg-btn" id="seg-blur-bg" data-val="blur-bg"
+                    aria-pressed="false" onclick="setAspect('blur-bg')"
+                    title="Portrait video on blurred landscape background">🌅 Blur BG</button>
+          </div>
+          <div class="aspect-note" id="aspect-note"></div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label" id="lbl-speed">Encode Speed</div>
+          <div class="seg-control" role="group" aria-labelledby="lbl-speed">
+            <button class="seg-btn active" id="seg-fast" data-preset="ultrafast"
+                    aria-pressed="true" onclick="setPreset('ultrafast')">Fast</button>
+            <button class="seg-btn" id="seg-balanced" data-preset="veryfast"
+                    aria-pressed="false" onclick="setPreset('veryfast')">Balanced</button>
+            <button class="seg-btn" id="seg-hq" data-preset="medium"
+                    aria-pressed="false" onclick="setPreset('medium')">HQ</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">Quality of Life</div>
+          <label class="toggle-row" aria-label="Toggle audio scrubbing">
+            <input type="checkbox" id="scrub-toggle" checked aria-label="Enable audio scrubbing">
+            <span class="toggle-label">Audio Scrubbing on seek</span>
+          </label>
+          <label class="toggle-row" aria-label="Toggle crossfade at cuts">
+            <input type="checkbox" id="crossfade-toggle" checked aria-label="Enable crossfade at cut points">
+            <span class="toggle-label">Crossfade at cut points (0.1s)</span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">Silence Detection</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <label class="sub-label" for="silence-threshold">Threshold dB</label>
+            <input type="number" id="silence-threshold" value="-40" min="-60" max="-10" step="5"
+                   class="num-input" aria-label="Silence threshold in decibels" style="width:64px;">
+            <label class="sub-label" for="silence-min-dur">Min gap (s)</label>
+            <input type="number" id="silence-min-dur" value="0.5" min="0.1" max="5" step="0.1"
+                   class="num-input" aria-label="Minimum silence duration to cut" style="width:56px;">
+          </div>
+        </div>
+
+        <div class="setting-row summary-row">
+          <div class="setting-label">Summary</div>
+          <div class="summary-body">
+            <div id="summary-mode">Mode: —</div>
+            <div id="summary-aspect">Format: 16:9 Landscape</div>
+            <div id="summary-layers">Layers: none</div>
+            <div id="summary-trim">Trim: full video</div>
+            <div id="summary-cuts">Cuts: none</div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /panels -->
+
+    <!-- Progress -->
+    <div id="progress-wrap" class="progress-wrap hidden" aria-label="Export progress">
+      <div class="progress-meta">
+        <span id="progress-phase">Preparing…</span>
+        <span class="progress-pct" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-track" role="progressbar"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar-role">
+        <div class="progress-fill" id="prog-fill"></div>
+      </div>
+    </div>
+
+    <!-- Download result -->
+    <div id="download-result" class="download-result hidden">
+      <span class="dl-label" aria-hidden="true">✓ Export complete</span>
+      <a id="download-link" href="#" download="tech-house-export.mp4"
+         class="dl-btn" aria-label="Download exported video file">⬇ Download Video</a>
+    </div>
+
+    <!-- Export button -->
+    <button class="export-btn" id="export-btn" disabled
+            aria-label="Export video — keyboard shortcut Control X"
+            onclick="runExport()">
+      🚀 &nbsp; EXPORT VIDEO
+    </button>
+
+    <!-- Shortcuts reference -->
+    <div class="shortcuts" role="complementary" aria-label="Keyboard shortcuts">
+      <span class="sc-item"><kbd>S</kbd> Set In</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>E</kbd> Set Out</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Space</kbd> Play/Pause</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>←</kbd><kbd>→</kbd> ±10s</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Shift</kbd><kbd>←</kbd><kbd>→</kbd> ±1s</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>⌫</kbd> Cut</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Z</kbd> Zoom</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>Z</kbd> Undo</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>D</kbd> Auto-Cut Silence</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>L</kbd> Logo</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>I</kbd> +Illus</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>B</kbd> +BGM</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>F</kbd> +SFX</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>R</kbd> +B-Roll</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>U</kbd> Swap</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Shift</kbd><kbd>Ctrl</kbd><kbd>←/→</kbd> Nudge SFX 0.1s</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>V</kbd> Status</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>X</kbd> Export</span>
+    </div>
+
+  </main>
+</div>
+
+<div class="toast-wrap" id="toast-wrap" aria-live="assertive" aria-atomic="true"></div>
+
+<script src="tech-house-editor-script.js" type="module"></script>
+</body>
+</html>
