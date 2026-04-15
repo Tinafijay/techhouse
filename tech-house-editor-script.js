@@ -146,68 +146,94 @@ function nextId() { return ++stackIdCounter; }
   }
 })();
 
-// ── FIREBASE AUTH + SIDEBAR ───────────────────────────────────
-onAuthStateChanged(auth, user => {
-  const sbUserInfo   = document.getElementById('sb-user-info');
-  const sbSigninArea = document.getElementById('sb-signin-area');
-  const sbLogoutBtn  = document.getElementById('sb-logout-btn');
-  const sbAvatar     = document.getElementById('sb-avatar');
-  const sbName       = document.getElementById('sb-display-name');
-  const sbEmail      = document.getElementById('sb-email');
+// ── FIREBASE AUTH + AUTH WIDGET ───────────────────────────────
+// The auth widget lives in the header top-right.
+// When logged out: "Sign In" button → dropdown with Google sign-in.
+// When logged in: avatar + name → dropdown with logout.
+// Logging in/out syncs across the whole Tech House suite (same Firebase project).
 
-  if (user) {
-    sbUserInfo.classList.remove('hidden');
-    sbSigninArea.classList.add('hidden');
-    sbLogoutBtn.classList.remove('hidden');
+let authDropdownOpen = false;
 
-    sbName.textContent  = user.displayName || user.email.split('@')[0];
-    sbEmail.textContent = user.email || '';
-    if (user.photoURL) {
-      sbAvatar.src = user.photoURL;
-      sbAvatar.classList.remove('hidden');
-    } else {
-      // Initials fallback
-      sbAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(sbName.textContent)}&background=f59e0b&color=000&size=80`;
-    }
-  } else {
-    sbUserInfo.classList.add('hidden');
-    sbSigninArea.classList.remove('hidden');
-    sbLogoutBtn.classList.add('hidden');
+function toggleAuthDropdown(forceClose = false) {
+  const dropdown    = document.getElementById('auth-dropdown');
+  const signinBtn   = document.getElementById('auth-signin-btn');
+  const userBtn     = document.getElementById('auth-user-btn');
+  authDropdownOpen  = forceClose ? false : !authDropdownOpen;
+  dropdown.classList.toggle('hidden', !authDropdownOpen);
+  const expanded = String(authDropdownOpen);
+  signinBtn.setAttribute('aria-expanded', expanded);
+  userBtn.setAttribute('aria-expanded', expanded);
+}
+
+document.getElementById('auth-signin-btn').addEventListener('click', () => toggleAuthDropdown());
+document.getElementById('auth-user-btn').addEventListener('click',   () => toggleAuthDropdown());
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!document.getElementById('auth-widget').contains(e.target)) {
+    if (authDropdownOpen) toggleAuthDropdown(true);
   }
 });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && authDropdownOpen) toggleAuthDropdown(true);
+});
 
-// Sidebar Google sign-in
-document.getElementById('sb-google-btn').onclick = async () => {
+// Google sign-in
+document.getElementById('auth-google-btn').addEventListener('click', async () => {
+  toggleAuthDropdown(true);
   try {
     await signInWithPopup(auth, gProvider);
-    toast('Signed in ✓', 'success');
+    toast('Signed in to Tech House ✓', 'success');
   } catch (err) {
-    if (err.code !== 'auth/popup-closed-by-user') {
-      // Fallback to redirect on popup-blocked
+    if (err.code !== 'auth/popup-closed-by-user' &&
+        err.code !== 'auth/cancelled-popup-request') {
+      // Redirect fallback for browsers that block popups
       signInWithRedirect(auth, gProvider);
     }
   }
-};
+});
 
-// Sidebar logout
-document.getElementById('sb-logout-btn').onclick = async () => {
+// Logout
+document.getElementById('auth-logout-btn').addEventListener('click', async () => {
+  toggleAuthDropdown(true);
   await signOut(auth);
-  toast('Logged out', 'info');
-};
+  toast('Logged out of Tech House', 'info');
+});
 
-// Sidebar open/close
-const sidebar          = document.getElementById('sidebar');
-const sidebarBackdrop  = document.getElementById('sidebar-backdrop');
-document.getElementById('sidebar-toggle').onclick = () => {
-  sidebar.classList.add('open');
-  sidebarBackdrop.classList.add('visible');
-};
-function closeSidebar() {
-  sidebar.classList.remove('open');
-  sidebarBackdrop.classList.remove('visible');
-}
-document.getElementById('sidebar-close').onclick = closeSidebar;
-sidebarBackdrop.onclick = closeSidebar;
+// Auth state observer — updates widget whenever sign-in state changes
+onAuthStateChanged(auth, user => {
+  const signinBtn   = document.getElementById('auth-signin-btn');
+  const userBtn     = document.getElementById('auth-user-btn');
+  const avatar      = document.getElementById('auth-avatar');
+  const nameEl      = document.getElementById('auth-name');
+  const googleBtn   = document.getElementById('auth-google-btn');
+  const logoutBtn   = document.getElementById('auth-logout-btn');
+  const dropName    = document.getElementById('auth-dropdown-name');
+  const dropEmail   = document.getElementById('auth-dropdown-email');
+
+  if (user) {
+    const displayName = user.displayName || user.email.split('@')[0];
+    // Show user button, hide sign-in button
+    signinBtn.classList.add('hidden');
+    userBtn.classList.remove('hidden');
+    nameEl.textContent  = displayName.split(' ')[0]; // first name only in button
+    dropName.textContent  = displayName;
+    dropEmail.textContent = user.email || '';
+    // Avatar
+    avatar.src = user.photoURL ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=f59e0b&color=000&size=80`;
+    // In dropdown: hide google btn, show logout
+    googleBtn.classList.add('hidden');
+    logoutBtn.classList.remove('hidden');
+  } else {
+    signinBtn.classList.remove('hidden');
+    userBtn.classList.add('hidden');
+    googleBtn.classList.remove('hidden');
+    logoutBtn.classList.add('hidden');
+    dropName.textContent  = '—';
+    dropEmail.textContent = '—';
+  }
+});
 
 // ── VIDEO UPLOAD ──────────────────────────────────────────────
 document.getElementById('vid-uploader').onchange = async (e) => {
@@ -495,7 +521,12 @@ function removeIllu(id) {
   toast('Illustration removed', 'info');
 }
 
-// ── MULTI-STACK: BGM ──────────────────────────────────────────
+// ── MULTI-STACK: BGM with Music Focus Controller ─────────────
+// The "focused" BGM track gets a visual scrubber + play/pause button.
+// Keyboard when focused: Space = play/pause, Left/Right = ±5s start, Shift+Left/Right = ±1s
+let focusedBgmId = null;
+let bgmScrubIntervals = {}; // interval refs per BGM id for scrubber update
+
 function triggerAddBGM() {
   document.getElementById('bgm-uploader').click();
 }
@@ -509,34 +540,66 @@ document.getElementById('bgm-uploader').onchange = (e) => {
   audio.volume = 0.18;
   bgmStack.push({ id, file, audio, startAt: 0, offset: 0, volume: 18 });
   pushHistory();
+  // Focus the new track automatically
+  focusedBgmId = id;
   renderBgmStack();
   updateSummary();
-  announce(`BGM track added: ${file.name}`);
+  announce(`BGM track added: "${file.name}". Now focused. Press Space to preview. Left/Right arrows nudge start time.`);
   toast('BGM track added ✓', 'success');
   e.target.value = '';
 };
+
 function renderBgmStack() {
   const container = document.getElementById('bgm-stack');
   container.innerHTML = '';
   bgmStack.forEach(item => {
+    const isFocused = item.id === focusedBgmId;
     const card = document.createElement('div');
-    card.className = 'stack-item';
+    card.className = 'stack-item' + (isFocused ? ' selected' : '');
+    card.setAttribute('data-bgm-id', item.id);
     card.innerHTML = `
       <div class="stack-item-header">
-        <span class="stack-item-name">🎵 ${item.file.name.slice(0,18)}</span>
-        <button class="stack-item-remove" onclick="removeBgm(${item.id})" aria-label="Remove BGM track">✕</button>
+        <span class="stack-item-name">🎵 ${item.file.name.slice(0,16)}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          ${isFocused ? `<span class="bgm-focused-badge">FOCUSED</span>` : ''}
+          <button class="stack-item-remove" onclick="removeBgm(${item.id})" aria-label="Remove BGM track">✕</button>
+        </div>
       </div>
+
+      <!-- Click to focus -->
+      <button class="btn btn-sm btn-ghost" style="width:100%;font-size:0.7rem;margin-bottom:4px;"
+              onclick="focusBgm(${item.id})"
+              aria-label="${isFocused ? 'Track is focused' : 'Click to focus this BGM track for keyboard control'}">
+        ${isFocused ? '🎯 Focused — use keyboard to control' : '🎯 Click to focus'}
+      </button>
+
+      <!-- Music Focus Controller (only shown when focused) -->
+      ${isFocused ? `
+      <div class="bgm-focus-controls" id="bgm-focus-${item.id}">
+        <div class="bgm-scrubber-row">
+          <button class="bgm-play-btn" id="bgm-play-${item.id}"
+                  aria-label="Play or pause this BGM track"
+                  onclick="toggleBgmPlayback(${item.id})">▶</button>
+          <input type="range" class="bgm-scrubber" id="bgm-scrub-${item.id}"
+                 min="0" max="100" value="0" step="0.1"
+                 aria-label="BGM song position scrubber"
+                 oninput="onBgmScrub(${item.id}, this.value)">
+          <span class="bgm-time-display" id="bgm-time-${item.id}">0:00 / 0:00</span>
+        </div>
+        <p class="stack-hint" style="margin-top:2px;">Space=play/pause · ←/→=±5s start · Shift+←/→=±1s</p>
+      </div>` : ''}
+
       <div class="stack-item-controls">
         <div class="stack-ctrl-row">
-          <span class="stack-ctrl-label">Start (s)</span>
+          <span class="stack-ctrl-label">Start at (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.startAt}" min="0" step="0.5"
-                 aria-label="BGM start time in video"
+                 aria-label="At what point in the video BGM starts playing"
                  onchange="updateBgm(${item.id},'startAt',parseFloat(this.value))">
         </div>
         <div class="stack-ctrl-row">
-          <span class="stack-ctrl-label">Song offset</span>
+          <span class="stack-ctrl-label">Song offset (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.offset}" min="0" step="1"
-                 aria-label="How many seconds into the song to start"
+                 aria-label="How far into the song to start from"
                  onchange="updateBgm(${item.id},'offset',parseFloat(this.value))">
         </div>
         <div style="grid-column:1/-1;">
@@ -546,14 +609,91 @@ function renderBgmStack() {
                  oninput="updateBgm(${item.id},'volume',parseInt(this.value))">
         </div>
       </div>`;
+
+    card.addEventListener('click', (e) => {
+      // Focus on click anywhere in the card (unless a control was clicked)
+      if (!['INPUT','SELECT','BUTTON'].includes(e.target.tagName)) {
+        focusBgm(item.id);
+      }
+    });
+
     container.appendChild(card);
+
+    // Start scrubber update interval for focused track
+    if (isFocused) {
+      clearInterval(bgmScrubIntervals[item.id]);
+      bgmScrubIntervals[item.id] = setInterval(() => updateBgmScrubberDisplay(item.id), 250);
+    }
   });
 }
+
+function focusBgm(id) {
+  // Clear old interval
+  if (focusedBgmId && bgmScrubIntervals[focusedBgmId]) {
+    clearInterval(bgmScrubIntervals[focusedBgmId]);
+  }
+  focusedBgmId = id;
+  renderBgmStack();
+  const item = bgmStack.find(i => i.id === id);
+  if (item) announce(`BGM "${item.file.name}" focused. Space to play or pause. Left Right arrows to nudge start time.`);
+}
+
+function toggleBgmPlayback(id) {
+  const item = bgmStack.find(i => i.id === id);
+  if (!item) return;
+  // Pause main video while using music focus
+  if (!player.paused) player.pause();
+  if (item.audio.paused) {
+    item.audio.currentTime = item.offset;
+    item.audio.play().catch(() => {});
+    const btn = document.getElementById(`bgm-play-${id}`);
+    if (btn) btn.textContent = '⏸';
+    announce(`BGM playing: ${item.file.name}`);
+  } else {
+    item.audio.pause();
+    const btn = document.getElementById(`bgm-play-${id}`);
+    if (btn) btn.textContent = '▶';
+    announce('BGM paused.');
+  }
+}
+
+function onBgmScrub(id, pct) {
+  const item = bgmStack.find(i => i.id === id);
+  if (!item || !item.audio.duration) return;
+  // Moving the scrubber sets the song offset (where in the song to start)
+  const newOffset = (pct / 100) * item.audio.duration;
+  item.audio.currentTime = newOffset;
+  item.offset = newOffset;
+  updateBgmScrubberDisplay(id);
+  announce(`Song position set to ${fmtTime(newOffset)}.`);
+}
+
+function updateBgmScrubberDisplay(id) {
+  const item   = bgmStack.find(i => i.id === id);
+  const scrub  = document.getElementById(`bgm-scrub-${id}`);
+  const timeEl = document.getElementById(`bgm-time-${id}`);
+  if (!item || !scrub || !timeEl) return;
+  const dur  = item.audio.duration || 0;
+  const cur  = item.audio.currentTime || 0;
+  scrub.value = dur > 0 ? ((cur / dur) * 100).toFixed(1) : '0';
+  timeEl.textContent = `${fmtTime(cur)} / ${fmtTime(dur)}`;
+}
+
+function nudgeBgmStartAt(id, deltaSeconds) {
+  const item = bgmStack.find(i => i.id === id);
+  if (!item) return;
+  item.startAt = Math.max(0, item.startAt + deltaSeconds);
+  renderBgmStack();
+  updateSummary();
+  announce(`BGM starts at ${fmtTime(item.startAt)} in video.`);
+}
+
 function updateBgm(id, field, val) {
   const item = bgmStack.find(i => i.id === id);
   if (!item) return;
   item[field] = val;
   if (field === 'volume') item.audio.volume = val / 100;
+  if (field === 'offset') item.audio.currentTime = val;
   renderBgmStack();
   updateSummary();
 }
@@ -561,7 +701,9 @@ function removeBgm(id) {
   const idx = bgmStack.findIndex(i => i.id === id);
   if (idx === -1) return;
   bgmStack[idx].audio.pause();
+  clearInterval(bgmScrubIntervals[id]);
   bgmStack.splice(idx, 1);
+  if (focusedBgmId === id) focusedBgmId = bgmStack.length > 0 ? bgmStack[0].id : null;
   pushHistory();
   renderBgmStack();
   updateSummary();
@@ -682,11 +824,11 @@ document.getElementById('broll-uploader').onchange = (e) => {
   vid.src   = URL.createObjectURL(file);
   vid.muted = true;
   vid.preload = 'metadata';
-  brollStack.push({ id, file, video: vid, at: player.currentTime || 0, duration: 5, muteAudio: true });
+  brollStack.push({ id, file, video: vid, at: player.currentTime || 0, duration: 5, muteAudio: true, layout: 'fullscreen' });
   pushHistory();
   renderBrollStack();
   updateSummary();
-  announce(`B-Roll clip added at ${fmtTime(player.currentTime)}.`);
+  announce(`B-Roll clip added at ${fmtTime(player.currentTime)}. Overlays main video as fullscreen by default. You can change the layout.`);
   toast('B-Roll added ✓', 'success');
   e.target.value = '';
 };
@@ -705,20 +847,28 @@ function renderBrollStack() {
         <div class="stack-ctrl-row">
           <span class="stack-ctrl-label">At (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.at.toFixed(1)}" min="0" step="0.5"
-                 aria-label="B-Roll start time"
+                 aria-label="B-Roll start time in video"
                  onchange="updateBroll(${item.id},'at',parseFloat(this.value))">
         </div>
         <div class="stack-ctrl-row">
-          <span class="stack-ctrl-label">Dur (s)</span>
+          <span class="stack-ctrl-label">Duration (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.duration}" min="0.5" step="0.5"
-                 aria-label="B-Roll duration"
+                 aria-label="How long the B-Roll shows"
                  onchange="updateBroll(${item.id},'duration',parseFloat(this.value))">
         </div>
         <div style="grid-column:1/-1;">
+          <span class="stack-ctrl-label">Layout / Position</span>
+          <select class="stack-select" aria-label="B-Roll layout on screen"
+                  onchange="updateBroll(${item.id},'layout',this.value)">
+            ${['fullscreen','center','left-third','right-third'].map(l =>
+              `<option value="${l}" ${item.layout===l?'selected':''}>${l.replace(/-/g,' ')}</option>`).join('')}
+          </select>
+        </div>
+        <div style="grid-column:1/-1;">
           <label style="display:flex;align-items:center;gap:6px;font-size:0.72rem;cursor:pointer;">
-            <input type="checkbox" ${item.muteAudio?'checked':''} aria-label="Mute B-Roll audio"
+            <input type="checkbox" ${item.muteAudio?'checked':''} aria-label="Mute B-Roll audio — keep main video audio"
                    onchange="updateBroll(${item.id},'muteAudio',this.checked)">
-            Mute B-Roll audio
+            Mute B-Roll audio (keep main audio)
           </label>
         </div>
       </div>`;
@@ -1183,6 +1333,22 @@ window.addEventListener('keydown', e => {
   if (ctrl && k === 'r') { e.preventDefault(); triggerAddBRoll(); announce('Opening B-Roll upload.'); return; }
   if (ctrl && k === 'u') { e.preventDefault(); triggerLayer('audioSwap'); announce('Opening audio swap upload.'); return; }
 
+  // BGM Music Focus keyboard control
+  // When a BGM track is focused: Space controls that track, Left/Right nudge its startAt
+  if (focusedBgmId && bgmStack.length > 0) {
+    if (k === ' ' && !ctrl) {
+      e.preventDefault();
+      toggleBgmPlayback(focusedBgmId);
+      return;
+    }
+    if ((k === 'arrowleft' || k === 'arrowright') && !ctrl) {
+      e.preventDefault();
+      const delta = (e.shiftKey ? 1 : 5) * (k === 'arrowleft' ? -1 : 1);
+      nudgeBgmStartAt(focusedBgmId, delta);
+      return;
+    }
+  }
+
   // Undo
   if (ctrl && !e.shiftKey && k === 'z') { e.preventDefault(); doUndo(); return; }
 
@@ -1351,33 +1517,57 @@ async function runExport() {
       let vTag;
 
       if (hasCuts) {
-        // Multi-segment concat
-        const vLabels = [], aLabels = [];
+        // ── Multi-segment concat (handles all cuts including auto-silence) ──
+        // IMPORTANT: FFmpeg concat filter requires inputs interleaved as:
+        //   [v0][a0][v1][a1]...concat=n=N:v=1:a=1
+        // NOT all-video then all-audio. This was the bug causing silent failure.
+        const concatInputs = []; // interleaved: v0,a0,v1,a1,...
+        const hasAudio     = videoHasAudio && !muteMode;
+        const aLabelsList  = [];
+
         segments.forEach((seg, i) => {
-          let scaleF = aspect === 'portrait'
-            ? `crop=trunc(ih*9/16/2)*2:trunc(ih/2)*2,scale=720:1280`
-            : aspect === 'blur-bg'
-              ? `scale=720:1280` // portrait source scaled for blur-bg in concat handled below
-              : `scale=1280:720`;
+          let scaleF;
+          if (aspect === 'portrait') {
+            scaleF = `crop=trunc(ih*9/16/2)*2:trunc(ih/2)*2,scale=720:1280`;
+          } else if (aspect === 'blur-bg') {
+            // For blur-bg with cuts we scale to portrait size; blur applied post-concat
+            scaleF = `scale=720:1280`;
+          } else {
+            scaleF = `scale=1280:720`;
+          }
           filterParts.push(`[0:v]trim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},setpts=PTS-STARTPTS,${scaleF}[vs${i}]`);
-          vLabels.push(`[vs${i}]`);
-          if (videoHasAudio && !muteMode) {
+          concatInputs.push(`[vs${i}]`);
+
+          if (hasAudio) {
             let af = `[0:a]atrim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},asetpts=PTS-STARTPTS`;
-            // Add crossfade fades at boundaries
-            if (useCrossfade && i > 0)                       af += `,afade=t=in:st=0:d=0.1`;
-            if (useCrossfade && i < segments.length - 1)    af += `,afade=t=out:st=${(seg.e-seg.s-0.1).toFixed(2)}:d=0.1`;
+            if (useCrossfade && i > 0)                    af += `,afade=t=in:st=0:d=0.1`;
+            if (useCrossfade && i < segments.length - 1)  af += `,afade=t=out:st=${Math.max(0, seg.e-seg.s-0.1).toFixed(2)}:d=0.1`;
             filterParts.push(`${af}[as${i}]`);
-            aLabels.push(`[as${i}]`);
+            concatInputs.push(`[as${i}]`);
+            aLabelsList.push(`[as${i}]`);
           }
         });
+
         const n = segments.length;
-        if (videoHasAudio && aLabels.length > 0) {
-          filterParts.push(`${vLabels.join('')}${aLabels.join('')}concat=n=${n}:v=1:a=1[vconcat][aconcat]`);
+        const concatStr = concatInputs.join('');
+        if (hasAudio) {
+          filterParts.push(`${concatStr}concat=n=${n}:v=1:a=1[vconcat][aconcat]`);
           vTag = '[vconcat]';
+          aTag = '[aconcat]'; // aconcat is a filter output label
         } else {
-          filterParts.push(`${vLabels.join('')}concat=n=${n}:v=1:a=0[vconcat]`);
+          filterParts.push(`${concatStr}concat=n=${n}:v=1:a=0[vconcat]`);
           vTag = '[vconcat]';
+          aTag = null;
         }
+
+        // Apply blur-bg post-concat if needed
+        if (aspect === 'blur-bg') {
+          filterParts.push(`${vTag}split[bgraw][sharpraw]`);
+          filterParts.push(`[bgraw]scale=1280:720,boxblur=20:6,setsar=1[bgblur]`);
+          filterParts.push(`[bgblur][sharpraw]overlay=(W-w)/2:0[vblur]`);
+          vTag = '[vblur]';
+        }
+
       } else {
         // Single segment
         const seg = segments[0];
@@ -1419,56 +1609,97 @@ async function runExport() {
         vTag = `[vI${i}]`;
       });
 
-      // B-Roll overlay (each layer on top)
+      // B-Roll overlay (each layer on top, with layout support)
       brollStack.forEach((item, i) => {
         const t0     = Math.max(0, item.at - (hasCuts ? 0 : segments[0].s)).toFixed(2);
         const t1     = (parseFloat(t0) + item.duration).toFixed(2);
         const enable = `enable='between(t,${t0},${t1})'`;
-        filterParts.push(`[${brollIdx[i]}:v]scale=1280:720,format=yuv420p[vb${i}]`);
-        filterParts.push(`${vTag}[vb${i}]overlay=0:0:${enable}[vB${i}]`);
+        let scaleB, overlayB;
+        switch (item.layout || 'fullscreen') {
+          case 'left-third':
+            scaleB   = `scale=trunc(W/3/2)*2:-2,format=yuv420p`;
+            overlayB = `0:(H-h)/2`; break;
+          case 'right-third':
+            scaleB   = `scale=trunc(W/3/2)*2:-2,format=yuv420p`;
+            overlayB = `W-w:(H-h)/2`; break;
+          case 'center':
+            scaleB   = `scale=trunc(W*0.45/2)*2:-2,format=yuv420p`;
+            overlayB = `(W-w)/2:(H-h)/2`; break;
+          default: // fullscreen
+            scaleB   = `scale=1280:720,format=yuv420p`;
+            overlayB = `0:0`;
+        }
+        filterParts.push(`[${brollIdx[i]}:v]${scaleB}[vb${i}]`);
+        filterParts.push(`${vTag}[vb${i}]overlay=${overlayB}:${enable}[vB${i}]`);
         vTag = `[vB${i}]`;
       });
 
       // Audio chain
       let aTag = null;
-      const seg0 = hasCuts ? null : segments[0];
+      const seg0    = hasCuts ? null : segments[0];
       const trimDur = seg0 ? (seg0.e - seg0.s) : segments.reduce((a,s) => a + (s.e - s.s), 0);
 
       if (muteMode) {
         aTag = null;
       } else if (noiseMode && videoHasAudio) {
-        filterParts.push(`[0:a]anlmdn=s=3:p=0.004:r=0.004:m=10[anoise]`);
+        // Gentle noise removal — apply to the output of concat or direct stream
+        const noiseInput = hasCuts ? '[aconcat]' : '[0:a]';
+        filterParts.push(`${noiseInput}anlmdn=s=3:p=0.004:r=0.004:m=10[anoise]`);
         aTag = '[anoise]';
       } else if (hasAudioSwap) {
         filterParts.push(`[${swapIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[aswap]`);
         aTag = '[aswap]';
+      } else if (hasCuts && videoHasAudio) {
+        // [aconcat] already produced by concat filter above
+        aTag = '[aconcat]';
+      } else if (!hasCuts && videoHasAudio) {
+        aTag = '0:a'; // direct stream reference (no brackets = stream specifier)
       } else {
-        aTag = videoHasAudio && !hasCuts ? '0:a' : (hasCuts && videoHasAudio ? '[aconcat]' : null);
+        aTag = null;
       }
 
-      // Mix BGM tracks
-      if (hasBgm && aTag !== null) {
-        const mixInputs = [aTag === '[aconcat]' ? '[aconcat]' : `${aTag === '0:a' ? '[0:a]' : aTag}`];
+      // Mix BGM tracks — use duration=longest so BGM can extend beyond video
+      if (hasBgm) {
+        // Wrap current aTag into a labeled stream for mixing
+        let mainALabel = null;
         if (aTag === '0:a') {
           filterParts.push(`[0:a]volume=1.0[amain]`);
-          mixInputs[0] = '[amain]';
+          mainALabel = '[amain]';
+        } else if (aTag && aTag !== null) {
+          // Already a label like [aconcat], [anoise], [aswap]
+          mainALabel = aTag;
         }
+
+        const mixInputs = mainALabel ? [mainALabel] : [];
+
         bgmStack.forEach((item, i) => {
           const startMs = Math.round(item.startAt * 1000);
-          filterParts.push(`[${bgmIdx[i]}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)},adelay=${startMs}|${startMs}[abgm${i}]`);
+          // atrim duration = trimDur + extra time for BGM to continue
+          // We use a generous duration so BGM isn't cut short
+          const bgmDur = Math.max(trimDur, trimDur + 30); // allow up to 30s extension
+          filterParts.push(`[${bgmIdx[i]}:a]atrim=duration=${bgmDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)},adelay=${startMs}|${startMs}[abgm${i}]`);
           mixInputs.push(`[abgm${i}]`);
         });
-        filterParts.push(`${mixInputs.join('')}amix=inputs=${mixInputs.length}:duration=first:dropout_transition=2[amixed]`);
+
+        if (mixInputs.length === 1) {
+          // Only BGM, no main audio
+          filterParts.push(`${mixInputs[0]}acopy[amixed]`);
+        } else {
+          // duration=longest lets BGM extend beyond the video if needed
+          filterParts.push(`${mixInputs.join('')}amix=inputs=${mixInputs.length}:duration=longest:dropout_transition=2[amixed]`);
+        }
         aTag = '[amixed]';
       }
 
       // Mix SFX
       if (hasSfx && aTag !== null) {
-        const startLabel = aTag === '0:a' ? '[0:a]' : aTag;
+        // Wrap current aTag for mixing
+        let sfxBaseLabel = aTag;
         if (aTag === '0:a') {
-          filterParts.push(`[0:a]volume=1.0[apre]`); aTag = '[apre]';
+          filterParts.push(`[0:a]volume=1.0[apre]`);
+          sfxBaseLabel = '[apre]';
         }
-        const sfxLabels = [aTag];
+        const sfxLabels = [sfxBaseLabel];
         sfxStack.forEach((item, i) => {
           const delayMs = Math.max(0, Math.round((item.at - (seg0 ? seg0.s : 0)) * 1000));
           filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
@@ -1485,7 +1716,16 @@ async function runExport() {
         if (pct === 40 || pct === 70) announce(`Export ${pct}% complete.`);
       });
 
-      const audioArgs = aTag ? ['-map', aTag, '-c:a', 'aac', '-b:a', '192k'] : [];
+      // aTag is either:
+      //   '0:a'   → direct stream specifier (no brackets) — use -map 0:a
+      //   '[xxx]' → filter output label — use -map [xxx]
+      //   null    → no audio output
+      let audioArgs = [];
+      if (aTag === '0:a') {
+        audioArgs = ['-map', '0:a', '-c:a', 'aac', '-b:a', '192k'];
+      } else if (aTag) {
+        audioArgs = ['-map', aTag, '-c:a', 'aac', '-b:a', '192k'];
+      }
       await ffmpeg.run(
         ...args,
         '-filter_complex', filterComplex,
