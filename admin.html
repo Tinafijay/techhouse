@@ -2,189 +2,177 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tech House - Master Admin</title>
+    <title>Tech House - CEO Control Center</title>
     <style>
-        :root { --primary: #228B22; --dark: #0d1117; --light: #f4f4f4; --error: #ff4d4d; }
-        body { font-family: 'Inter', sans-serif; padding: 20px; max-width: 950px; margin: auto; background: var(--light); color: #333; }
-        .admin-box { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        :root { --primary: #228B22; --dark: #0d1117; --light: #f4f4f4; }
+        body { font-family: 'Inter', system-ui, sans-serif; padding: 20px; max-width: 950px; margin: auto; background: var(--light); color: #333; }
+        .admin-box { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         h1 { color: var(--primary); font-size: 1.8rem; border-left: 5px solid var(--primary); padding-left: 15px; }
-        label { display: block; font-weight: bold; margin-top: 20px; color: #555; }
+        
+        /* Media responsiveness */
+        .blog-content img, .blog-content video, .blog-content audio { max-width: 100%; height: auto; display: block; margin: 15px auto; border-radius: 10px; }
+
         input, textarea { width: 100%; padding: 12px; margin-top: 8px; border: 2px solid #eee; border-radius: 10px; font-size: 1rem; box-sizing: border-box; }
         
-        /* Keeping images and videos from going rogue */
-        .blog-content img, .blog-content video { max-width: 100%; height: auto; border-radius: 12px; display: block; margin: 20px auto; }
-
-        .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 30px; }
-        .main-btn { padding: 15px; border: none; border-radius: 10px; font-size: 1.1rem; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-preview { background: #6c757d; color: white; }
-        .btn-publish { background: var(--primary); color: white; }
-        
-        /* Post Manager Layout */
-        .post-manager { background: #fff; padding: 20px; border-radius: 15px; border: 1px solid #ddd; margin-bottom: 20px; max-height: 350px; overflow-y: auto; }
+        .post-manager { background: #fff; padding: 20px; border-radius: 15px; border: 1px solid #ddd; margin-bottom: 20px; max-height: 400px; overflow-y: auto; }
         .post-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
-        .edit-btn { background: #e3f2fd; color: #1976d2; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .del-btn { background: #ffebee; color: #d32f2f; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-left: 5px; }
+        
+        .btn { padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; border: none; transition: 0.2s; }
+        .btn-edit { background: #e3f2fd; color: #1976d2; }
+        .btn-del { background: #ffebee; color: #d32f2f; }
+        .btn-publish { background: var(--primary); color: white; width: 100%; margin-top: 20px; font-size: 1.1rem; }
 
-        #status { margin-top: 20px; padding: 15px; border-radius: 10px; display: none; text-align: center; font-weight: bold; }
-        .media-tag { background: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9rem; }
+        /* Accessibility: Visual indicator for status */
+        #status { margin-top: 20px; padding: 15px; border-radius: 10px; font-weight: bold; text-align: center; }
     </style>
 </head>
 <body>
 
 <div class="admin-box">
-    <h1>Tech House Control Center</h1>
+    <h1>Tech House Admin</h1>
     
-    <div class="post-manager">
-        <h3 style="margin-top:0;">📂 Existing Content</h3>
-        <button onclick="fetchPosts()" style="width:100%; padding: 10px; cursor: pointer; border-radius: 8px; background: #fff; border: 1px solid #ccc;">🔄 Sync with GitHub</button>
+    <!-- This div tells your screen reader when things change! -->
+    <div id="status" aria-live="polite" role="status">Ready for action, CEO.</div>
+
+    <section class="post-manager" aria-label="Existing Blog Posts">
+        <button class="btn" onclick="fetchPosts()" style="width:100%; border: 1px solid #ccc; background: #fff;">🔄 Refresh File List</button>
         <div id="post-list" style="margin-top:15px;"></div>
-    </div>
+    </section>
 
     <label for="postTitle">Blog Title</label>
-    <input type="text" id="postTitle" placeholder="The Next Big Thing...">
+    <input type="text" id="postTitle" placeholder="The Million Dollar Video Editor Idea">
 
-    <label for="postContent">Content (Use <span class="media-tag">[IMG1]</span>, <span class="media-tag">[AUDIO1]</span>, <span class="media-tag">[VIDEO1]</span>)</label>
-    <textarea id="postContent" rows="12" placeholder="Start typing..."></textarea>
+    <label for="postContent">Content (Use tags: [IMG1], [AUDIO1], [VIDEO1])</label>
+    <textarea id="postContent" rows="12" placeholder="Write the future here..."></textarea>
 
-    <div id="media-section" style="background: #f9f9f9; padding: 15px; border-radius: 10px; margin-top:20px;">
-        <strong>Media Assets</strong>
+    <div id="media-controls" style="background: #f9f9f9; padding: 15px; border-radius: 10px; margin-top:15px;">
+        <strong>Add Media Tags:</strong>
         <div id="media-inputs"></div>
         <div style="margin-top:10px;">
-            <button onclick="addMedia('img')">+ Image</button>
-            <button onclick="addMedia('audio')">+ Audio</button>
-            <button onclick="addMedia('video')">+ Video</button>
+            <button class="btn" onclick="addMedia('img')">+ Image</button>
+            <button class="btn" onclick="addMedia('audio')">+ Audio</button>
+            <button class="btn" onclick="addMedia('video')">+ Video</button>
         </div>
     </div>
 
-    <label for="ghToken">GitHub Token</label>
-    <input type="password" id="ghToken" placeholder="Enter your secret key">
+    <label for="ghToken">GitHub Personal Access Token</label>
+    <input type="password" id="ghToken" placeholder="Paste token here">
 
-    <div class="btn-row">
-        <button class="main-btn btn-preview" onclick="showPreview()">👁️ Preview</button>
-        <button class="main-btn btn-publish" onclick="publishPost()">🚀 Ship It!</button>
-    </div>
-
-    <div id="status"></div>
-</div>
-
-<div id="preview-area" style="display:none; background: white; padding: 30px; border-radius: 20px; border: 2px solid var(--primary); margin-top: 20px;">
-    <h2 style="color: var(--primary);">Instant Preview</h2>
-    <hr>
-    <div id="preview-body" class="blog-content"></div>
+    <button class="btn btn-publish" onclick="publishPost()">🚀 Publish to GitHub</button>
 </div>
 
 <script>
     const repo = "tinafijay/techhouse";
     let mediaCount = { img: 0, audio: 0, video: 0 };
 
+    // Helper: Safe Base64 decoding (the vibe fix)
+    function b64DecodeUnicode(str) {
+        return decodeURIComponent(atob(str).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+    }
+
     if(localStorage.getItem('techhouse_token')) {
         document.getElementById('ghToken').value = localStorage.getItem('techhouse_token');
     }
 
+    const updateStatus = (msg, color = "#eee") => {
+        const s = document.getElementById('status');
+        s.innerText = msg;
+        s.style.backgroundColor = color;
+    };
+
     function addMedia(type) {
         mediaCount[type]++;
         const div = document.createElement('div');
-        div.style.cssText = "margin-top:10px; display:flex; align-items:center; gap:10px;";
-        div.innerHTML = `<strong>[${type.toUpperCase()}${mediaCount[type]}]</strong> <input type="file" class="${type}-file">`;
+        div.style.marginTop = "8px";
+        div.innerHTML = `<span>[${type.toUpperCase()}${mediaCount[type]}]</span> <input type="file" class="${type}-file">`;
         document.getElementById('media-inputs').appendChild(div);
+        updateStatus(`${type.toUpperCase()} tag added.`);
     }
 
     async function fetchPosts() {
         const token = document.getElementById('ghToken').value;
-        if(!token) return alert("Token missing, Boss!");
+        if(!token) return updateStatus("❌ Token missing!", "#ffcccc");
         
-        const list = document.getElementById('post-list');
-        list.innerHTML = "Fetching...";
-        
+        updateStatus("⏳ Fetching files...");
         try {
             const res = await fetch(`https://api.github.com/repos/${repo}/contents/`, {
                 headers: { 'Authorization': `token ${token}` }
             });
             const files = await res.json();
+            // Filter out core files
             const blogFiles = files.filter(f => f.name.endsWith('.html') && !['index.html', 'blog.html', 'admin.html'].includes(f.name));
             
-            list.innerHTML = blogFiles.map(f => `
+            document.getElementById('post-list').innerHTML = blogFiles.map(f => `
                 <div class="post-item">
                     <span>${f.name}</span>
-                    <div class="action-btns">
-                        <button class="edit-btn" onclick="editExisting('${f.path}')">Edit</button>
-                        <button class="del-btn" onclick="deletePost('${f.path}', '${f.sha}')">Delete</button>
+                    <div>
+                        <button class="btn btn-edit" onclick="loadForEdit('${f.path}')" aria-label="Edit ${f.name}">Edit</button>
+                        <button class="btn btn-del" onclick="deletePost('${f.path}', '${f.sha}')" aria-label="Delete ${f.name}">Delete</button>
                     </div>
                 </div>
             `).join('');
-        } catch(e) { list.innerHTML = "Error loading files."; }
+            updateStatus("✅ Files loaded.");
+        } catch(e) { updateStatus("❌ Failed to fetch files.", "#ffcccc"); }
     }
 
-    async function editExisting(path) {
+    async function loadForEdit(path) {
         const token = document.getElementById('ghToken').value;
-        const status = document.getElementById('status');
+        updateStatus("⏳ Downloading content...");
         
-        status.style.display = "block";
-        status.style.background = "#e3f2fd";
-        status.innerText = "⏳ Downloading post data...";
-
         try {
             const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
                 headers: { 'Authorization': `token ${token}` }
             });
             const data = await res.json();
-            const rawContent = decodeURIComponent(escape(atob(data.content)));
+            const rawContent = b64DecodeUnicode(data.content);
 
             const parser = new DOMParser();
             const doc = parser.parseFromString(rawContent, 'text/html');
 
             const title = doc.querySelector('title')?.innerText.split(' | ')[0] || "";
-            // We search for several possibilities in case the structure changed
-            const body = doc.querySelector('.blog-content')?.innerHTML || doc.body.innerHTML;
+            // Find content: check .blog-content first, then fallback to body
+            let body = doc.querySelector('.blog-content')?.innerHTML || doc.body.innerHTML;
 
             document.getElementById('postTitle').value = title;
+            // Clean HTML tags back to newlines for editing
             document.getElementById('postContent').value = body
-                .replace(/<\/p><p>/g, '\n\n')
-                .replace(/<p>/g, '')
-                .replace(/<\/p>/g, '')
-                .replace(/<h1.*?>.*?<\/h1>/i, '') // Remove the H1 if it's in the body
+                .replace(/<p>/g, '').replace(/<\/p>/g, '\n')
+                .replace(/<h1.*?>.*?<\/h1>/i, '')
                 .trim();
 
-            status.innerText = "✅ Loaded instantly!";
-            setTimeout(() => status.style.display = "none", 2000);
-        } catch(e) {
-            status.style.background = "#f8d7da";
-            status.innerText = "❌ Failed to load. Check console.";
-            console.error(e);
-        }
+            updateStatus("✅ Content loaded into editor!");
+        } catch(e) { updateStatus("❌ Load failed.", "#ffcccc"); }
     }
 
     async function deletePost(path, sha) {
-        if(!confirm("Destroy this post forever?")) return;
+        if(!confirm("Destroy this post? This cannot be undone.")) return;
         const token = document.getElementById('ghToken').value;
-        await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `token ${token}` },
-            body: JSON.stringify({ message: "CEO Housekeeping", sha: sha })
-        });
-        fetchPosts();
-    }
+        updateStatus("⏳ Deleting...");
 
-    function showPreview() {
-        const title = document.getElementById('postTitle').value;
-        const content = document.getElementById('postContent').value;
-        document.getElementById('preview-body').innerHTML = `<h1>${title}</h1>` + content.replace(/\n/g, '<p></p>');
-        document.getElementById('preview-area').style.display = "block";
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        try {
+            const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `token ${token}` },
+                body: JSON.stringify({ message: "CEO Clean-up", sha: sha })
+            });
+            if(res.ok) {
+                updateStatus("🗑️ Post deleted successfully!");
+                fetchPosts();
+            } else { updateStatus("❌ Delete failed.", "#ffcccc"); }
+        } catch(e) { updateStatus("❌ Network error during delete.", "#ffcccc"); }
     }
 
     async function publishPost() {
         const title = document.getElementById('postTitle').value;
         const content = document.getElementById('postContent').value;
         const token = document.getElementById('ghToken').value;
-        const status = document.getElementById('status');
 
-        if(!title || !token) return alert("Fill in the blanks!");
+        if(!title || !token) return updateStatus("❌ Title and Token required!", "#ffcccc");
         localStorage.setItem('techhouse_token', token);
 
-        status.style.display = "block";
-        status.innerText = "⏳ Publishing to GitHub...";
-
+        updateStatus("🚀 Shipping your code to the world...");
         const fileName = title.toLowerCase().replace(/ /g, '-') + ".html";
 
         const finalHtml = `<!DOCTYPE html>
@@ -196,7 +184,7 @@
     <script type="module" src="script.js"><\/script>
 </head>
 <body>
-    <header id="nav-placeholder"></header>
+    <header id="nav-inject"></header>
     <main style="padding: 40px 5%; max-width: 800px; margin: auto;">
         <div class="blog-content">
             <h1>${title}</h1>
@@ -206,34 +194,34 @@
     <script>
         fetch('index.html').then(r => r.text()).then(h => {
             const nav = new DOMParser().parseFromString(h, 'text/html').querySelector('header');
-            if(nav) document.getElementById('nav-placeholder').innerHTML = nav.innerHTML;
+            if(nav) document.getElementById('nav-inject').innerHTML = nav.innerHTML;
         });
     <\/script>
 </body>
 </html>`;
 
         try {
+            // Check for existing file to get SHA (for updates)
             const check = await fetch(`https://api.github.com/repos/${repo}/contents/${fileName}`, {
                 headers: { 'Authorization': `token ${token}` }
             });
             let sha = check.ok ? (await check.json()).sha : null;
 
-            await fetch(`https://api.github.com/repos/${repo}/contents/${fileName}`, {
+            const res = await fetch(`https://api.github.com/repos/${repo}/contents/${fileName}`, {
                 method: 'PUT',
                 headers: { 'Authorization': `token ${token}` },
                 body: JSON.stringify({ 
-                    message: `Post Update: ${title}`, 
+                    message: `CEO Update: ${title}`, 
                     content: btoa(unescape(encodeURIComponent(finalHtml))),
                     sha: sha 
                 })
             });
 
-            status.style.background = "#d4edda";
-            status.innerText = "✅ Successfully shipped!";
-        } catch(e) {
-            status.style.background = "#f8d7da";
-            status.innerText = "❌ Error: " + e.message;
-        }
+            if(res.ok) {
+                updateStatus("✅ MISSION ACCOMPLISHED. Post is live!", "#d4edda");
+                fetchPosts();
+            } else { updateStatus("❌ Publish failed.", "#ffcccc"); }
+        } catch(e) { updateStatus("❌ Publish Error.", "#ffcccc"); }
     }
 </script>
 </body>
