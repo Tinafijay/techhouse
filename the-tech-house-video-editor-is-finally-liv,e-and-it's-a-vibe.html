@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>The tech house video editor is finally liv,e and it's a vibe | Tech House</title>
+    <link rel="stylesheet" href="Techhouse_style.css">
+    <script type="module" src="script.js"></script>
+</head>
+<body>
+    <header id="nav-inject"></header>
+    <main style="padding: 40px 5%; max-width: 800px; margin: auto;">
+        <div class="blog-content">
+            <h1>The tech house video editor is finally liv,e and it's a vibe</h1>
+            <p>Yo everyone! I’ve been locked in the "Tech House" kitchen for a minute, and I finally cooked up something special. I’m tired of clunky video editors that feel like they were built in 1995, so I just freestyled my own. </p><p> [IMG1]</p><p>It’s built with **FFmpeg.wasm**, which basically means you’re running a professional-grade video engine right inside your browser. No "uploading to a server and waiting 10 years" nonsense—it's all happening right on your machine.</p><p>### Why this thing actually slaps:</p><p>*   **Auto-Cut Silence:** I added a feature that scans your audio for those awkward "uhhh" moments and long pauses, then just... snips them. It’s like a digital haircut for your videos.</p><p>*   **The Layer Stack:** You can toss in logos, illustrations, sound effects, background music and B-roll overlays like you're playing Tetris</p><p>*   **Music Focus Controller:** This is my favorite part. You can focus a BGM track and nudge it around with the keyboard until the beat drops exactly when you want it to.</p><p>*   **Privacy-First:** Since it’s all local, your weird dance videos or top-secret projects stay on your computer.</p><p>It even has a "Blur BG" mode for when you’re trying to make those portrait phone videos look decent on a landscape screen. 🌅</p><p>Go use it, or just vibe with the UI here:</p><p>[https://techhouse-87e28.web.app/tech-house-editor])</p><p>Let me know if the "Auto-Cut" saves your life or if I need to jump back into the script and tweak the dB thresholds! ✌️</p>
+        </div>
+    </main>
+    <script>
+        fetch('index.html').then(r => r.text()).then(h => {
+            const nav = new DOMParser().parseFromString(h, 'text/html').querySelector('header');
+            if(nav) document.getElementById('nav-inject').innerHTML = nav.innerHTML;
+        });
+    </script>
+</body>
+</html>
