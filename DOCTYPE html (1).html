@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T Vision | Mobility AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-950 text-white font-sans flex flex-col items-center min-h-screen">
+
+    <div id="key-screen" class="fixed inset-0 bg-black z-50 flex items-center justify-center p-6 hidden">
+        <div class="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl w-full max-w-md shadow-2xl text-center">
+            <h2 class="text-3xl font-bold mb-2 text-blue-500 text-center">Eye of T-Vision</h2>
+            <p class="text-zinc-500 mb-6 italic">Secure initialization required</p>
+            <input type="password" id="api-input" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl p-4 mb-4 focus:ring-2 focus:ring-blue-500 outline-none text-center" placeholder="Paste Gemini API Key">
+            <button onclick="saveAndStart()" class="w-full bg-blue-600 py-4 rounded-2xl font-black text-lg hover:bg-blue-500 transition-all">START ENGINE</button>
+        </div>
+    </div>
+
+    <header class="py-6 w-full text-center">
+        <h1 class="text-2xl font-black text-blue-500 tracking-tighter">👁️ T VISION PROTOTYPE</h1>
+        <p class="text-[10px] text-zinc-600 uppercase tracking-[0.3em]">Independence through Intelligence</p>
+    </header>
+
+    <div class="relative w-[90%] max-w-md aspect-[3/4] bg-zinc-900 rounded-[2.5rem] overflow-hidden border-4 border-zinc-800 shadow-2xl">
+        <video id="webcam" autoplay playsinline class="w-full h-full object-cover grayscale brightness-75"></video>
+        <canvas id="hidden-canvas" class="hidden"></canvas>
+        
+        <div id="scanner" class="absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_15px_blue] hidden"></div>
+    </div>
+
+    <div class="w-full max-w-md p-6 space-y-6">
+        <div id="ai-text" class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 min-h-[140px] text-lg text-zinc-400 font-medium leading-tight">
+            Ready to assist. Tap the button below to scan your surroundings.
+        </div>
+
+        <button id="scan-btn" onclick="runVision()" class="w-full h-24 bg-blue-600 hover:bg-blue-500 rounded-[2rem] text-2xl font-black shadow-[0_10px_40px_-10px_rgba(37,99,235,0.5)] active:scale-95 transition-all">
+            SCAN ENVIRONMENT 🗣️
+        </button>
+        
+        <button onclick="clearKey()" class="w-full text-zinc-700 text-xs uppercase tracking-widest hover:text-red-500 transition-colors">Reset API Key</button>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+        let genAI, model;
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('hidden-canvas');
+        const textBox = document.getElementById('ai-text');
+        const scanner = document.getElementById('scanner');
+
+        // 1. KEY MANAGEMENT
+        window.saveAndStart = () => {
+            const key = document.getElementById('api-input').value;
+            if(key) {
+                localStorage.setItem('t_vision_key', key);
+                location.reload();
+            }
+        };
+
+        window.clearKey = () => {
+            localStorage.removeItem('t_vision_key');
+            location.reload();
+        };
+
+        const storedKey = localStorage.getItem('t_vision_key');
+        if (!storedKey) {
+            document.getElementById('key-screen').classList.remove('hidden');
+        } else {
+            genAI = new GoogleGenerativeAI(storedKey);
+            // TARGETING GEMINI 3 FLASH (The 2026 workhorse you wanted)
+            model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+            startCamera();
+        }
+
+        // 2. CAMERA SETUP
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+            } catch (err) {
+                textBox.innerText = "Camera permission denied. Please allow access.";
+            }
+        }
+
+        // 3. THE VISION LOGIC (The "Snap & Read" method)
+        window.runVision = async () => {
+            // UI Feedback
+            textBox.innerText = "Processing vision...";
+            textBox.classList.add('animate-pulse');
+            scanner.classList.remove('hidden');
+            scanner.style.animation = "scan 1.5s infinite linear";
+
+            // Snap the frame
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const base64Image = canvas.toDataURL('image/jpeg').split(',')[1];
+
+            // The Prompt (Protecting your vision)
+            const prompt = `You are T Vision. Analyze this scene for a blind user. 
+            1. Identify any IMMEDIATE hazards (steps, holes, cars). If found, start with 'DANGER'.
+            2. Describe the room/people and their emotions briefly.
+            Keep the response under 3 sentences for fast reading.`;
+
+            try {
+                const result = await model.generateContent([
+                    prompt,
+                    { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+                ]);
+                
+                const responseText = result.response.text();
+                
+                // Stop UI effects
+                textBox.classList.remove('animate-pulse');
+                scanner.classList.add('hidden');
+                
+                // Display and Speak
+                textBox.innerText = responseText;
+                
+                const synth = window.speechSynthesis;
+                synth.cancel(); // Interrupt previous speech
+                const utterance = new SpeechSynthesisUtterance(responseText);
+                
+                // If danger, make the voice high-pitched and fast
+                if (responseText.toUpperCase().includes("DANGER")) {
+                    utterance.rate = 1.4;
+                    utterance.pitch = 1.2;
+                    textBox.classList.add('text-red-500');
+                } else {
+                    textBox.classList.remove('text-red-500');
+                    textBox.classList.add('text-zinc-300');
+                }
+                
+                synth.speak(utterance);
+
+            } catch (error) {
+                textBox.innerText = "System Error: Check connection or Key.";
+                scanner.classList.add('hidden');
+            }
+        };
+    </script>
+
+    <style>
+        @keyframes scan {
+            from { top: 0; }
+            to { top: 100%; }
+        }
+    </style>
+</body>
+</html>
