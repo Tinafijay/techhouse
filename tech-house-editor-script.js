@@ -100,6 +100,8 @@ const overlayLogo   = document.getElementById('overlay-logo');
 const illuContainer = document.getElementById('illu-overlay-container');
 const brollPlayer   = document.getElementById('broll-player');
 const overlayBroll  = document.getElementById('overlay-broll');
+const audioOnlyStage = document.getElementById('audio-only-stage');
+const audioPlayer    = document.getElementById('audio-player');
 
 // ── Preview Audio (BGM swap use arrays now) ──────────────────
 const swapAudio = new Audio();
@@ -108,6 +110,12 @@ swapAudio.loop  = true;
 // ── App State ─────────────────────────────────────────────────
 let mainVideoFile = null;
 let mainAudioBuffer = null; // decoded audio for silence detection
+let mediaKind = 'video'; // 'video' | 'audio' — hybrid editor mode
+
+// Returns the media element currently driving the timeline (video or audio).
+function activeMedia() {
+  return mediaKind === 'audio' ? audioPlayer : player;
+}
 
 // Single-item assets (logo, audioSwap)
 let assets = { logo: null, audioSwap: null };
@@ -336,11 +344,12 @@ function resetProjectMediaState() {
   latestAiSuggestions = null;
   el('apply-ai-btn')?.setAttribute('disabled', 'disabled');
   if (el('apply-ai-btn')) el('apply-ai-btn').disabled = true;
-  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = 'Load a video, then run AI analysis to get editing suggestions.';
+  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = 'Load a video or audio file, then run AI analysis to get editing suggestions.';
   illuContainer.innerHTML = '';
   overlayBroll.classList.add('hidden');
   brollPlayer.pause();
   brollPlayer.removeAttribute('src');
+  if (audioPlayer) { audioPlayer.pause(); audioPlayer.removeAttribute('src'); }
   syncSingleAssetUI();
   renderIlluStack();
   renderBgmStack();
@@ -765,18 +774,21 @@ async function extractAudioSampleForAi(file) {
     return { part: null, note: 'Audio transcript skipped because FFmpeg is still loading.' };
   }
 
-  const duration = times.duration || player.duration || 0;
+  const duration = times.duration || player.duration || audioPlayer.duration || 0;
+  const mediaLabel = mediaKind === 'audio' ? 'audio file' : 'video';
 
-  // Videos over 10 minutes ask the user before sending the full audio track.
-  const LONG_VIDEO_THRESHOLD = 600; // seconds
-  if (duration > LONG_VIDEO_THRESHOLD) {
+  // Media over 10 minutes asks the user before sending the full audio track.
+  const LONG_MEDIA_THRESHOLD = 600; // seconds
+  if (duration > LONG_MEDIA_THRESHOLD) {
     const proceed = window.confirm(
-      `This video is ${fmtTime(duration)} long (over 10 minutes).\n\n` +
-      'Send the full audio track to Gemini for transcription anyway?\n\n' +
-      'OK = send audio.  Cancel = analyze snapshots only (no audio).'
+      `This ${mediaLabel} is ${fmtTime(duration)} long (over 10 minutes).\n\n` +
+      'Send the full audio to Gemini for transcription anyway?\n\n' +
+      (mediaKind === 'audio'
+        ? 'OK = send audio.  Cancel = skip AI transcription.'
+        : 'OK = send audio.  Cancel = analyze snapshots only (no audio).')
     );
     if (!proceed) {
-      return { part: null, note: 'Audio transcript skipped — you chose not to send audio for this long video.' };
+      return { part: null, note: 'Audio transcript skipped — you chose not to send audio for this long file.' };
     }
   }
 
@@ -822,6 +834,8 @@ function normalizeAiSuggestions(data) {
     audioSummary: safe.audioSummary || 'No audio summary returned.',
     illustrationSuggestions: Array.isArray(safe.illustrationSuggestions) ? safe.illustrationSuggestions : [],
     brollSuggestions: Array.isArray(safe.brollSuggestions) ? safe.brollSuggestions : [],
+    bgmSuggestions: Array.isArray(safe.bgmSuggestions) ? safe.bgmSuggestions : [],
+    sfxSuggestions: Array.isArray(safe.sfxSuggestions) ? safe.sfxSuggestions : [],
     accessibilityFindings: Array.isArray(safe.accessibilityFindings) ? safe.accessibilityFindings : [],
     compatibilityFindings: Array.isArray(safe.compatibilityFindings) ? safe.compatibilityFindings : [],
     bugChecks: Array.isArray(safe.bugChecks) ? safe.bugChecks : []
@@ -844,6 +858,16 @@ function renderAiAnalysisResult(result, audioNote = '') {
       `- B-Roll ${item.index}: ${fmtTime(Number(item.at) || 0)} for ${Number(item.duration) || 0}s (${item.layout || 'fullscreen'}) — ${item.reason || 'No reason'}`
     ),
     '',
+    `BGM suggestions: ${result.bgmSuggestions.length}`,
+    ...result.bgmSuggestions.slice(0, 4).map(item =>
+      `- BGM ${item.index}: start ${fmtTime(Number(item.startAt) || 0)} at ${Number(item.volume) || 0}% — ${item.reason || 'No reason'}`
+    ),
+    '',
+    `SFX suggestions: ${result.sfxSuggestions.length}`,
+    ...result.sfxSuggestions.slice(0, 4).map(item =>
+      `- SFX ${item.index}: ${fmtTime(Number(item.at) || 0)} at ${Number(item.volume) || 0}% — ${item.reason || 'No reason'}`
+    ),
+    '',
     'Accessibility checks:',
     ...(result.accessibilityFindings.length ? result.accessibilityFindings.map(item => `- ${item}`) : ['- None returned']),
     '',
@@ -860,7 +884,7 @@ function renderAiAnalysisResult(result, audioNote = '') {
 async function analyzeProjectWithGemini() {
   if (aiJobRunning) return;
   if (!mainVideoFile) {
-    toast('Load a video before running AI analysis', 'error');
+    toast('Load a video or audio file before running AI analysis', 'error');
     return;
   }
 
@@ -873,66 +897,98 @@ async function analyzeProjectWithGemini() {
     return;
   }
 
+  const isAudio = mediaKind === 'audio';
+
   aiJobRunning = true;
   el('analyze-project-btn').disabled = true;
   el('apply-ai-btn').disabled = true;
   latestAiSuggestions = null;
-  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = 'Analyzing video snapshots and optional audio context…';
-  setStatus('Preparing AI project analysis…');
+  if (el('ai-analysis-result')) {
+    el('ai-analysis-result').textContent = isAudio
+      ? 'Transcribing audio and analyzing pacing…'
+      : 'Analyzing video snapshots and audio transcript…';
+  }
+  setStatus('Preparing AI analysis…');
 
   try {
-    const snapshots = await captureVideoSnapshots(mainVideoFile);
+    // Snapshots only make sense for video. Audio is always transcribed.
+    const snapshots = isAudio ? [] : await captureVideoSnapshots(mainVideoFile);
     const audioSample = await extractAudioSampleForAi(mainVideoFile);
     const parts = snapshots.map(item => item.inlineData);
     if (audioSample.part) parts.push(audioSample.part);
 
     const prompt = [
-      'You are helping a browser-based video editor place already-uploaded visual assets onto a timeline.',
+      isAudio
+        ? 'You are helping a browser-based AUDIO editor. The user uploaded an audio file (no video frames exist).'
+        : 'You are helping a browser-based VIDEO editor place already-uploaded visual assets onto a timeline.',
       'Return strict JSON only. No markdown fences.',
       'JSON schema:',
       '{',
       '  "projectSummary": "short paragraph",',
-      '  "audioTranscript": "verbatim transcript of the spoken audio; empty string if no audio was provided or there is no speech",',
+      '  "audioTranscript": "verbatim, punctuated transcript of the spoken audio; empty string only if there is truly no speech",',
       '  "audioSummary": "short paragraph summarizing tone and pacing; mention if audio was unavailable",',
       '  "illustrationSuggestions": [{"index":1,"at":12.5,"duration":3,"layout":"center","reason":"why"}],',
       '  "brollSuggestions": [{"index":1,"at":24.5,"duration":4,"layout":"fullscreen","reason":"why"}],',
+      '  "bgmSuggestions": [{"index":1,"startAt":0,"volume":18,"reason":"why"}],',
+      '  "sfxSuggestions": [{"index":1,"at":8.0,"volume":100,"reason":"why"}],',
       '  "accessibilityFindings": ["..."],',
       '  "compatibilityFindings": ["..."],',
       '  "bugChecks": ["..."]',
       '}',
       '',
-      `Video duration: ${fmtTime(times.duration || player.duration || 0)}`,
-      `Current illustration assets: ${illuStack.length ? illuStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
-      `Current B-Roll assets: ${brollStack.length ? brollStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
-      `Current audio layers: ${bgmStack.length} BGM, ${sfxStack.length} SFX, audio swap ${assets.audioSwap ? 'loaded' : 'not loaded'}`,
+      `Project type: ${isAudio ? 'audio-only' : 'video'}`,
+      `Media duration: ${fmtTime(times.duration || player.duration || audioPlayer.duration || 0)}`,
+      isAudio
+        ? 'Illustration/B-Roll assets: not applicable for audio projects (keep those arrays empty).'
+        : `Current illustration assets: ${illuStack.length ? illuStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
+      isAudio ? '' : `Current B-Roll assets: ${brollStack.length ? brollStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
+      `Current background music tracks: ${bgmStack.length ? bgmStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
+      `Current sound effects: ${sfxStack.length ? sfxStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
+      `Audio swap: ${assets.audioSwap ? 'loaded' : 'not loaded'}`,
       `User editing goal: ${editorSettings.aiUserBrief || 'No extra goal provided.'}`,
-      `Transcript or notes: ${editorSettings.aiTranscript || 'No transcript supplied by the user.'}`,
+      `Transcript or notes supplied by user: ${editorSettings.aiTranscript || 'None — please generate the transcript from the audio.'}`,
       `Audio analysis note: ${audioSample.note}`,
-      `Snapshot times: ${snapshots.map(item => `${item.label}@${fmtTime(item.time)}`).join(', ')}`,
+      isAudio ? '' : `Snapshot times: ${snapshots.map(item => `${item.label}@${fmtTime(item.time)}`).join(', ')}`,
       'Rules:',
-      '- Use only uploaded illustration indexes 1..N and B-Roll indexes 1..M.',
-      '- Keep arrays empty when there are no uploaded assets of that type.',
-      '- Layout must be one of: center, fullscreen, left-third, right-third.',
+      '- Always transcribe the spoken audio into audioTranscript when an audio track is provided.',
+      isAudio
+        ? '- This is audio-only: keep illustrationSuggestions and brollSuggestions empty. Focus on transcript, bgmSuggestions and sfxSuggestions.'
+        : '- Use only uploaded illustration indexes 1..N and B-Roll indexes 1..M. Layout must be one of: center, fullscreen, left-third, right-third.',
+      '- Use only uploaded BGM indexes 1..N and SFX indexes 1..M. startAt/at are seconds within the timeline; volume is a percent 0..100.',
+      '- Keep any array empty when there are no uploaded assets of that type.',
       '- Suggestions must be conservative and timeline-safe.',
-      '- If an audio track is provided, transcribe the spoken words into audioTranscript and base pacing suggestions on what is actually said.',
-      '- Accessibility findings should focus on captions, contrast, keyboard flow, and motion sensitivity.',
-      '- Compatibility findings should focus on browser support, persistence/backward compatibility, and failure modes.',
+      '- Accessibility findings should focus on captions/transcripts, contrast, keyboard flow, and motion sensitivity.',
+      '- Compatibility findings should focus on browser support, persistence, and failure modes.',
       '- Bug checks should highlight likely editor regressions to manually verify.'
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
     const payload = await callGeminiAPI(prompt, parts);
     const parsed = normalizeAiSuggestions(parseGeminiJson(extractGeminiText(payload)));
     latestAiSuggestions = parsed;
+
+    // Auto-fill the transcript box so Gemini's transcript becomes reusable context.
+    if (parsed.audioTranscript && el('ai-transcript')) {
+      el('ai-transcript').value = parsed.audioTranscript;
+      editorSettings.aiTranscript = parsed.audioTranscript;
+      persistEditorSettings();
+      announce('Transcript generated and added to the transcript box.');
+    }
+
     renderAiAnalysisResult(parsed, audioSample.note);
-    el('apply-ai-btn').disabled = !(parsed.illustrationSuggestions.length || parsed.brollSuggestions.length);
+    el('apply-ai-btn').disabled = !(
+      parsed.illustrationSuggestions.length ||
+      parsed.brollSuggestions.length ||
+      parsed.bgmSuggestions.length ||
+      parsed.sfxSuggestions.length
+    );
     updateGeminiStatusText('Gemini analysis completed successfully.', 'success');
     setStatus('AI analysis complete.');
-    toast('AI project analysis complete ✓', 'success');
+    toast('AI analysis complete ✓', 'success');
   } catch (err) {
     console.error('[AI analysis]', err);
     if (el('ai-analysis-result')) el('ai-analysis-result').textContent = `AI analysis failed: ${err.message}`;
     updateGeminiStatusText(err.message || 'Gemini analysis failed.', 'error');
-    toast('AI project analysis failed', 'error');
+    toast('AI analysis failed', 'error');
   } finally {
     aiJobRunning = false;
     el('analyze-project-btn').disabled = false;
@@ -967,6 +1023,35 @@ function applyAiSuggestions() {
     applied++;
   });
 
+  // Apply BGM suggestions: start time + volume.
+  (latestAiSuggestions.bgmSuggestions || []).forEach(suggestion => {
+    const item = bgmStack[(Number(suggestion.index) || 0) - 1];
+    if (!item) return;
+    if (suggestion.startAt != null && !isNaN(Number(suggestion.startAt))) {
+      item.startAt = clamp(Number(suggestion.startAt), 0, times.duration || Number(suggestion.startAt));
+    }
+    if (suggestion.volume != null && !isNaN(Number(suggestion.volume))) {
+      item.volume = clamp(Math.round(Number(suggestion.volume)), 0, 100);
+      if (item.audio) item.audio.volume = item.volume / 100;
+    }
+    applied++;
+  });
+
+  // Apply SFX suggestions: trigger time + volume.
+  (latestAiSuggestions.sfxSuggestions || []).forEach(suggestion => {
+    const item = sfxStack[(Number(suggestion.index) || 0) - 1];
+    if (!item) return;
+    if (suggestion.at != null && !isNaN(Number(suggestion.at))) {
+      item.at = clamp(Number(suggestion.at), 0, times.duration || Number(suggestion.at));
+    }
+    if (suggestion.volume != null && !isNaN(Number(suggestion.volume))) {
+      item.volume = clamp(Math.round(Number(suggestion.volume)), 0, 100);
+      if (item.audio) item.audio.volume = item.volume / 100;
+    }
+    item.triggered = false;
+    applied++;
+  });
+
   if (!applied) {
     toast('AI returned review notes but no applicable asset placements', 'info');
     return;
@@ -974,6 +1059,9 @@ function applyAiSuggestions() {
 
   renderIlluStack();
   renderBrollStack();
+  renderBgmStack();
+  renderSfxStack();
+  renderSfxMarkers();
   updateSummary();
   announce(`Applied ${applied} AI placement suggestion${applied === 1 ? '' : 's'}.`);
   toast(`Applied ${applied} AI suggestion${applied === 1 ? '' : 's'} ✓`, 'success');
@@ -1076,54 +1164,136 @@ function setupAuth() {
   });
 }
 
-// ── VIDEO UPLOAD ──────────────────────────────────────────────
-document.getElementById('vid-uploader').onchange = async (e) => {
-  const file = e.target.files[0];
+// ── MEDIA UPLOAD (HYBRID: VIDEO OR AUDIO) ─────────────────────
+
+// Robust media-type detection. iOS Chrome/Safari sometimes report an empty
+// or generic file.type, so we fall back to the file extension.
+function detectMediaKind(file) {
+  const type = (file.type || '').toLowerCase();
+  if (type.startsWith('video/')) return 'video';
+  if (type.startsWith('audio/')) return 'audio';
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi', '3gp'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'opus', 'aiff'].includes(ext)) return 'audio';
+  return '';
+}
+
+async function handleMainMediaFile(file) {
   if (!file) return;
+  const kind = detectMediaKind(file);
+  if (!kind) {
+    toast('Unsupported file — please pick a video or audio file', 'error');
+    setStatus('Unsupported file type. Load a video or audio file.', true);
+    return;
+  }
+
   resetProjectMediaState();
+  mediaKind = kind;
   mainVideoFile = file;
-  player.src = getPreviewURL(file);
-  player.load();
+  applyMediaKindUI();
 
-  player.onloadedmetadata = () => {
-    times.duration = player.duration;
-    times.s = 0;
-    times.e = player.duration;
-    segments    = [{ s: 0, e: player.duration }];
-    editHistory = [];
+  if (kind === 'video') {
+    await loadMainVideo(file);
+  } else {
+    await loadMainAudio(file);
+  }
+}
 
-    uploadZone.classList.add('hidden');
-    previewStage.classList.remove('hidden');
-    document.getElementById('export-btn').disabled  = false;
-    document.getElementById('silence-btn').disabled = false;
-    document.getElementById('undo-btn').disabled    = true;
+// Show/hide the correct preview surface and adjust controls for the mode.
+function applyMediaKindUI() {
+  const isAudio = mediaKind === 'audio';
+  if (player) player.classList.toggle('hidden', isAudio);
+  if (audioOnlyStage) audioOnlyStage.classList.toggle('hidden', !isAudio);
+  document.body.classList.toggle('audio-mode', isAudio);
+  // Video-only overlay layers (logo, illustrations, B-roll) are dimmed for audio.
+  document.querySelectorAll('[data-video-only]').forEach(node => {
+    node.classList.toggle('mode-disabled', isAudio);
+  });
+}
 
-    updateTimecodes();
-    updateTrimBar();
-    updateSegmentDisplay();
-    updateSummary();
-    renderSfxMarkers();
-    setStatus(`Loaded: "${file.name}" — ${fmtTime(player.duration)}`);
-    toast('Video loaded ✓', 'success');
-    scheduleProjectAutosave();
+function finishMediaLoad(file, duration) {
+  times.duration = duration;
+  times.s = 0;
+  times.e = duration;
+  segments    = [{ s: 0, e: duration }];
+  editHistory = [];
 
-    // Decode audio for silence detection in background
-    decodeVideoAudio(file);
-  };
-};
+  uploadZone.classList.add('hidden');
+  previewStage.classList.remove('hidden');
+  document.getElementById('export-btn').disabled  = false;
+  document.getElementById('silence-btn').disabled = false;
+  document.getElementById('undo-btn').disabled    = true;
 
-// Drag-and-drop
+  updateTimecodes();
+  updateTrimBar();
+  updateSegmentDisplay();
+  updateSummary();
+  renderSfxMarkers();
+  const kindLabel = mediaKind === 'audio' ? 'Audio' : 'Video';
+  setStatus(`Loaded: "${file.name}" — ${fmtTime(duration)}`);
+  toast(`${kindLabel} loaded ✓`, 'success');
+  scheduleProjectAutosave();
+
+  // Decode audio for silence detection + AI transcription in the background.
+  decodeVideoAudio(file);
+}
+
+function loadMainVideo(file) {
+  return new Promise((resolve) => {
+    player.src = getPreviewURL(file);
+    player.load();
+    const onMeta = () => {
+      player.removeEventListener('loadedmetadata', onMeta);
+      finishMediaLoad(file, player.duration || 0);
+      resolve();
+    };
+    player.addEventListener('loadedmetadata', onMeta, { once: true });
+    // iOS Safari occasionally withholds loadedmetadata until playback is
+    // nudged; a muted no-op play()/pause() reliably forces metadata to load.
+    const wasMuted = player.muted;
+    player.muted = true;
+    const kick = player.play?.();
+    if (kick && typeof kick.then === 'function') {
+      kick.then(() => { player.pause(); player.currentTime = 0; player.muted = wasMuted; })
+          .catch(() => { player.muted = wasMuted; });
+    } else {
+      player.muted = wasMuted;
+    }
+  });
+}
+
+function loadMainAudio(file) {
+  return new Promise((resolve) => {
+    if (el('audio-only-name')) el('audio-only-name').textContent = file.name;
+    audioPlayer.src = getPreviewURL(file);
+    audioPlayer.load();
+    const onMeta = () => {
+      audioPlayer.removeEventListener('loadedmetadata', onMeta);
+      finishMediaLoad(file, audioPlayer.duration || 0);
+      resolve();
+    };
+    audioPlayer.addEventListener('loadedmetadata', onMeta, { once: true });
+  });
+}
+
+document.getElementById('vid-uploader').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  await handleMainMediaFile(file);
+  // Reset so re-selecting the same file still fires 'change' (needed on iOS).
+  e.target.value = '';
+});
+
+// Drag-and-drop (desktop) — accepts video OR audio.
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--amber)'; });
 uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
-uploadZone.addEventListener('drop', e => {
+uploadZone.addEventListener('drop', async e => {
   e.preventDefault();
   uploadZone.style.borderColor = '';
-  const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('video/')) {
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    document.getElementById('vid-uploader').files = dt.files;
-    document.getElementById('vid-uploader').dispatchEvent(new Event('change'));
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file && detectMediaKind(file)) {
+    await handleMainMediaFile(file);
+  } else if (file) {
+    toast('Drop a video or audio file', 'error');
   }
 });
 
@@ -1572,12 +1742,12 @@ document.getElementById('sfx-uploader').onchange = (e) => {
   const audio = new Audio();
   audio.src   = URL.createObjectURL(file);
   audio.volume = 1.0;
-  sfxStack.push({ id, file, audio, at: player.currentTime || 0, volume: 100, triggered: false });
+  sfxStack.push({ id, file, audio, at: activeMedia().currentTime || 0, volume: 100, triggered: false });
   pushHistory();
   renderSfxStack();
   renderSfxMarkers();
   updateSummary();
-  announce(`SFX added at ${fmtTime(player.currentTime)}. Select it and use Shift+Ctrl+Arrow to nudge.`);
+  announce(`SFX added at ${fmtTime(activeMedia().currentTime)}. Select it and use Shift+Ctrl+Arrow to nudge.`);
   toast('SFX added ✓', 'success');
   e.target.value = '';
 };
@@ -1912,6 +2082,71 @@ player.ontimeupdate = () => {
   }
 };
 
+// ── AUDIO-ONLY LIVE PREVIEW ───────────────────────────────────
+// Mirrors the video preview engine for audio projects, driving BGM/SFX,
+// timecode and cut-skipping off the dedicated <audio> element.
+audioPlayer.addEventListener('play', () => {
+  previewStage.classList.add('playing');
+  sfxStack.forEach(s => { s.triggered = false; });
+  bgmStack.forEach(item => {
+    const off = audioPlayer.currentTime - item.startAt;
+    if (off < 0) { item.audio.pause(); return; }
+    const dur = item.audio.duration || 1;
+    item.audio.currentTime = (item.offset + off) % dur;
+    item.audio.play().catch(() => {});
+  });
+});
+audioPlayer.addEventListener('pause', () => {
+  previewStage.classList.remove('playing');
+  bgmStack.forEach(i => i.audio.pause());
+});
+audioPlayer.addEventListener('ended', () => {
+  previewStage.classList.remove('playing');
+  bgmStack.forEach(i => i.audio.pause());
+});
+audioPlayer.addEventListener('seeked', () => {
+  sfxStack.forEach(s => { s.triggered = false; });
+});
+audioPlayer.ontimeupdate = () => {
+  if (mediaKind !== 'audio') return;
+  const t = audioPlayer.currentTime;
+  document.getElementById('tc-current').textContent = fmtTime(t);
+
+  if (times.duration > 0) {
+    const frac    = t / times.duration;
+    const fracVis = Math.max(0, Math.min(1, (frac - zoomStart) * zoomLevel));
+    document.getElementById('trim-playhead').style.left = (fracVis * 100) + '%';
+  }
+
+  // SFX triggers
+  sfxStack.forEach(item => {
+    if (!item.triggered && t >= item.at && t < item.at + 0.5) {
+      item.audio.currentTime = 0;
+      item.audio.play().catch(() => {});
+      item.triggered = true;
+    }
+  });
+
+  // BGM start-at logic
+  bgmStack.forEach(item => {
+    if (!audioPlayer.paused && t >= item.startAt && item.audio.paused) {
+      const off = t - item.startAt;
+      const dur = item.audio.duration || 1;
+      item.audio.currentTime = (item.offset + off) % dur;
+      item.audio.play().catch(() => {});
+    }
+    if (t < item.startAt && !item.audio.paused) item.audio.pause();
+  });
+
+  // Skip cut regions
+  const inCut = !segments.some(seg => t >= seg.s - 0.05 && t < seg.e + 0.05);
+  if (inCut && !audioPlayer.paused && segments.length > 0) {
+    const nextSeg = segments.find(seg => seg.s > t);
+    if (nextSeg) { audioPlayer.currentTime = nextSeg.s; }
+    else { audioPlayer.pause(); }
+  }
+};
+
 // ── ASPECT & PRESET ───────────────────────────────────────────
 function setAspect(val) {
   aspect = val;
@@ -2037,12 +2272,12 @@ function onDrag(e) {
   const t       = zoomToFrac(rawFrac) * times.duration;
   if (dragType === 's') {
     times.s = Math.min(Math.max(0, t), times.e - 0.5);
-    player.currentTime = times.s;
+    activeMedia().currentTime = times.s;
     document.getElementById('tc-start').textContent = fmtTime(times.s);
     document.getElementById('tc-start').classList.remove('muted');
   } else {
     times.e = Math.max(Math.min(times.duration, t), times.s + 0.5);
-    player.currentTime = times.e;
+    activeMedia().currentTime = times.e;
     document.getElementById('tc-end').textContent = fmtTime(times.e);
     document.getElementById('tc-end').classList.remove('muted');
   }
@@ -2060,13 +2295,13 @@ document.getElementById('trim-track').addEventListener('click', e => {
   const rect    = e.currentTarget.getBoundingClientRect();
   const rawFrac = (e.clientX - rect.left) / rect.width;
   const seekTo  = zoomToFrac(Math.max(0, Math.min(1, rawFrac))) * times.duration;
-  player.currentTime = seekTo;
+  activeMedia().currentTime = seekTo;
   playScrubSnippet(seekTo);
 });
 
 // ── TRIM BUTTONS ──────────────────────────────────────────────
 document.getElementById('btn-set-start').onclick = () => {
-  const t = player.currentTime;
+  const t = activeMedia().currentTime;
   if (t >= times.e) { toast('In must be before Out', 'error'); return; }
   pushHistory();
   times.s = t;
@@ -2076,7 +2311,7 @@ document.getElementById('btn-set-start').onclick = () => {
   setStatus(`In point: ${fmtTime(t)}`);
 };
 document.getElementById('btn-set-end').onclick = () => {
-  const t = player.currentTime;
+  const t = activeMedia().currentTime;
   if (t <= times.s) { toast('Out must be after In', 'error'); return; }
   pushHistory();
   times.e = t;
@@ -2232,8 +2467,8 @@ window.addEventListener('keydown', e => {
   // Playback
   if (k === 's' && !ctrl) { e.preventDefault(); document.getElementById('btn-set-start').click(); }
   if (k === 'e' && !ctrl) { e.preventDefault(); document.getElementById('btn-set-end').click(); }
-  if (k === ' ')           { e.preventDefault(); if (!mainVideoFile) return; player.paused ? player.play() : player.pause(); }
-  if (k === 'v' && !ctrl) { setStatus(`Current: ${fmtTime(player.currentTime)}  In: ${fmtTime(times.s)}  Out: ${fmtTime(times.e)}`); }
+  if (k === ' ')           { e.preventDefault(); if (!mainVideoFile) return; const m = activeMedia(); m.paused ? m.play() : m.pause(); }
+  if (k === 'v' && !ctrl) { setStatus(`Current: ${fmtTime(activeMedia().currentTime)}  In: ${fmtTime(times.s)}  Out: ${fmtTime(times.e)}`); }
   if (k === 'z' && !ctrl) { e.preventDefault(); cycleZoom(); }
   if (k === 'backspace')   { e.preventDefault(); cutSegment(); }
 
@@ -2242,9 +2477,10 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     const step = e.shiftKey ? 1 : 10;
     const dir  = k === 'arrowleft' ? -1 : 1;
-    player.currentTime = Math.max(0, Math.min(times.duration, player.currentTime + dir * step));
-    playScrubSnippet(player.currentTime);
-    announce(`${step}s ${dir > 0 ? 'forward' : 'back'}. Now at ${fmtTime(player.currentTime)}.`);
+    const m = activeMedia();
+    m.currentTime = Math.max(0, Math.min(times.duration, m.currentTime + dir * step));
+    playScrubSnippet(m.currentTime);
+    announce(`${step}s ${dir > 0 ? 'forward' : 'back'}. Now at ${fmtTime(m.currentTime)}.`);
   }
 });
 
@@ -2252,7 +2488,7 @@ window.addEventListener('keydown', e => {
 function updateTimecodes() {
   document.getElementById('tc-start').textContent   = fmtTime(times.s);
   document.getElementById('tc-end').textContent     = fmtTime(times.e);
-  document.getElementById('tc-current').textContent = fmtTime(player.currentTime);
+  document.getElementById('tc-current').textContent = fmtTime(activeMedia().currentTime);
 }
 
 function updateSummary() {
@@ -2299,10 +2535,106 @@ function getLogoOverlayExpr(pos) {
   }[pos] || `W-w-${pad}:${pad}`;
 }
 
+// ── AUDIO-ONLY EXPORT ─────────────────────────────────────────
+async function runAudioExport() {
+  setStatus('Preparing audio export…');
+  document.getElementById('progress-wrap').classList.remove('hidden');
+  document.getElementById('download-result').classList.add('hidden');
+  document.getElementById('export-btn').disabled = true;
+  setProgress(0, 'Writing files…');
+
+  try {
+    const ext = (mainVideoFile.name.split('.').pop() || 'mp3').replace(/[^a-z0-9]/gi, '') || 'mp3';
+    ffmpeg.FS('writeFile', `main.${ext}`, await fetchFile(mainVideoFile));
+    for (let i = 0; i < bgmStack.length; i++) ffmpeg.FS('writeFile', `bgm${i}.mp3`, await fetchFile(bgmStack[i].file));
+    for (let i = 0; i < sfxStack.length; i++) ffmpeg.FS('writeFile', `sfx${i}.mp3`, await fetchFile(sfxStack[i].file));
+    setProgress(12, 'Building filter graph…');
+
+    const seg0 = segments[0] || { s: 0, e: times.duration };
+    const trimDur = Math.max(0.1, (segments[segments.length - 1]?.e || times.duration) - seg0.s);
+
+    const args = ['-ss', seg0.s.toFixed(3), '-t', trimDur.toFixed(3), '-i', `main.${ext}`];
+    for (let i = 0; i < bgmStack.length; i++) args.push('-stream_loop', '-1', '-i', `bgm${i}.mp3`);
+    for (let i = 0; i < sfxStack.length; i++) args.push('-i', `sfx${i}.mp3`);
+
+    let idx = 1;
+    const bgmIdx = bgmStack.map(() => idx++);
+    const sfxIdx = sfxStack.map(() => idx++);
+
+    const muteMain = audioProcessing === 'mute';
+    const filterParts = [`[0:a]volume=${muteMain ? 0 : 1.0}[main]`];
+    const mixLabels = ['[main]'];
+
+    bgmStack.forEach((item, i) => {
+      const delayMs = Math.max(0, Math.round((item.startAt - seg0.s) * 1000));
+      filterParts.push(`[${bgmIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[abgm${i}]`);
+      mixLabels.push(`[abgm${i}]`);
+    });
+    sfxStack.forEach((item, i) => {
+      const delayMs = Math.max(0, Math.round((item.at - seg0.s) * 1000));
+      filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
+      mixLabels.push(`[asfx${i}]`);
+    });
+
+    let mapArg;
+    if (mixLabels.length > 1) {
+      filterParts.push(`${mixLabels.join('')}amix=inputs=${mixLabels.length}:duration=first:dropout_transition=1[aout]`);
+      mapArg = '[aout]';
+    } else {
+      mapArg = '[main]';
+    }
+
+    ffmpeg.setProgress(({ ratio }) => {
+      const pct = Math.min(97, Math.round(15 + ratio * 82));
+      setProgress(pct, `Encoding audio… ${pct}%`);
+    });
+
+    await ffmpeg.run(
+      ...args,
+      '-filter_complex', filterParts.join(';'),
+      '-map', mapArg,
+      '-c:a', 'libmp3lame', '-q:a', '2',
+      'output.mp3'
+    );
+
+    setProgress(100, 'Done!');
+    const data = ffmpeg.FS('readFile', 'output.mp3');
+    const blob = new Blob([data.buffer], { type: 'audio/mpeg' });
+    const url  = URL.createObjectURL(blob);
+    const rawName = (document.getElementById('project-name').value || 'tech-house').trim();
+    const safeName = rawName.replace(/[^a-zA-Z0-9_\-. ]/g, '').replace(/\s+/g, '-') || 'tech-house';
+    const dlLink = document.getElementById('download-link');
+    dlLink.href = url;
+    dlLink.download = `${safeName}.mp3`;
+    document.getElementById('download-result').classList.remove('hidden');
+    dlLink.focus();
+    try { dlLink.click(); } catch (_) {}
+
+    const filesToClean = [`main.${ext}`, 'output.mp3'];
+    for (let i = 0; i < bgmStack.length; i++) filesToClean.push(`bgm${i}.mp3`);
+    for (let i = 0; i < sfxStack.length; i++) filesToClean.push(`sfx${i}.mp3`);
+    filesToClean.forEach(f => { try { ffmpeg.FS('unlink', f); } catch (_) {} });
+
+    setStatus(`Export complete — ${safeName}.mp3`);
+    announce('Audio export complete. Download button focused.');
+    toast('Audio export complete ✓', 'success');
+  } catch (err) {
+    console.error('[AUDIO EXPORT ERROR]', err);
+    setStatus('Audio export failed: ' + (err.message || String(err)), true);
+    toast('Audio export failed — see console', 'error');
+  } finally {
+    document.getElementById('export-btn').disabled = false;
+    setTimeout(() => document.getElementById('progress-wrap').classList.add('hidden'), 1200);
+  }
+}
+
 // ── MASTER EXPORT ENGINE ──────────────────────────────────────
 async function runExport() {
-  if (!mainVideoFile) { toast('No video loaded', 'error'); return; }
+  if (!mainVideoFile) { toast('No media loaded', 'error'); return; }
   if (!engineReady)   { toast('Engine not ready', 'error'); return; }
+
+  // Audio-only projects export to MP3 through a dedicated, simpler path.
+  if (mediaKind === 'audio') { return runAudioExport(); }
 
   setStatus('Preparing export…');
   document.getElementById('progress-wrap').classList.remove('hidden');
