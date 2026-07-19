@@ -374,17 +374,12 @@
           </div>
           <label class="sub-label" for="gemini-model">Gemini Model</label>
           <select id="gemini-model" class="text-input" aria-label="Gemini model">
-            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+            <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
           </select>
           <div class="setting-checkbox-grid" role="group" aria-label="Editor preferences">
             <label class="toggle-row">
               <input type="checkbox" id="autosave-project" checked aria-label="Automatically save project settings">
               <span class="toggle-label">Autosave project settings</span>
-            </label>
-            <label class="toggle-row">
-              <input type="checkbox" id="include-audio-analysis" checked aria-label="Include short audio transcript summary">
-              <span class="toggle-label">Include short audio transcript summary</span>
             </label>
             <label class="toggle-row">
               <input type="checkbox" id="reduce-motion-toggle" aria-label="Reduce motion and animation">
@@ -419,7 +414,7 @@
             <button class="btn btn-sm btn-ghost" id="apply-ai-btn" disabled>Apply Suggestions</button>
           </div>
           <div class="settings-help">
-            The AI uses start, middle, and end snapshots plus an optional short audio summary to suggest placements and review accessibility and compatibility risks.
+            The AI always analyzes start, middle, and end snapshots plus the video's audio track (sent directly to Gemini for transcription and pacing). For videos longer than 10 minutes you'll be asked to confirm before the audio is sent.
           </div>
           <div id="ai-analysis-result" class="analysis-card" aria-live="polite">
             Load a video, then run AI analysis to get editing suggestions.

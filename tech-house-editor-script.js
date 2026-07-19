@@ -161,9 +161,8 @@ function el(id) { return document.getElementById(id); }
 function createDefaultEditorSettings() {
   return {
     geminiApiKey: '',
-    geminiModel: 'gemini-2.5-flash',
+    geminiModel: 'gemini-3-flash-preview',
     autosaveProject: true,
-    includeAudioAnalysis: true,
     reduceMotion: false,
     highContrast: false,
     aiUserBrief: '',
@@ -251,9 +250,8 @@ function syncSettingsFromForm() {
   editorSettings = {
     ...editorSettings,
     geminiApiKey: (el('gemini-api-key')?.value || '').trim(),
-    geminiModel: el('gemini-model')?.value || 'gemini-2.5-flash',
+    geminiModel: el('gemini-model')?.value || 'gemini-3-flash-preview',
     autosaveProject: !!el('autosave-project')?.checked,
-    includeAudioAnalysis: !!el('include-audio-analysis')?.checked,
     reduceMotion: !!el('reduce-motion-toggle')?.checked,
     highContrast: !!el('high-contrast-toggle')?.checked,
     aiUserBrief: el('ai-user-brief')?.value || '',
@@ -263,9 +261,8 @@ function syncSettingsFromForm() {
 
 function updateSettingsForm() {
   if (el('gemini-api-key')) el('gemini-api-key').value = editorSettings.geminiApiKey || '';
-  if (el('gemini-model')) el('gemini-model').value = editorSettings.geminiModel || 'gemini-2.5-flash';
+  if (el('gemini-model')) el('gemini-model').value = editorSettings.geminiModel || 'gemini-3-flash-preview';
   if (el('autosave-project')) el('autosave-project').checked = !!editorSettings.autosaveProject;
-  if (el('include-audio-analysis')) el('include-audio-analysis').checked = !!editorSettings.includeAudioAnalysis;
   if (el('reduce-motion-toggle')) el('reduce-motion-toggle').checked = !!editorSettings.reduceMotion;
   if (el('high-contrast-toggle')) el('high-contrast-toggle').checked = !!editorSettings.highContrast;
   if (el('ai-user-brief')) el('ai-user-brief').value = editorSettings.aiUserBrief || '';
@@ -359,10 +356,9 @@ function buildProjectSnapshot() {
     projectName: (el('project-name')?.value || 'my-project').trim(),
     settings: {
       autosaveProject: !!editorSettings.autosaveProject,
-      includeAudioAnalysis: !!editorSettings.includeAudioAnalysis,
       reduceMotion: !!editorSettings.reduceMotion,
       highContrast: !!editorSettings.highContrast,
-      geminiModel: editorSettings.geminiModel || 'gemini-2.5-flash',
+      geminiModel: editorSettings.geminiModel || 'gemini-3-flash-preview',
       aiUserBrief: editorSettings.aiUserBrief || '',
       aiTranscript: editorSettings.aiTranscript || ''
     },
@@ -600,7 +596,7 @@ function initializeEnhancements() {
     testGeminiKey();
   });
 
-  ['gemini-model', 'autosave-project', 'include-audio-analysis', 'reduce-motion-toggle', 'high-contrast-toggle']
+  ['gemini-model', 'autosave-project', 'reduce-motion-toggle', 'high-contrast-toggle']
     .forEach(id => el(id)?.addEventListener('change', () => {
       syncSettingsFromForm();
       applyAccessibilityPreferences();
@@ -671,7 +667,7 @@ async function callGeminiAPI(prompt, parts = []) {
   if (!apiKey) throw new Error('Add a Gemini API key in Editor Preferences first.');
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(editorSettings.geminiModel || 'gemini-2.5-flash')}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(editorSettings.geminiModel || 'gemini-3-flash-preview')}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -765,16 +761,23 @@ async function captureVideoSnapshots(file) {
 }
 
 async function extractAudioSampleForAi(file) {
-  if (!editorSettings.includeAudioAnalysis) {
-    return { part: null, note: 'Audio summary skipped because the setting is turned off.' };
-  }
   if (!engineReady) {
-    return { part: null, note: 'Audio summary skipped because FFmpeg is still loading.' };
+    return { part: null, note: 'Audio transcript skipped because FFmpeg is still loading.' };
   }
 
   const duration = times.duration || player.duration || 0;
-  if (duration > 120) {
-    return { part: null, note: 'Audio summary skipped for videos longer than 2 minutes to save API calls.' };
+
+  // Videos over 10 minutes ask the user before sending the full audio track.
+  const LONG_VIDEO_THRESHOLD = 600; // seconds
+  if (duration > LONG_VIDEO_THRESHOLD) {
+    const proceed = window.confirm(
+      `This video is ${fmtTime(duration)} long (over 10 minutes).\n\n` +
+      'Send the full audio track to Gemini for transcription anyway?\n\n' +
+      'OK = send audio.  Cancel = analyze snapshots only (no audio).'
+    );
+    if (!proceed) {
+      return { part: null, note: 'Audio transcript skipped — you chose not to send audio for this long video.' };
+    }
   }
 
   const ext = (file.name.split('.').pop() || 'mp4').replace(/[^a-z0-9]/gi, '') || 'mp4';
@@ -790,7 +793,6 @@ async function extractAudioSampleForAi(file) {
       '-ac', '1',
       '-ar', '16000',
       '-b:a', '48k',
-      '-t', String(Math.max(1, Math.min(duration || 120, 120))),
       outputName
     );
     const audioBytes = ffmpeg.FS('readFile', outputName);
@@ -801,11 +803,11 @@ async function extractAudioSampleForAi(file) {
           data: arrayBufferToBase64(audioBytes)
         }
       },
-      note: 'Included a compressed audio sample for transcript and pacing analysis.'
+      note: 'Included the full audio track for transcript and pacing analysis.'
     };
   } catch (err) {
     console.warn('[AI audio]', err.message);
-    return { part: null, note: 'Audio summary could not be extracted from this video.' };
+    return { part: null, note: 'Audio transcript could not be extracted from this video.' };
   } finally {
     try { ffmpeg.FS('unlink', inputName); } catch (_) {}
     try { ffmpeg.FS('unlink', outputName); } catch (_) {}
@@ -816,6 +818,7 @@ function normalizeAiSuggestions(data) {
   const safe = data && typeof data === 'object' ? data : {};
   return {
     projectSummary: safe.projectSummary || 'No project summary returned.',
+    audioTranscript: typeof safe.audioTranscript === 'string' ? safe.audioTranscript : '',
     audioSummary: safe.audioSummary || 'No audio summary returned.',
     illustrationSuggestions: Array.isArray(safe.illustrationSuggestions) ? safe.illustrationSuggestions : [],
     brollSuggestions: Array.isArray(safe.brollSuggestions) ? safe.brollSuggestions : [],
@@ -829,6 +832,7 @@ function renderAiAnalysisResult(result, audioNote = '') {
   const lines = [
     `Summary: ${result.projectSummary || 'None'}`,
     `Audio: ${result.audioSummary || audioNote || 'Not provided'}`,
+    ...(result.audioTranscript ? ['', 'Transcript:', result.audioTranscript] : []),
     '',
     `Illustration suggestions: ${result.illustrationSuggestions.length}`,
     ...result.illustrationSuggestions.slice(0, 4).map(item =>
@@ -888,7 +892,8 @@ async function analyzeProjectWithGemini() {
       'JSON schema:',
       '{',
       '  "projectSummary": "short paragraph",',
-      '  "audioSummary": "short paragraph; mention if audio was unavailable",',
+      '  "audioTranscript": "verbatim transcript of the spoken audio; empty string if no audio was provided or there is no speech",',
+      '  "audioSummary": "short paragraph summarizing tone and pacing; mention if audio was unavailable",',
       '  "illustrationSuggestions": [{"index":1,"at":12.5,"duration":3,"layout":"center","reason":"why"}],',
       '  "brollSuggestions": [{"index":1,"at":24.5,"duration":4,"layout":"fullscreen","reason":"why"}],',
       '  "accessibilityFindings": ["..."],',
@@ -909,6 +914,7 @@ async function analyzeProjectWithGemini() {
       '- Keep arrays empty when there are no uploaded assets of that type.',
       '- Layout must be one of: center, fullscreen, left-third, right-third.',
       '- Suggestions must be conservative and timeline-safe.',
+      '- If an audio track is provided, transcribe the spoken words into audioTranscript and base pacing suggestions on what is actually said.',
       '- Accessibility findings should focus on captions, contrast, keyboard flow, and motion sensitivity.',
       '- Compatibility findings should focus on browser support, persistence/backward compatibility, and failure modes.',
       '- Bug checks should highlight likely editor regressions to manually verify.'
