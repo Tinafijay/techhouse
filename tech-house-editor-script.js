@@ -24,23 +24,32 @@
 // Firebase compat globals are loaded via a dynamic script injection here.
 let auth, gProvider, fbSignInWithPopup, fbSignInWithRedirect, fbOnAuthStateChanged, fbSignOut;
 
-function loadFirebase() {
-  return new Promise(resolve => {
-    // Check if already loaded
-    if (window.firebase) { initFirebaseAuth(); resolve(); return; }
-    const scripts = [
-      'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
-      'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js'
-    ];
-    let loaded = 0;
-    scripts.forEach(src => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => { loaded++; if (loaded === scripts.length) { initFirebaseAuth(); resolve(); } };
-      s.onerror = () => { console.warn('[Firebase] Could not load', src); loaded++; if (loaded === scripts.length) resolve(); };
-      document.head.appendChild(s);
-    });
+function loadExternalScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === 'true') { resolve(); return; }
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error(`Could not load ${src}`)), { once: true });
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => { s.dataset.loaded = 'true'; resolve(); };
+    s.onerror = () => reject(new Error(`Could not load ${src}`));
+    document.head.appendChild(s);
   });
+}
+
+async function loadFirebase() {
+  try {
+    if (window.firebase?.auth) { initFirebaseAuth(); return; }
+    await loadExternalScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+    await loadExternalScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js');
+    initFirebaseAuth();
+  } catch (err) {
+    console.warn('[Firebase] Could not load compat SDK:', err.message);
+  }
 }
 
 function initFirebaseAuth() {
@@ -136,6 +145,41 @@ let dragType         = null;
 let isScrubbing      = false;
 let scrubAudioCtx    = null;
 let stackIdCounter   = 0;
+let latestAiSuggestions = null;
+let aiJobRunning = false;
+
+const PROJECT_SCHEMA_VERSION = 2;
+const STORAGE_KEYS = {
+  editorSettings: 'th_editor_settings_v2',
+  projectSnapshot: 'th_editor_project_v2'
+};
+const mediaPreviewUrls = new WeakMap();
+let editorSettings = createDefaultEditorSettings();
+
+function el(id) { return document.getElementById(id); }
+
+function createDefaultEditorSettings() {
+  return {
+    geminiApiKey: '',
+    geminiModel: 'gemini-2.5-flash',
+    autosaveProject: true,
+    includeAudioAnalysis: true,
+    reduceMotion: false,
+    highContrast: false,
+    aiUserBrief: '',
+    aiTranscript: ''
+  };
+}
+
+function cloneJSON(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getPreviewURL(file) {
+  if (!file) return '';
+  if (!mediaPreviewUrls.has(file)) mediaPreviewUrls.set(file, URL.createObjectURL(file));
+  return mediaPreviewUrls.get(file);
+}
 
 // ── Announce helpers ──────────────────────────────────────────
 function announce(msg, urgent = false) {
@@ -163,6 +207,771 @@ function fmtTime(t) {
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${f}`;
 }
 function nextId() { return ++stackIdCounter; }
+
+let autosaveTimer = null;
+
+function setInlineStatus(id, msg, type = '') {
+  const node = el(id);
+  if (!node) return;
+  node.className = 'inline-status';
+  if (type) node.classList.add(type);
+  node.textContent = msg;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function applyAccessibilityPreferences() {
+  document.body.classList.toggle('reduce-motion', !!editorSettings.reduceMotion);
+  document.body.classList.toggle('high-contrast', !!editorSettings.highContrast);
+}
+
+function loadEditorSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.editorSettings);
+    if (!raw) return;
+    editorSettings = { ...createDefaultEditorSettings(), ...JSON.parse(raw) };
+  } catch (err) {
+    console.warn('[Settings] Could not read settings:', err.message);
+  }
+}
+
+function persistEditorSettings(statusMessage) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.editorSettings, JSON.stringify(editorSettings));
+    if (statusMessage) setInlineStatus('project-save-status', statusMessage, 'success');
+  } catch (err) {
+    console.warn('[Settings] Could not persist settings:', err.message);
+    setInlineStatus('project-save-status', 'Could not save settings in this browser.', 'error');
+  }
+}
+
+function syncSettingsFromForm() {
+  editorSettings = {
+    ...editorSettings,
+    geminiApiKey: (el('gemini-api-key')?.value || '').trim(),
+    geminiModel: el('gemini-model')?.value || 'gemini-2.5-flash',
+    autosaveProject: !!el('autosave-project')?.checked,
+    includeAudioAnalysis: !!el('include-audio-analysis')?.checked,
+    reduceMotion: !!el('reduce-motion-toggle')?.checked,
+    highContrast: !!el('high-contrast-toggle')?.checked,
+    aiUserBrief: el('ai-user-brief')?.value || '',
+    aiTranscript: el('ai-transcript')?.value || ''
+  };
+}
+
+function updateSettingsForm() {
+  if (el('gemini-api-key')) el('gemini-api-key').value = editorSettings.geminiApiKey || '';
+  if (el('gemini-model')) el('gemini-model').value = editorSettings.geminiModel || 'gemini-2.5-flash';
+  if (el('autosave-project')) el('autosave-project').checked = !!editorSettings.autosaveProject;
+  if (el('include-audio-analysis')) el('include-audio-analysis').checked = !!editorSettings.includeAudioAnalysis;
+  if (el('reduce-motion-toggle')) el('reduce-motion-toggle').checked = !!editorSettings.reduceMotion;
+  if (el('high-contrast-toggle')) el('high-contrast-toggle').checked = !!editorSettings.highContrast;
+  if (el('ai-user-brief')) el('ai-user-brief').value = editorSettings.aiUserBrief || '';
+  if (el('ai-transcript')) el('ai-transcript').value = editorSettings.aiTranscript || '';
+  applyAccessibilityPreferences();
+  updateGeminiStatusText();
+}
+
+function updateGeminiStatusText(msg, type = 'info') {
+  const key = (editorSettings.geminiApiKey || '').trim();
+  if (msg) {
+    setInlineStatus('gemini-auth-status', msg, type);
+    return;
+  }
+  if (!key) {
+    setInlineStatus('gemini-auth-status', 'Gemini key not configured yet.', 'info');
+    return;
+  }
+  const masked = key.length > 8 ? `${key.slice(0, 4)}…${key.slice(-4)}` : 'saved';
+  setInlineStatus('gemini-auth-status', `Gemini key saved locally (${masked}).`, 'success');
+}
+
+function syncSingleAssetUI() {
+  const logoLoaded = !!assets.logo;
+  const swapLoaded = !!assets.audioSwap;
+  const logoImg = el('overlay-logo-img');
+
+  if (logoLoaded && logoImg) {
+    logoImg.src = getPreviewURL(assets.logo);
+    overlayLogo.classList.remove('hidden');
+    applyLogoPosition(logoPosition);
+    el('layer-logo')?.classList.add('loaded');
+    if (el('desc-logo')) el('desc-logo').textContent = assets.logo.name.slice(0, 20);
+  } else {
+    overlayLogo.className = 'overlay-logo hidden';
+    el('layer-logo')?.classList.remove('loaded');
+    if (el('desc-logo')) el('desc-logo').textContent = 'Permanent watermark';
+  }
+
+  if (swapLoaded) {
+    swapAudio.src = getPreviewURL(assets.audioSwap);
+    swapAudio.load();
+    el('layer-audioSwap')?.classList.add('loaded');
+    if (el('desc-audioSwap')) el('desc-audioSwap').textContent = assets.audioSwap.name.slice(0, 20);
+  } else {
+    swapAudio.pause();
+    swapAudio.removeAttribute('src');
+    el('layer-audioSwap')?.classList.remove('loaded');
+    if (el('desc-audioSwap')) el('desc-audioSwap').textContent = 'Replaces original audio';
+  }
+
+  player.muted = swapLoaded;
+  if (el('logo-position')) el('logo-position').value = logoPosition;
+  if (el('noise-filter-select')) el('noise-filter-select').value = audioProcessing;
+  setAudioProcessing(audioProcessing);
+}
+
+function resetProjectMediaState() {
+  assets = { logo: null, audioSwap: null };
+  logoPosition = 'top-right';
+  audioProcessing = 'none';
+  sfxStack.forEach(item => item.audio?.pause());
+  bgmStack.forEach(item => item.audio?.pause());
+  brollStack.forEach(item => item.video?.pause());
+  sfxStack = [];
+  bgmStack = [];
+  illuStack = [];
+  brollStack = [];
+  selectedSfxId = null;
+  focusedBgmId = null;
+  latestAiSuggestions = null;
+  el('apply-ai-btn')?.setAttribute('disabled', 'disabled');
+  if (el('apply-ai-btn')) el('apply-ai-btn').disabled = true;
+  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = 'Load a video, then run AI analysis to get editing suggestions.';
+  illuContainer.innerHTML = '';
+  overlayBroll.classList.add('hidden');
+  brollPlayer.pause();
+  brollPlayer.removeAttribute('src');
+  syncSingleAssetUI();
+  renderIlluStack();
+  renderBgmStack();
+  renderSfxStack();
+  renderBrollStack();
+  renderSfxMarkers();
+}
+
+function buildProjectSnapshot() {
+  return {
+    version: PROJECT_SCHEMA_VERSION,
+    savedAt: new Date().toISOString(),
+    projectName: (el('project-name')?.value || 'my-project').trim(),
+    settings: {
+      autosaveProject: !!editorSettings.autosaveProject,
+      includeAudioAnalysis: !!editorSettings.includeAudioAnalysis,
+      reduceMotion: !!editorSettings.reduceMotion,
+      highContrast: !!editorSettings.highContrast,
+      geminiModel: editorSettings.geminiModel || 'gemini-2.5-flash',
+      aiUserBrief: editorSettings.aiUserBrief || '',
+      aiTranscript: editorSettings.aiTranscript || ''
+    },
+    editorState: {
+      aspect,
+      preset,
+      logoPosition,
+      audioProcessing,
+      times: { ...times },
+      segments: cloneJSON(segments),
+      scrubAudio: !!el('scrub-toggle')?.checked,
+      crossfadeCuts: !!el('crossfade-toggle')?.checked,
+      silenceThreshold: el('silence-threshold')?.value || '-40',
+      silenceMinDuration: el('silence-min-dur')?.value || '0.5',
+      assets: {
+        logoLoaded: !!assets.logo,
+        logoName: assets.logo?.name || '',
+        audioSwapLoaded: !!assets.audioSwap,
+        audioSwapName: assets.audioSwap?.name || ''
+      },
+      illuStack: illuStack.map(item => ({
+        fileName: item.file?.name || '',
+        at: item.at,
+        duration: item.duration,
+        layout: item.layout
+      })),
+      bgmStack: bgmStack.map(item => ({
+        fileName: item.file?.name || '',
+        startAt: item.startAt,
+        offset: item.offset,
+        volume: item.volume
+      })),
+      sfxStack: sfxStack.map(item => ({
+        fileName: item.file?.name || '',
+        at: item.at,
+        volume: item.volume
+      })),
+      brollStack: brollStack.map(item => ({
+        fileName: item.file?.name || '',
+        at: item.at,
+        duration: item.duration,
+        muteAudio: item.muteAudio,
+        layout: item.layout || 'fullscreen'
+      }))
+    }
+  };
+}
+
+function migrateProjectSnapshot(raw) {
+  const defaults = {
+    version: PROJECT_SCHEMA_VERSION,
+    savedAt: '',
+    projectName: 'my-project',
+    settings: createDefaultEditorSettings(),
+    editorState: {
+      aspect: 'landscape',
+      preset: 'ultrafast',
+      logoPosition: 'top-right',
+      audioProcessing: 'none',
+      times: { s: 0, e: times.duration || 0, duration: times.duration || 0 },
+      segments: times.duration ? [{ s: 0, e: times.duration }] : [],
+      scrubAudio: true,
+      crossfadeCuts: true,
+      silenceThreshold: '-40',
+      silenceMinDuration: '0.5',
+      assets: { logoLoaded: false, logoName: '', audioSwapLoaded: false, audioSwapName: '' },
+      illuStack: [],
+      bgmStack: [],
+      sfxStack: [],
+      brollStack: []
+    }
+  };
+  const merged = {
+    ...defaults,
+    ...(raw || {}),
+    settings: { ...defaults.settings, ...(raw?.settings || {}) },
+    editorState: { ...defaults.editorState, ...(raw?.editorState || {}) }
+  };
+  ['illuStack', 'bgmStack', 'sfxStack', 'brollStack', 'segments'].forEach(key => {
+    if (!Array.isArray(merged.editorState[key])) merged.editorState[key] = defaults.editorState[key];
+  });
+  return merged;
+}
+
+function saveProjectSnapshot(manual = false) {
+  try {
+    const snapshot = buildProjectSnapshot();
+    localStorage.setItem(STORAGE_KEYS.projectSnapshot, JSON.stringify(snapshot));
+    if (manual) {
+      setInlineStatus(
+        'project-save-status',
+        `Saved project settings locally at ${new Date(snapshot.savedAt).toLocaleTimeString()}.`,
+        'success'
+      );
+      toast('Project settings saved locally ✓', 'success');
+    }
+  } catch (err) {
+    console.warn('[Project] Could not save snapshot:', err.message);
+    setInlineStatus('project-save-status', 'Could not save project settings in this browser.', 'error');
+  }
+}
+
+function scheduleProjectAutosave() {
+  if (!editorSettings.autosaveProject) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => saveProjectSnapshot(false), 350);
+}
+
+function applyProjectSnapshot(rawSnapshot) {
+  const snapshot = migrateProjectSnapshot(rawSnapshot);
+  editorSettings = {
+    ...editorSettings,
+    ...snapshot.settings,
+    geminiApiKey: editorSettings.geminiApiKey
+  };
+  updateSettingsForm();
+
+  if (el('project-name')) el('project-name').value = snapshot.projectName || 'my-project';
+
+  setAspect(snapshot.editorState.aspect || 'landscape');
+  setPreset(snapshot.editorState.preset || 'ultrafast');
+  logoPosition = snapshot.editorState.logoPosition || 'top-right';
+  audioProcessing = snapshot.editorState.audioProcessing || 'none';
+  if (el('scrub-toggle')) el('scrub-toggle').checked = snapshot.editorState.scrubAudio !== false;
+  if (el('crossfade-toggle')) el('crossfade-toggle').checked = snapshot.editorState.crossfadeCuts !== false;
+  if (el('silence-threshold')) el('silence-threshold').value = snapshot.editorState.silenceThreshold || '-40';
+  if (el('silence-min-dur')) el('silence-min-dur').value = snapshot.editorState.silenceMinDuration || '0.5';
+
+  if (times.duration > 0) {
+    const incomingTimes = snapshot.editorState.times || {};
+    times.s = clamp(Number(incomingTimes.s) || 0, 0, times.duration);
+    times.e = clamp(Number(incomingTimes.e) || times.duration, 0, times.duration);
+    times.duration = player.duration || times.duration;
+    if (times.e <= times.s) {
+      times.s = 0;
+      times.e = times.duration;
+    }
+    if (snapshot.editorState.segments.length > 0) {
+      segments = snapshot.editorState.segments
+        .map(seg => ({
+          s: clamp(Number(seg.s) || 0, 0, times.duration),
+          e: clamp(Number(seg.e) || 0, 0, times.duration)
+        }))
+        .filter(seg => seg.e - seg.s > 0.05);
+      if (!segments.length) segments = [{ s: 0, e: times.duration }];
+    }
+  }
+
+  snapshot.editorState.illuStack.forEach((saved, index) => {
+    const item = illuStack[index];
+    if (!item) return;
+    item.at = clamp(Number(saved.at) || item.at, 0, times.duration || item.at);
+    item.duration = Math.max(0.5, Number(saved.duration) || item.duration);
+    item.layout = saved.layout || item.layout;
+    if (item.el) item.el.className = `illu-overlay-el layout-${item.layout} hidden`;
+  });
+  snapshot.editorState.bgmStack.forEach((saved, index) => {
+    const item = bgmStack[index];
+    if (!item) return;
+    item.startAt = Math.max(0, Number(saved.startAt) || 0);
+    item.offset = Math.max(0, Number(saved.offset) || 0);
+    item.volume = clamp(Number(saved.volume) || item.volume, 0, 100);
+    item.audio.volume = item.volume / 100;
+  });
+  snapshot.editorState.sfxStack.forEach((saved, index) => {
+    const item = sfxStack[index];
+    if (!item) return;
+    item.at = clamp(Number(saved.at) || item.at, 0, times.duration || item.at);
+    item.volume = clamp(Number(saved.volume) || item.volume, 0, 100);
+    item.audio.volume = item.volume / 100;
+  });
+  snapshot.editorState.brollStack.forEach((saved, index) => {
+    const item = brollStack[index];
+    if (!item) return;
+    item.at = clamp(Number(saved.at) || item.at, 0, times.duration || item.at);
+    item.duration = Math.max(0.5, Number(saved.duration) || item.duration);
+    item.muteAudio = saved.muteAudio !== false;
+    item.layout = saved.layout || item.layout || 'fullscreen';
+    item.video.muted = item.muteAudio;
+  });
+
+  syncSingleAssetUI();
+  updateTimecodes();
+  updateTrimBar();
+  updateSegmentDisplay();
+  renderIlluStack();
+  renderBgmStack();
+  renderSfxStack();
+  renderBrollStack();
+  renderSfxMarkers();
+  updateSummary();
+  applyAccessibilityPreferences();
+
+  const restoredMedia = mainVideoFile ? 'media placements' : 'settings only (reload media files to restore file-based layers)';
+  setInlineStatus('project-save-status', `Restored ${restoredMedia} from the saved local snapshot.`, 'success');
+}
+
+function restoreSavedProject() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.projectSnapshot);
+    if (!raw) {
+      setInlineStatus('project-save-status', 'No saved local project snapshot found yet.', 'info');
+      toast('No saved local project found', 'info');
+      return;
+    }
+    applyProjectSnapshot(JSON.parse(raw));
+    toast('Saved project restored ✓', 'success');
+  } catch (err) {
+    console.warn('[Project] Could not restore snapshot:', err.message);
+    setInlineStatus('project-save-status', 'Could not restore the saved project snapshot.', 'error');
+  }
+}
+
+function initializeEnhancements() {
+  loadEditorSettings();
+  updateSettingsForm();
+
+  el('save-gemini-key')?.addEventListener('click', () => {
+    syncSettingsFromForm();
+    persistEditorSettings('Gemini settings saved locally.');
+    updateGeminiStatusText();
+    scheduleProjectAutosave();
+  });
+
+  el('clear-gemini-key')?.addEventListener('click', () => {
+    editorSettings.geminiApiKey = '';
+    if (el('gemini-api-key')) el('gemini-api-key').value = '';
+    persistEditorSettings('Gemini key cleared from this browser.');
+    updateGeminiStatusText();
+  });
+
+  el('test-gemini-key')?.addEventListener('click', () => {
+    syncSettingsFromForm();
+    persistEditorSettings();
+    testGeminiKey();
+  });
+
+  ['gemini-model', 'autosave-project', 'include-audio-analysis', 'reduce-motion-toggle', 'high-contrast-toggle']
+    .forEach(id => el(id)?.addEventListener('change', () => {
+      syncSettingsFromForm();
+      applyAccessibilityPreferences();
+      persistEditorSettings('Editor preferences saved locally.');
+      scheduleProjectAutosave();
+    }));
+
+  ['ai-user-brief', 'ai-transcript', 'project-name'].forEach(id => el(id)?.addEventListener('input', () => {
+    syncSettingsFromForm();
+    persistEditorSettings();
+    scheduleProjectAutosave();
+  }));
+
+  el('save-project-btn')?.addEventListener('click', () => {
+    syncSettingsFromForm();
+    persistEditorSettings();
+    saveProjectSnapshot(true);
+  });
+
+  el('load-project-btn')?.addEventListener('click', restoreSavedProject);
+  el('analyze-project-btn')?.addEventListener('click', analyzeProjectWithGemini);
+  el('apply-ai-btn')?.addEventListener('click', applyAiSuggestions);
+
+  window.addEventListener('beforeunload', () => {
+    syncSettingsFromForm();
+    persistEditorSettings();
+    if (editorSettings.autosaveProject) saveProjectSnapshot(false);
+  });
+}
+
+initializeEnhancements();
+
+function arrayBufferToBase64(buffer) {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function extractGeminiText(payload) {
+  return (payload?.candidates || [])
+    .flatMap(candidate => candidate?.content?.parts || [])
+    .map(part => part?.text || '')
+    .join('\n')
+    .trim();
+}
+
+function parseGeminiJson(text) {
+  const cleaned = (text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+  try {
+    return JSON.parse(cleaned);
+  } catch (_) {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error('Gemini did not return valid JSON.');
+  }
+}
+
+async function callGeminiAPI(prompt, parts = []) {
+  const apiKey = (editorSettings.geminiApiKey || '').trim();
+  if (!apiKey) throw new Error('Add a Gemini API key in Editor Preferences first.');
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(editorSettings.geminiModel || 'gemini-2.5-flash')}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [...parts, { text: prompt }] }],
+        generationConfig: { temperature: 0.25, topP: 0.8, topK: 32 }
+      })
+    }
+  );
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload?.error?.message || `Gemini request failed with ${response.status}`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
+async function testGeminiKey() {
+  try {
+    updateGeminiStatusText('Checking Gemini key…', 'info');
+    const payload = await callGeminiAPI('Reply with the single word OK.');
+    const text = extractGeminiText(payload);
+    updateGeminiStatusText(text ? 'Gemini key is valid and ready.' : 'Gemini responded, but returned no text.', 'success');
+  } catch (err) {
+    console.error('[Gemini test]', err);
+    updateGeminiStatusText(err.message || 'Gemini key test failed.', 'error');
+    toast('Gemini key test failed', 'error');
+  }
+}
+
+function waitForMediaEvent(node, eventName) {
+  return new Promise((resolve, reject) => {
+    const onDone = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error(`Media event failed: ${eventName}`));
+    };
+    const cleanup = () => {
+      node.removeEventListener(eventName, onDone);
+      node.removeEventListener('error', onError);
+    };
+    node.addEventListener(eventName, onDone, { once: true });
+    node.addEventListener('error', onError, { once: true });
+  });
+}
+
+async function captureVideoSnapshots(file) {
+  const tempVideo = document.createElement('video');
+  tempVideo.preload = 'auto';
+  tempVideo.muted = true;
+  tempVideo.playsInline = true;
+  tempVideo.src = getPreviewURL(file);
+  await waitForMediaEvent(tempVideo, 'loadedmetadata');
+
+  const duration = tempVideo.duration || times.duration || 0;
+  const baseTargets = [
+    { label: 'start', time: Math.min(0.5, Math.max(0, duration * 0.1)) },
+    { label: 'middle', time: duration / 2 || 0 },
+    { label: 'end', time: Math.max(0, duration - Math.min(0.5, duration / 3 || 0.5)) }
+  ];
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const width = tempVideo.videoWidth || 640;
+  const height = tempVideo.videoHeight || 360;
+  const scale = Math.min(1, 640 / width, 360 / height);
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+
+  const snapshots = [];
+  for (const target of baseTargets) {
+    const seekTime = clamp(target.time || 0, 0, Math.max(0, duration - 0.05));
+    if (Math.abs(tempVideo.currentTime - seekTime) > 0.02) {
+      const seekPromise = waitForMediaEvent(tempVideo, 'seeked');
+      tempVideo.currentTime = seekTime;
+      await seekPromise;
+    }
+    ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+    const data = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+    snapshots.push({
+      label: target.label,
+      time: Number(seekTime.toFixed(2)),
+      inlineData: { mimeType: 'image/jpeg', data }
+    });
+  }
+  return snapshots;
+}
+
+async function extractAudioSampleForAi(file) {
+  if (!editorSettings.includeAudioAnalysis) {
+    return { part: null, note: 'Audio summary skipped because the setting is turned off.' };
+  }
+  if (!engineReady) {
+    return { part: null, note: 'Audio summary skipped because FFmpeg is still loading.' };
+  }
+
+  const duration = times.duration || player.duration || 0;
+  if (duration > 120) {
+    return { part: null, note: 'Audio summary skipped for videos longer than 2 minutes to save API calls.' };
+  }
+
+  const ext = (file.name.split('.').pop() || 'mp4').replace(/[^a-z0-9]/gi, '') || 'mp4';
+  const stamp = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const inputName = `ai-input-${stamp}.${ext}`;
+  const outputName = `ai-audio-${stamp}.mp3`;
+
+  try {
+    ffmpeg.FS('writeFile', inputName, await fetchFile(file));
+    await ffmpeg.run(
+      '-i', inputName,
+      '-vn',
+      '-ac', '1',
+      '-ar', '16000',
+      '-b:a', '48k',
+      '-t', String(Math.max(1, Math.min(duration || 120, 120))),
+      outputName
+    );
+    const audioBytes = ffmpeg.FS('readFile', outputName);
+    return {
+      part: {
+        inlineData: {
+          mimeType: 'audio/mpeg',
+          data: arrayBufferToBase64(audioBytes)
+        }
+      },
+      note: 'Included a compressed audio sample for transcript and pacing analysis.'
+    };
+  } catch (err) {
+    console.warn('[AI audio]', err.message);
+    return { part: null, note: 'Audio summary could not be extracted from this video.' };
+  } finally {
+    try { ffmpeg.FS('unlink', inputName); } catch (_) {}
+    try { ffmpeg.FS('unlink', outputName); } catch (_) {}
+  }
+}
+
+function normalizeAiSuggestions(data) {
+  const safe = data && typeof data === 'object' ? data : {};
+  return {
+    projectSummary: safe.projectSummary || 'No project summary returned.',
+    audioSummary: safe.audioSummary || 'No audio summary returned.',
+    illustrationSuggestions: Array.isArray(safe.illustrationSuggestions) ? safe.illustrationSuggestions : [],
+    brollSuggestions: Array.isArray(safe.brollSuggestions) ? safe.brollSuggestions : [],
+    accessibilityFindings: Array.isArray(safe.accessibilityFindings) ? safe.accessibilityFindings : [],
+    compatibilityFindings: Array.isArray(safe.compatibilityFindings) ? safe.compatibilityFindings : [],
+    bugChecks: Array.isArray(safe.bugChecks) ? safe.bugChecks : []
+  };
+}
+
+function renderAiAnalysisResult(result, audioNote = '') {
+  const lines = [
+    `Summary: ${result.projectSummary || 'None'}`,
+    `Audio: ${result.audioSummary || audioNote || 'Not provided'}`,
+    '',
+    `Illustration suggestions: ${result.illustrationSuggestions.length}`,
+    ...result.illustrationSuggestions.slice(0, 4).map(item =>
+      `- Illu ${item.index}: ${fmtTime(Number(item.at) || 0)} for ${Number(item.duration) || 0}s (${item.layout || 'center'}) — ${item.reason || 'No reason'}`
+    ),
+    '',
+    `B-Roll suggestions: ${result.brollSuggestions.length}`,
+    ...result.brollSuggestions.slice(0, 4).map(item =>
+      `- B-Roll ${item.index}: ${fmtTime(Number(item.at) || 0)} for ${Number(item.duration) || 0}s (${item.layout || 'fullscreen'}) — ${item.reason || 'No reason'}`
+    ),
+    '',
+    'Accessibility checks:',
+    ...(result.accessibilityFindings.length ? result.accessibilityFindings.map(item => `- ${item}`) : ['- None returned']),
+    '',
+    'Compatibility checks:',
+    ...(result.compatibilityFindings.length ? result.compatibilityFindings.map(item => `- ${item}`) : ['- None returned']),
+    '',
+    'Bug checks:',
+    ...(result.bugChecks.length ? result.bugChecks.map(item => `- ${item}`) : ['- None returned'])
+  ];
+  if (audioNote && !result.audioSummary) lines.splice(1, 0, `Audio note: ${audioNote}`);
+  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = lines.join('\n');
+}
+
+async function analyzeProjectWithGemini() {
+  if (aiJobRunning) return;
+  if (!mainVideoFile) {
+    toast('Load a video before running AI analysis', 'error');
+    return;
+  }
+
+  syncSettingsFromForm();
+  persistEditorSettings();
+
+  if (!(editorSettings.geminiApiKey || '').trim()) {
+    updateGeminiStatusText('Paste and save a Gemini API key first.', 'error');
+    toast('Add a Gemini API key first', 'error');
+    return;
+  }
+
+  aiJobRunning = true;
+  el('analyze-project-btn').disabled = true;
+  el('apply-ai-btn').disabled = true;
+  latestAiSuggestions = null;
+  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = 'Analyzing video snapshots and optional audio context…';
+  setStatus('Preparing AI project analysis…');
+
+  try {
+    const snapshots = await captureVideoSnapshots(mainVideoFile);
+    const audioSample = await extractAudioSampleForAi(mainVideoFile);
+    const parts = snapshots.map(item => item.inlineData);
+    if (audioSample.part) parts.push(audioSample.part);
+
+    const prompt = [
+      'You are helping a browser-based video editor place already-uploaded visual assets onto a timeline.',
+      'Return strict JSON only. No markdown fences.',
+      'JSON schema:',
+      '{',
+      '  "projectSummary": "short paragraph",',
+      '  "audioSummary": "short paragraph; mention if audio was unavailable",',
+      '  "illustrationSuggestions": [{"index":1,"at":12.5,"duration":3,"layout":"center","reason":"why"}],',
+      '  "brollSuggestions": [{"index":1,"at":24.5,"duration":4,"layout":"fullscreen","reason":"why"}],',
+      '  "accessibilityFindings": ["..."],',
+      '  "compatibilityFindings": ["..."],',
+      '  "bugChecks": ["..."]',
+      '}',
+      '',
+      `Video duration: ${fmtTime(times.duration || player.duration || 0)}`,
+      `Current illustration assets: ${illuStack.length ? illuStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
+      `Current B-Roll assets: ${brollStack.length ? brollStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
+      `Current audio layers: ${bgmStack.length} BGM, ${sfxStack.length} SFX, audio swap ${assets.audioSwap ? 'loaded' : 'not loaded'}`,
+      `User editing goal: ${editorSettings.aiUserBrief || 'No extra goal provided.'}`,
+      `Transcript or notes: ${editorSettings.aiTranscript || 'No transcript supplied by the user.'}`,
+      `Audio analysis note: ${audioSample.note}`,
+      `Snapshot times: ${snapshots.map(item => `${item.label}@${fmtTime(item.time)}`).join(', ')}`,
+      'Rules:',
+      '- Use only uploaded illustration indexes 1..N and B-Roll indexes 1..M.',
+      '- Keep arrays empty when there are no uploaded assets of that type.',
+      '- Layout must be one of: center, fullscreen, left-third, right-third.',
+      '- Suggestions must be conservative and timeline-safe.',
+      '- Accessibility findings should focus on captions, contrast, keyboard flow, and motion sensitivity.',
+      '- Compatibility findings should focus on browser support, persistence/backward compatibility, and failure modes.',
+      '- Bug checks should highlight likely editor regressions to manually verify.'
+    ].join('\n');
+
+    const payload = await callGeminiAPI(prompt, parts);
+    const parsed = normalizeAiSuggestions(parseGeminiJson(extractGeminiText(payload)));
+    latestAiSuggestions = parsed;
+    renderAiAnalysisResult(parsed, audioSample.note);
+    el('apply-ai-btn').disabled = !(parsed.illustrationSuggestions.length || parsed.brollSuggestions.length);
+    updateGeminiStatusText('Gemini analysis completed successfully.', 'success');
+    setStatus('AI analysis complete.');
+    toast('AI project analysis complete ✓', 'success');
+  } catch (err) {
+    console.error('[AI analysis]', err);
+    if (el('ai-analysis-result')) el('ai-analysis-result').textContent = `AI analysis failed: ${err.message}`;
+    updateGeminiStatusText(err.message || 'Gemini analysis failed.', 'error');
+    toast('AI project analysis failed', 'error');
+  } finally {
+    aiJobRunning = false;
+    el('analyze-project-btn').disabled = false;
+  }
+}
+
+function applyAiSuggestions() {
+  if (!latestAiSuggestions) {
+    toast('Run AI analysis first', 'info');
+    return;
+  }
+
+  let applied = 0;
+  pushHistory();
+
+  latestAiSuggestions.illustrationSuggestions.forEach(suggestion => {
+    const item = illuStack[(Number(suggestion.index) || 0) - 1];
+    if (!item) return;
+    item.at = clamp(Number(suggestion.at) || item.at, 0, times.duration || item.at);
+    item.duration = Math.max(0.5, Number(suggestion.duration) || item.duration);
+    item.layout = ['center', 'fullscreen', 'left-third', 'right-third'].includes(suggestion.layout) ? suggestion.layout : item.layout;
+    if (item.el) item.el.className = `illu-overlay-el layout-${item.layout} hidden`;
+    applied++;
+  });
+
+  latestAiSuggestions.brollSuggestions.forEach(suggestion => {
+    const item = brollStack[(Number(suggestion.index) || 0) - 1];
+    if (!item) return;
+    item.at = clamp(Number(suggestion.at) || item.at, 0, times.duration || item.at);
+    item.duration = Math.max(0.5, Number(suggestion.duration) || item.duration);
+    item.layout = ['center', 'fullscreen', 'left-third', 'right-third'].includes(suggestion.layout) ? suggestion.layout : item.layout;
+    applied++;
+  });
+
+  if (!applied) {
+    toast('AI returned review notes but no applicable asset placements', 'info');
+    return;
+  }
+
+  renderIlluStack();
+  renderBrollStack();
+  updateSummary();
+  announce(`Applied ${applied} AI placement suggestion${applied === 1 ? '' : 's'}.`);
+  toast(`Applied ${applied} AI suggestion${applied === 1 ? '' : 's'} ✓`, 'success');
+}
 
 // ── ENGINE INIT ───────────────────────────────────────────────
 (async function initEngine() {
@@ -265,8 +1074,9 @@ function setupAuth() {
 document.getElementById('vid-uploader').onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  resetProjectMediaState();
   mainVideoFile = file;
-  player.src = URL.createObjectURL(file);
+  player.src = getPreviewURL(file);
   player.load();
 
   player.onloadedmetadata = () => {
@@ -289,6 +1099,7 @@ document.getElementById('vid-uploader').onchange = async (e) => {
     renderSfxMarkers();
     setStatus(`Loaded: "${file.name}" — ${fmtTime(player.duration)}`);
     toast('Video loaded ✓', 'success');
+    scheduleProjectAutosave();
 
     // Decode audio for silence detection in background
     decodeVideoAudio(file);
@@ -413,8 +1224,9 @@ document.getElementById('layer-uploader').onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const type = e.target._type;
+  pushHistory();
   assets[type] = file;
-  const objectURL = URL.createObjectURL(file);
+  const objectURL = getPreviewURL(file);
 
   if (type === 'logo') {
     document.getElementById('overlay-logo-img').src = objectURL;
@@ -435,7 +1247,6 @@ document.getElementById('layer-uploader').onchange = (e) => {
     announce('Audio Swap loaded. Original audio muted in preview.');
   }
 
-  pushHistory();
   updateSummary();
   toast(`${type === 'logo' ? 'Logo' : 'Audio Swap'} added ✓`, 'success');
   e.target.value = '';
@@ -1119,6 +1930,7 @@ function setPreset(val) {
     b.classList.toggle('active', on);
     b.setAttribute('aria-pressed', String(on));
   });
+  updateSummary();
 }
 
 // ── ZOOM ─────────────────────────────────────────────────────
@@ -1313,6 +2125,7 @@ function pushHistory() {
   editHistory.push({
     segments:     JSON.parse(JSON.stringify(segments)),
     times:        { ...times },
+    assets:       { ...assets },
     sfxStack:     sfxStack.map(i => ({ ...i })),
     bgmStack:     bgmStack.map(i => ({ ...i })),
     illuStack:    illuStack.map(i => ({ ...i })),
@@ -1320,6 +2133,7 @@ function pushHistory() {
     logoPosition,
     audioProcessing,
     aspect,
+    preset,
   });
   document.getElementById('undo-btn').disabled = false;
 }
@@ -1330,6 +2144,7 @@ function doUndo() {
 
   segments        = prev.segments;
   times           = { ...prev.times };
+  assets          = { ...prev.assets };
   sfxStack        = prev.sfxStack.map(i => ({ ...i, audio: sfxStack.find(s => s.id === i.id)?.audio || new Audio() }));
   bgmStack        = prev.bgmStack.map(i => ({ ...i, audio: bgmStack.find(b => b.id === i.id)?.audio || new Audio() }));
   illuStack       = prev.illuStack.map(i => ({ ...i, el: illuStack.find(il => il.id === i.id)?.el || null })).filter(i => i.el);
@@ -1337,6 +2152,7 @@ function doUndo() {
   logoPosition    = prev.logoPosition;
   audioProcessing = prev.audioProcessing;
   aspect          = prev.aspect;
+  preset          = prev.preset || preset;
 
   document.getElementById('tc-start').textContent = fmtTime(times.s);
   document.getElementById('tc-end').textContent   = fmtTime(times.e);
@@ -1346,7 +2162,9 @@ function doUndo() {
   updateTrimBar(); updateSegmentDisplay(); updateSummary();
   renderSfxStack(); renderBgmStack(); renderIlluStack(); renderBrollStack();
   renderSfxMarkers();
+  syncSingleAssetUI();
   setAspect(aspect);
+  setPreset(preset);
 
   document.getElementById('undo-btn').disabled = editHistory.length === 0;
   announce(`Undo applied. ${segments.length} segment${segments.length > 1 ? 's' : ''} restored.`);
@@ -1454,6 +2272,7 @@ function updateSummary() {
   }
   const cutCount = segments.length - 1;
   document.getElementById('summary-cuts').textContent   = cutCount > 0 ? `Cuts: ${cutCount}` : 'Cuts: none';
+  scheduleProjectAutosave();
 }
 
 function setProgress(pct, phase) {
