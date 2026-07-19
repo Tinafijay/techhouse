@@ -79,20 +79,37 @@
       <span class="status-scrub-indicator hidden" id="scrub-indicator" aria-hidden="true">◉ SCRUBBING</span>
     </div>
 
-    <!-- Upload Zone -->
+    <!-- Upload Zone (hybrid: video OR audio) -->
     <div id="upload-zone" class="upload-zone" tabindex="0" role="button"
-         aria-label="Click or press Enter to upload a video file"
+         aria-label="Click or press Enter to upload a video or audio file"
          onclick="document.getElementById('vid-uploader').click()"
-         onkeydown="if(event.key==='Enter'||event.key===' '){document.getElementById('vid-uploader').click()}">
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('vid-uploader').click()}">
       <span class="upload-icon" aria-hidden="true">📽️</span>
-      <h2>Drop or Click to Load Video</h2>
-      <p class="upload-hint">MP4, MOV, WebM — any resolution</p>
-      <input type="file" id="vid-uploader" hidden accept="video/*" aria-label="Upload main video file">
+      <h2>Drop or Click to Load Media</h2>
+      <p class="upload-hint">Video (MP4, MOV, WebM) or Audio (MP3, WAV, M4A, AAC) — any length</p>
+      <!--
+        Hybrid input: no restrictive accept="video/*" so iOS/Chrome shows the
+        Files app and audio library instead of only the camera. We validate the
+        chosen file type in JS instead of relying on the accept filter.
+      -->
+      <input type="file" id="vid-uploader"
+             accept="video/*,audio/*,.mp4,.mov,.m4v,.webm,.mkv,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+             aria-label="Upload a video or audio file"
+             style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
     </div>
 
     <!-- Preview Stage -->
-    <div class="preview-stage hidden" id="preview-stage" aria-label="Video preview with live overlays">
-      <video id="player" controls playsinline aria-label="Video preview player" tabindex="0"></video>
+    <div class="preview-stage hidden" id="preview-stage" aria-label="Media preview with live overlays">
+      <video id="player" controls playsinline preload="metadata" aria-label="Video preview player" tabindex="0"></video>
+
+      <!-- Audio-only preview (shown when an audio file is loaded) -->
+      <div class="audio-only-stage hidden" id="audio-only-stage">
+        <span class="audio-only-icon" aria-hidden="true">🎧</span>
+        <div class="audio-only-name" id="audio-only-name">Audio project</div>
+        <audio id="audio-player" controls preload="metadata"
+               aria-label="Audio preview player" class="audio-only-player"></audio>
+        <p class="audio-only-hint">Audio mode — trim, layer sound, and let AI transcribe &amp; suggest edits.</p>
+      </div>
 
       <!-- Live logo overlay -->
       <div class="overlay-logo hidden" id="overlay-logo" aria-hidden="true">
@@ -175,7 +192,7 @@
         </div>
 
         <!-- ─ Logo ─ -->
-        <div class="stack-section">
+        <div class="stack-section" data-video-only>
           <div class="stack-section-header">
             <div class="layer-item-row" id="layer-logo" tabindex="0" role="button"
                  onclick="triggerLayer('logo')"
@@ -201,7 +218,7 @@
         </div>
 
         <!-- ─ Illustrations (multi-stack) ─ -->
-        <div class="stack-section">
+        <div class="stack-section" data-video-only>
           <div class="stack-section-header">
             <span class="stack-title">🎨 Illustrations</span>
             <button class="btn btn-sm" onclick="triggerAddIllu()"
@@ -239,7 +256,7 @@
         </div>
 
         <!-- ─ B-Roll (multi-stack) ─ -->
-        <div class="stack-section">
+        <div class="stack-section" data-video-only>
           <div class="stack-section-header">
             <span class="stack-title">🎥 B-Roll Overlays</span>
             <button class="btn btn-sm" onclick="triggerAddBRoll()"
@@ -292,12 +309,12 @@
           </div>
         </div>
 
-        <!-- Hidden file inputs -->
-        <input type="file" id="layer-uploader"   hidden aria-label="Layer file input">
-        <input type="file" id="illu-uploader"    hidden accept="image/*" aria-label="Illustration file">
-        <input type="file" id="bgm-uploader"     hidden accept="audio/*" aria-label="BGM file">
-        <input type="file" id="sfx-uploader"     hidden accept="audio/*" aria-label="SFX file">
-        <input type="file" id="broll-uploader"   hidden accept="video/*" aria-label="B-Roll file">
+        <!-- Hidden file inputs (visually hidden but focusable-safe on iOS) -->
+        <input type="file" id="layer-uploader"   class="visually-hidden-input" aria-label="Layer file input">
+        <input type="file" id="illu-uploader"    class="visually-hidden-input" accept="image/*,.png,.jpg,.jpeg,.gif,.webp" aria-label="Illustration file">
+        <input type="file" id="bgm-uploader"     class="visually-hidden-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" aria-label="BGM file">
+        <input type="file" id="sfx-uploader"     class="visually-hidden-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" aria-label="SFX file">
+        <input type="file" id="broll-uploader"   class="visually-hidden-input" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" aria-label="B-Roll file">
       </section>
 
       <!-- RIGHT: Output Settings -->
@@ -405,19 +422,19 @@
           <textarea id="ai-user-brief" class="setting-textarea"
                     placeholder="Example: Make this tighter, keep the intro, and place illustrations when the speaker changes topics."
                     aria-label="Editing goal for AI assistance"></textarea>
-          <label class="sub-label" for="ai-transcript">Transcript or Notes</label>
+          <label class="sub-label" for="ai-transcript">Transcript (auto-filled by AI)</label>
           <textarea id="ai-transcript" class="setting-textarea setting-textarea-sm"
-                    placeholder="Optional transcript, shot list, or notes to improve the AI suggestions."
-                    aria-label="Transcript or notes for AI assistance"></textarea>
+                    placeholder="Run Analyze and the AI will transcribe your audio here. You can also paste your own notes."
+                    aria-label="Transcript — auto-filled by AI, editable"></textarea>
           <div class="setting-actions">
-            <button class="btn btn-sm" id="analyze-project-btn">Analyze Project</button>
+            <button class="btn btn-sm" id="analyze-project-btn">Analyze &amp; Transcribe</button>
             <button class="btn btn-sm btn-ghost" id="apply-ai-btn" disabled>Apply Suggestions</button>
           </div>
           <div class="settings-help">
-            The AI always analyzes start, middle, and end snapshots plus the video's audio track (sent directly to Gemini for transcription and pacing). For videos longer than 10 minutes you'll be asked to confirm before the audio is sent.
+            Works for both video and audio. The AI always transcribes the audio into the box above. For video it also reads start, middle, and end snapshots. Files over 10 minutes ask before sending audio.
           </div>
           <div id="ai-analysis-result" class="analysis-card" aria-live="polite">
-            Load a video, then run AI analysis to get editing suggestions.
+            Load a video or audio file, then run AI analysis to get editing suggestions.
           </div>
         </div>
 

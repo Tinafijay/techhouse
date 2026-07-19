@@ -840,3 +840,93 @@ body.high-contrast .inline-status {
   .project-name-input { max-width: 120px; }
   .setting-checkbox-grid { grid-template-columns: 1fr; }
 }
+
+/* ── HYBRID: AUDIO-ONLY STAGE ────────────────────────────────── */
+.audio-only-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px 20px;
+  text-align: center;
+  background:
+    radial-gradient(ellipse 400px 200px at 50% 0%, rgba(167,139,250,0.14) 0%, transparent 70%),
+    var(--surface);
+  min-height: 220px;
+}
+.audio-only-stage.hidden { display: none; }
+.audio-only-icon { font-size: 3rem; line-height: 1; }
+.audio-only-name {
+  font-family: var(--head);
+  font-weight: 600;
+  font-size: 1.05rem;
+  word-break: break-word;
+  max-width: 90%;
+}
+.audio-only-player { width: min(560px, 92%); }
+.audio-only-hint { color: var(--text-dim); font-size: 0.8rem; max-width: 90%; }
+#player.hidden { display: none; }
+
+/* Visually hidden file inputs — kept in the layout (not display:none) so
+   iOS Safari/Chrome reliably open the file picker on tap. */
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+/* Controls that only apply to video projects, dimmed in audio mode. */
+body.audio-mode .mode-disabled,
+.mode-disabled { opacity: 0.4; pointer-events: none; }
+
+/* ── ENHANCED MOBILE RESPONSIVENESS ──────────────────────────── */
+@media (max-width: 900px) {
+  .app { padding: 14px 12px 48px; }
+  #player { max-height: 320px; }
+}
+
+@media (max-width: 660px) {
+  .app-header { gap: 8px; }
+  .app-title { font-size: 1rem; }
+  .header-left { width: 100%; }
+  .header-right { width: 100%; justify-content: space-between; }
+  .project-name-input { max-width: none; flex: 1 1 100%; order: 3; }
+  .upload-zone { padding: 32px 16px; }
+  .upload-zone h2 { font-size: 0.92rem; }
+  .timecode-row { gap: 6px; }
+  .shortcuts { font-size: 0.62rem; }
+  .audio-only-icon { font-size: 2.4rem; }
+}
+
+/* Small phones (iPhone SE / older Android) */
+@media (max-width: 430px) {
+  body { font-size: 13px; }
+  .app { padding: 10px 8px 40px; }
+  #player { max-height: 240px; }
+  .tc-value { font-size: 0.95rem; }
+  .timecode-row { grid-template-columns: 1fr; }
+  .trim-actions { flex-wrap: wrap; }
+  .trim-actions .btn { flex: 1 1 auto; }
+  .export-btn { font-size: 0.85rem; padding: 12px; }
+  .panel-layers { max-height: none; }
+  .setting-actions { flex-wrap: wrap; }
+  .setting-actions .btn { flex: 1 1 auto; }
+}
+
+/* Tap targets: make interactive controls comfortable on touch. */
+@media (hover: none) and (pointer: coarse) {
+  .btn, .stack-item-remove, .trim-head, .auth-signin-btn, .auth-logout-btn {
+    min-height: 40px;
+  }
+  .trim-head { width: 22px; }
+  .stack-ctrl-input, .stack-select { min-height: 38px; }
+}
+
