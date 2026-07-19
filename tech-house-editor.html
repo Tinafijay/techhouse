@@ -37,6 +37,8 @@
               onclick="detectSilence()">🔇 Auto-Cut Silence</button>
       <button class="btn btn-sm btn-ghost" id="undo-btn" disabled
               aria-label="Undo — keyboard Control Z" onclick="doUndo()">↩ Undo</button>
+      <button class="btn btn-sm btn-ghost" id="open-settings-btn"
+              aria-label="Open settings" aria-haspopup="dialog">⚙ Settings</button>
 
       <!-- Auth Widget — inline, no dropdown -->
       <div class="auth-widget" id="auth-widget">
@@ -374,39 +376,12 @@
           </div>
         </div>
 
-        <div class="setting-row summary-row" aria-labelledby="editor-settings-heading">
-          <div class="setting-label" id="editor-settings-heading">Editor Preferences</div>
-          <label class="sub-label" for="gemini-api-key">Gemini API Key</label>
-          <input type="password" id="gemini-api-key" class="text-input"
-                 autocomplete="off" spellcheck="false"
-                 placeholder="Paste your Gemini API key"
-                 aria-label="Gemini API key">
-          <div class="setting-actions">
-            <button class="btn btn-sm" id="save-gemini-key">Save Key</button>
-            <button class="btn btn-sm" id="test-gemini-key">Test Key</button>
-            <button class="btn btn-sm btn-ghost" id="clear-gemini-key">Clear</button>
-          </div>
-          <div id="gemini-auth-status" class="inline-status" aria-live="polite">
-            Gemini key not configured yet.
-          </div>
-          <label class="sub-label" for="gemini-model">Gemini Model</label>
-          <select id="gemini-model" class="text-input" aria-label="Gemini model">
-            <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
-          </select>
-          <div class="setting-checkbox-grid" role="group" aria-label="Editor preferences">
-            <label class="toggle-row">
-              <input type="checkbox" id="autosave-project" checked aria-label="Automatically save project settings">
-              <span class="toggle-label">Autosave project settings</span>
-            </label>
-            <label class="toggle-row">
-              <input type="checkbox" id="reduce-motion-toggle" aria-label="Reduce motion and animation">
-              <span class="toggle-label">Reduce motion</span>
-            </label>
-            <label class="toggle-row">
-              <input type="checkbox" id="high-contrast-toggle" aria-label="Increase contrast in the editor">
-              <span class="toggle-label">High contrast mode</span>
-            </label>
-          </div>
+        <div class="setting-row summary-row" aria-labelledby="project-tools-heading">
+          <div class="setting-label" id="project-tools-heading">Project</div>
+          <p class="settings-help" style="margin-top:0;">
+            API key, AI model, and accessibility options now live in
+            <button type="button" class="link-btn" id="open-settings-inline">⚙ Settings</button>.
+          </p>
           <div class="setting-actions">
             <button class="btn btn-sm" id="save-project-btn">Save Project</button>
             <button class="btn btn-sm btn-ghost" id="load-project-btn">Restore Saved</button>
@@ -417,24 +392,35 @@
         </div>
 
         <div class="setting-row" aria-labelledby="ai-assist-heading">
-          <div class="setting-label" id="ai-assist-heading">AI Project Assist</div>
-          <label class="sub-label" for="ai-user-brief">Editing Goal</label>
-          <textarea id="ai-user-brief" class="setting-textarea"
-                    placeholder="Example: Make this tighter, keep the intro, and place illustrations when the speaker changes topics."
-                    aria-label="Editing goal for AI assistance"></textarea>
+          <div class="setting-label" id="ai-assist-heading">AI Assistant</div>
+
           <label class="sub-label" for="ai-transcript">Transcript (auto-filled by AI)</label>
           <textarea id="ai-transcript" class="setting-textarea setting-textarea-sm"
-                    placeholder="Run Analyze and the AI will transcribe your audio here. You can also paste your own notes."
+                    placeholder="Press Analyze and the AI transcribes your audio here. You can also paste your own notes."
                     aria-label="Transcript — auto-filled by AI, editable"></textarea>
-          <div class="setting-actions">
-            <button class="btn btn-sm" id="analyze-project-btn">Analyze &amp; Transcribe</button>
-            <button class="btn btn-sm btn-ghost" id="apply-ai-btn" disabled>Apply Suggestions</button>
+
+          <!-- Chat window -->
+          <div class="ai-chat" role="group" aria-labelledby="ai-assist-heading">
+            <div id="ai-chat-log" class="ai-chat-log" role="log" aria-live="polite" aria-label="AI assistant conversation">
+              <div class="ai-msg ai-msg-bot">
+                <p>Load a video or audio file, then press <strong>Analyze</strong>. I'll transcribe it, summarize it, and suggest edits — then you can just tell me what to change.</p>
+              </div>
+            </div>
+            <div class="ai-chat-input-row">
+              <label class="sr-only" for="ai-chat-input">Message the AI assistant</label>
+              <textarea id="ai-chat-input" class="ai-chat-input" rows="1"
+                        placeholder="e.g. Place illustration 1 at 0:12, or make the intro tighter"
+                        aria-label="Message the AI assistant" disabled></textarea>
+              <button class="btn btn-sm" id="ai-send-btn" aria-label="Send message to AI" disabled>Send</button>
+            </div>
+            <div class="setting-actions">
+              <button class="btn btn-sm" id="analyze-project-btn">Analyze &amp; Transcribe</button>
+              <button class="btn btn-sm btn-ghost" id="ai-clear-chat-btn">Clear Chat</button>
+            </div>
           </div>
+
           <div class="settings-help">
-            Works for both video and audio. The AI always transcribes the audio into the box above. For video it also reads start, middle, and end snapshots. Files over 10 minutes ask before sending audio.
-          </div>
-          <div id="ai-analysis-result" class="analysis-card" aria-live="polite">
-            Load a video or audio file, then run AI analysis to get editing suggestions.
+            Works for video and audio. Analyze transcribes and reviews your project; after that, chat to make changes — the AI applies them for you. Files over 10 minutes ask before sending audio.
           </div>
         </div>
 
@@ -507,6 +493,59 @@
 </div>
 
 <div class="toast-wrap" id="toast-wrap" aria-live="assertive" aria-atomic="true"></div>
+
+<!-- ═══════════════════════════════════════════ SETTINGS MODAL -->
+<div class="modal-overlay hidden" id="settings-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" id="settings-modal">
+    <div class="modal-header">
+      <h2 id="settings-modal-title">Settings</h2>
+      <button class="modal-close" id="settings-close-btn" aria-label="Close settings">✕</button>
+    </div>
+    <div class="modal-body">
+      <section class="modal-section" aria-labelledby="settings-ai-heading">
+        <h3 id="settings-ai-heading">AI</h3>
+        <label class="sub-label" for="gemini-api-key">Gemini API Key</label>
+        <input type="password" id="gemini-api-key" class="text-input"
+               autocomplete="off" spellcheck="false"
+               placeholder="Paste your Gemini API key"
+               aria-label="Gemini API key">
+        <div class="setting-actions">
+          <button class="btn btn-sm" id="save-gemini-key">Save Key</button>
+          <button class="btn btn-sm" id="test-gemini-key">Test Key</button>
+          <button class="btn btn-sm btn-ghost" id="clear-gemini-key">Clear</button>
+        </div>
+        <div id="gemini-auth-status" class="inline-status" aria-live="polite">
+          Gemini key not configured yet.
+        </div>
+        <label class="sub-label" for="gemini-model">Gemini Model</label>
+        <select id="gemini-model" class="text-input" aria-label="Gemini model">
+          <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
+        </select>
+      </section>
+
+      <section class="modal-section" aria-labelledby="settings-a11y-heading">
+        <h3 id="settings-a11y-heading">Accessibility &amp; Behaviour</h3>
+        <div class="setting-checkbox-grid" role="group" aria-label="Editor preferences">
+          <label class="toggle-row">
+            <input type="checkbox" id="autosave-project" checked aria-label="Automatically save project settings">
+            <span class="toggle-label">Autosave project settings</span>
+          </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="reduce-motion-toggle" aria-label="Reduce motion and animation">
+            <span class="toggle-label">Reduce motion</span>
+          </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="high-contrast-toggle" aria-label="Increase contrast in the editor">
+            <span class="toggle-label">High contrast mode</span>
+          </label>
+        </div>
+      </section>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-sm" id="settings-done-btn">Done</button>
+    </div>
+  </div>
+</div>
 
 <script src="tech-house-editor-script.js"></script>
 </body>

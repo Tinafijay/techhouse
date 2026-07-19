@@ -117,6 +117,40 @@ function activeMedia() {
   return mediaKind === 'audio' ? audioPlayer : player;
 }
 
+// ── iOS AUDIO UNLOCK ──────────────────────────────────────────
+// iOS Safari/Chrome block HTMLAudioElement.play() until each element has
+// been started inside a user gesture. BGM/SFX are created programmatically,
+// so we "unlock" every layer element on the first tap/click/keydown, and
+// again whenever a new track is added while already unlocked.
+let audioUnlocked = false;
+function unlockAudioElement(audioEl) {
+  if (!audioEl) return;
+  try {
+    const wasMuted = audioEl.muted;
+    audioEl.muted = true;
+    const p = audioEl.play();
+    if (p && typeof p.then === 'function') {
+      p.then(() => { audioEl.pause(); audioEl.currentTime = 0; audioEl.muted = wasMuted; })
+       .catch(() => { audioEl.muted = wasMuted; });
+    } else {
+      audioEl.pause(); audioEl.muted = wasMuted;
+    }
+  } catch (_) {}
+}
+function unlockAllLayerAudio() {
+  unlockAudioElement(swapAudio);
+  bgmStack.forEach(item => unlockAudioElement(item.audio));
+  sfxStack.forEach(item => unlockAudioElement(item.audio));
+}
+function primeAudioUnlock() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  unlockAllLayerAudio();
+}
+['pointerdown', 'touchend', 'keydown', 'click'].forEach(evt => {
+  window.addEventListener(evt, primeAudioUnlock, { once: false, passive: true });
+});
+
 // Single-item assets (logo, audioSwap)
 let assets = { logo: null, audioSwap: null };
 let audioProcessing = 'none';
@@ -173,7 +207,6 @@ function createDefaultEditorSettings() {
     autosaveProject: true,
     reduceMotion: false,
     highContrast: false,
-    aiUserBrief: '',
     aiTranscript: ''
   };
 }
@@ -262,7 +295,6 @@ function syncSettingsFromForm() {
     autosaveProject: !!el('autosave-project')?.checked,
     reduceMotion: !!el('reduce-motion-toggle')?.checked,
     highContrast: !!el('high-contrast-toggle')?.checked,
-    aiUserBrief: el('ai-user-brief')?.value || '',
     aiTranscript: el('ai-transcript')?.value || ''
   };
 }
@@ -273,7 +305,6 @@ function updateSettingsForm() {
   if (el('autosave-project')) el('autosave-project').checked = !!editorSettings.autosaveProject;
   if (el('reduce-motion-toggle')) el('reduce-motion-toggle').checked = !!editorSettings.reduceMotion;
   if (el('high-contrast-toggle')) el('high-contrast-toggle').checked = !!editorSettings.highContrast;
-  if (el('ai-user-brief')) el('ai-user-brief').value = editorSettings.aiUserBrief || '';
   if (el('ai-transcript')) el('ai-transcript').value = editorSettings.aiTranscript || '';
   applyAccessibilityPreferences();
   updateGeminiStatusText();
@@ -342,9 +373,7 @@ function resetProjectMediaState() {
   selectedSfxId = null;
   focusedBgmId = null;
   latestAiSuggestions = null;
-  el('apply-ai-btn')?.setAttribute('disabled', 'disabled');
-  if (el('apply-ai-btn')) el('apply-ai-btn').disabled = true;
-  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = 'Load a video or audio file, then run AI analysis to get editing suggestions.';
+  if (typeof clearAiChat === 'function') clearAiChat();
   illuContainer.innerHTML = '';
   overlayBroll.classList.add('hidden');
   brollPlayer.pause();
@@ -368,7 +397,6 @@ function buildProjectSnapshot() {
       reduceMotion: !!editorSettings.reduceMotion,
       highContrast: !!editorSettings.highContrast,
       geminiModel: editorSettings.geminiModel || 'gemini-3-flash-preview',
-      aiUserBrief: editorSettings.aiUserBrief || '',
       aiTranscript: editorSettings.aiTranscript || ''
     },
     editorState: {
@@ -613,7 +641,7 @@ function initializeEnhancements() {
       scheduleProjectAutosave();
     }));
 
-  ['ai-user-brief', 'ai-transcript', 'project-name'].forEach(id => el(id)?.addEventListener('input', () => {
+  ['ai-transcript', 'project-name'].forEach(id => el(id)?.addEventListener('input', () => {
     syncSettingsFromForm();
     persistEditorSettings();
     scheduleProjectAutosave();
@@ -627,7 +655,30 @@ function initializeEnhancements() {
 
   el('load-project-btn')?.addEventListener('click', restoreSavedProject);
   el('analyze-project-btn')?.addEventListener('click', analyzeProjectWithGemini);
-  el('apply-ai-btn')?.addEventListener('click', applyAiSuggestions);
+
+  // Settings modal
+  el('open-settings-btn')?.addEventListener('click', openSettingsModal);
+  el('open-settings-inline')?.addEventListener('click', openSettingsModal);
+  el('settings-close-btn')?.addEventListener('click', closeSettingsModal);
+  el('settings-done-btn')?.addEventListener('click', closeSettingsModal);
+  el('settings-overlay')?.addEventListener('click', (e) => {
+    if (e.target === el('settings-overlay')) closeSettingsModal();
+  });
+
+  // AI chat wiring
+  el('ai-send-btn')?.addEventListener('click', sendChatMessage);
+  el('ai-clear-chat-btn')?.addEventListener('click', clearAiChat);
+  const chatInput = el('ai-chat-input');
+  if (chatInput) {
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+    });
+    // Auto-grow the textarea up to a few rows.
+    chatInput.addEventListener('input', () => {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(120, chatInput.scrollHeight) + 'px';
+    });
+  }
 
   window.addEventListener('beforeunload', () => {
     syncSettingsFromForm();
@@ -826,71 +877,100 @@ async function extractAudioSampleForAi(file) {
   }
 }
 
-function normalizeAiSuggestions(data) {
-  const safe = data && typeof data === 'object' ? data : {};
-  return {
-    projectSummary: safe.projectSummary || 'No project summary returned.',
-    audioTranscript: typeof safe.audioTranscript === 'string' ? safe.audioTranscript : '',
-    audioSummary: safe.audioSummary || 'No audio summary returned.',
-    illustrationSuggestions: Array.isArray(safe.illustrationSuggestions) ? safe.illustrationSuggestions : [],
-    brollSuggestions: Array.isArray(safe.brollSuggestions) ? safe.brollSuggestions : [],
-    bgmSuggestions: Array.isArray(safe.bgmSuggestions) ? safe.bgmSuggestions : [],
-    sfxSuggestions: Array.isArray(safe.sfxSuggestions) ? safe.sfxSuggestions : [],
-    accessibilityFindings: Array.isArray(safe.accessibilityFindings) ? safe.accessibilityFindings : [],
-    compatibilityFindings: Array.isArray(safe.compatibilityFindings) ? safe.compatibilityFindings : [],
-    bugChecks: Array.isArray(safe.bugChecks) ? safe.bugChecks : []
-  };
+// ── AI CHAT SUBSYSTEM ─────────────────────────────────────────
+// Conversation history sent to Gemini as multi-turn "contents".
+let aiChatHistory = [];        // [{ role:'user'|'model', text:'...' }]
+let aiMediaParts = [];         // cached snapshots + audio inlineData parts
+let aiMediaReady = false;      // media has been captured & attached once
+
+function chatLogEl() { return document.getElementById('ai-chat-log'); }
+
+function appendChatMessage(role, text) {
+  const log = chatLogEl();
+  if (!log) return null;
+  const wrap = document.createElement('div');
+  wrap.className = `ai-msg ai-msg-${role === 'user' ? 'user' : 'bot'}`;
+  const p = document.createElement('p');
+  p.textContent = text;
+  wrap.appendChild(p);
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+  return wrap;
 }
 
-function renderAiAnalysisResult(result, audioNote = '') {
+function setChatBusy(busy) {
+  aiJobRunning = busy;
+  const input = el('ai-chat-input');
+  const send  = el('ai-send-btn');
+  const analyze = el('analyze-project-btn');
+  if (input) input.disabled = busy || !mainVideoFile;
+  if (send)  send.disabled  = busy || !mainVideoFile;
+  if (analyze) analyze.disabled = busy;
+}
+
+// Describes the current project so the model always knows what's on the timeline.
+function buildProjectStateText() {
+  const isAudio = mediaKind === 'audio';
   const lines = [
-    `Summary: ${result.projectSummary || 'None'}`,
-    `Audio: ${result.audioSummary || audioNote || 'Not provided'}`,
-    ...(result.audioTranscript ? ['', 'Transcript:', result.audioTranscript] : []),
-    '',
-    `Illustration suggestions: ${result.illustrationSuggestions.length}`,
-    ...result.illustrationSuggestions.slice(0, 4).map(item =>
-      `- Illu ${item.index}: ${fmtTime(Number(item.at) || 0)} for ${Number(item.duration) || 0}s (${item.layout || 'center'}) — ${item.reason || 'No reason'}`
-    ),
-    '',
-    `B-Roll suggestions: ${result.brollSuggestions.length}`,
-    ...result.brollSuggestions.slice(0, 4).map(item =>
-      `- B-Roll ${item.index}: ${fmtTime(Number(item.at) || 0)} for ${Number(item.duration) || 0}s (${item.layout || 'fullscreen'}) — ${item.reason || 'No reason'}`
-    ),
-    '',
-    `BGM suggestions: ${result.bgmSuggestions.length}`,
-    ...result.bgmSuggestions.slice(0, 4).map(item =>
-      `- BGM ${item.index}: start ${fmtTime(Number(item.startAt) || 0)} at ${Number(item.volume) || 0}% — ${item.reason || 'No reason'}`
-    ),
-    '',
-    `SFX suggestions: ${result.sfxSuggestions.length}`,
-    ...result.sfxSuggestions.slice(0, 4).map(item =>
-      `- SFX ${item.index}: ${fmtTime(Number(item.at) || 0)} at ${Number(item.volume) || 0}% — ${item.reason || 'No reason'}`
-    ),
-    '',
-    'Accessibility checks:',
-    ...(result.accessibilityFindings.length ? result.accessibilityFindings.map(item => `- ${item}`) : ['- None returned']),
-    '',
-    'Compatibility checks:',
-    ...(result.compatibilityFindings.length ? result.compatibilityFindings.map(item => `- ${item}`) : ['- None returned']),
-    '',
-    'Bug checks:',
-    ...(result.bugChecks.length ? result.bugChecks.map(item => `- ${item}`) : ['- None returned'])
+    `Project type: ${isAudio ? 'audio-only' : 'video'}`,
+    `Media duration seconds: ${(times.duration || 0).toFixed(2)}`,
+    `Kept segments (after cuts): ${segments.map(s => `${s.s.toFixed(2)}-${s.e.toFixed(2)}`).join(', ') || 'full'}`,
+    `Illustrations: ${illuStack.length ? illuStack.map((it, i) => `${i+1}:${it.file.name}@${it.at.toFixed(1)}s/${it.duration}s/${it.layout}`).join('; ') : 'none'}`,
+    `B-Roll: ${brollStack.length ? brollStack.map((it, i) => `${i+1}:${it.file.name}@${it.at.toFixed(1)}s/${it.duration}s/${it.layout}`).join('; ') : 'none'}`,
+    `BGM: ${bgmStack.length ? bgmStack.map((it, i) => `${i+1}:${it.file.name} start${it.startAt.toFixed(1)}s vol${it.volume}%`).join('; ') : 'none'}`,
+    `SFX: ${sfxStack.length ? sfxStack.map((it, i) => `${i+1}:${it.file.name}@${it.at.toFixed(1)}s vol${it.volume}%`).join('; ') : 'none'}`,
+    `Audio swap: ${assets.audioSwap ? 'loaded' : 'not loaded'}`
   ];
-  if (audioNote && !result.audioSummary) lines.splice(1, 0, `Audio note: ${audioNote}`);
-  if (el('ai-analysis-result')) el('ai-analysis-result').textContent = lines.join('\n');
+  return lines.join('\n');
+}
+
+function aiSystemPreamble() {
+  const isAudio = mediaKind === 'audio';
+  return [
+    isAudio
+      ? 'You are the assistant inside a browser-based AUDIO editor. The user uploaded audio (no video frames).'
+      : 'You are the assistant inside a browser-based VIDEO editor with already-uploaded overlay assets.',
+    'You chat with the user AND perform edits by returning actions.',
+    'ALWAYS reply with strict JSON only (no markdown fences), matching:',
+    '{',
+    '  "reply": "a short, friendly message to show the user",',
+    '  "transcript": "verbatim transcript of the audio; only include on the first analysis or if asked; otherwise empty string",',
+    '  "actions": [',
+    '     {"type":"illu","index":1,"at":12.5,"duration":3,"layout":"center"},',
+    '     {"type":"broll","index":1,"at":24.5,"duration":4,"layout":"fullscreen"},',
+    '     {"type":"bgm","index":1,"startAt":0,"volume":18},',
+    '     {"type":"sfx","index":1,"at":8.0,"volume":100},',
+    '     {"type":"trim","in":0,"out":30}',
+    '  ]',
+    '}',
+    'Rules:',
+    '- "actions" may be empty when the user is just chatting or asking a question.',
+    '- Only use asset indexes that exist (1-based). Layout ∈ center, fullscreen, left-third, right-third.',
+    isAudio ? '- Audio-only: never use illu/broll actions.' : '- Illu/broll only for video.',
+    '- Times are seconds on the original timeline. Volume is percent 0..100.',
+    '- Keep "reply" concise and conversational. Confirm what you changed.'
+  ].join('\n');
+}
+
+// Captures snapshots + audio once (in parallel) and caches them for the chat.
+async function ensureAiMedia() {
+  if (aiMediaReady) return;
+  const isAudio = mediaKind === 'audio';
+  const [snapshots, audioSample] = await Promise.all([
+    isAudio ? Promise.resolve([]) : captureVideoSnapshots(mainVideoFile),
+    extractAudioSampleForAi(mainVideoFile)
+  ]);
+  aiMediaParts = snapshots.map(item => item.inlineData);
+  if (audioSample.part) aiMediaParts.push(audioSample.part);
+  aiMediaReady = true;
 }
 
 async function analyzeProjectWithGemini() {
   if (aiJobRunning) return;
-  if (!mainVideoFile) {
-    toast('Load a video or audio file before running AI analysis', 'error');
-    return;
-  }
+  if (!mainVideoFile) { toast('Load a video or audio file first', 'error'); return; }
 
   syncSettingsFromForm();
   persistEditorSettings();
-
   if (!(editorSettings.geminiApiKey || '').trim()) {
     updateGeminiStatusText('Paste and save a Gemini API key first.', 'error');
     toast('Add a Gemini API key first', 'error');
@@ -898,173 +978,220 @@ async function analyzeProjectWithGemini() {
   }
 
   const isAudio = mediaKind === 'audio';
-
-  aiJobRunning = true;
-  el('analyze-project-btn').disabled = true;
-  el('apply-ai-btn').disabled = true;
-  latestAiSuggestions = null;
-  if (el('ai-analysis-result')) {
-    el('ai-analysis-result').textContent = isAudio
-      ? 'Transcribing audio and analyzing pacing…'
-      : 'Analyzing video snapshots and audio transcript…';
-  }
+  setChatBusy(true);
+  const thinking = appendChatMessage('bot', isAudio ? 'Transcribing and analyzing your audio…' : 'Analyzing snapshots and transcribing audio…');
   setStatus('Preparing AI analysis…');
 
   try {
-    // Snapshots only make sense for video. Audio is always transcribed.
-    const snapshots = isAudio ? [] : await captureVideoSnapshots(mainVideoFile);
-    const audioSample = await extractAudioSampleForAi(mainVideoFile);
-    const parts = snapshots.map(item => item.inlineData);
-    if (audioSample.part) parts.push(audioSample.part);
+    await ensureAiMedia();
 
-    const prompt = [
-      isAudio
-        ? 'You are helping a browser-based AUDIO editor. The user uploaded an audio file (no video frames exist).'
-        : 'You are helping a browser-based VIDEO editor place already-uploaded visual assets onto a timeline.',
-      'Return strict JSON only. No markdown fences.',
-      'JSON schema:',
-      '{',
-      '  "projectSummary": "short paragraph",',
-      '  "audioTranscript": "verbatim, punctuated transcript of the spoken audio; empty string only if there is truly no speech",',
-      '  "audioSummary": "short paragraph summarizing tone and pacing; mention if audio was unavailable",',
-      '  "illustrationSuggestions": [{"index":1,"at":12.5,"duration":3,"layout":"center","reason":"why"}],',
-      '  "brollSuggestions": [{"index":1,"at":24.5,"duration":4,"layout":"fullscreen","reason":"why"}],',
-      '  "bgmSuggestions": [{"index":1,"startAt":0,"volume":18,"reason":"why"}],',
-      '  "sfxSuggestions": [{"index":1,"at":8.0,"volume":100,"reason":"why"}],',
-      '  "accessibilityFindings": ["..."],',
-      '  "compatibilityFindings": ["..."],',
-      '  "bugChecks": ["..."]',
-      '}',
+    const firstPrompt = [
+      aiSystemPreamble(),
       '',
-      `Project type: ${isAudio ? 'audio-only' : 'video'}`,
-      `Media duration: ${fmtTime(times.duration || player.duration || audioPlayer.duration || 0)}`,
-      isAudio
-        ? 'Illustration/B-Roll assets: not applicable for audio projects (keep those arrays empty).'
-        : `Current illustration assets: ${illuStack.length ? illuStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
-      isAudio ? '' : `Current B-Roll assets: ${brollStack.length ? brollStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
-      `Current background music tracks: ${bgmStack.length ? bgmStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
-      `Current sound effects: ${sfxStack.length ? sfxStack.map((item, index) => `${index + 1}:${item.file.name}`).join(', ') : 'none uploaded'}`,
-      `Audio swap: ${assets.audioSwap ? 'loaded' : 'not loaded'}`,
-      `User editing goal: ${editorSettings.aiUserBrief || 'No extra goal provided.'}`,
-      `Transcript or notes supplied by user: ${editorSettings.aiTranscript || 'None — please generate the transcript from the audio.'}`,
-      `Audio analysis note: ${audioSample.note}`,
-      isAudio ? '' : `Snapshot times: ${snapshots.map(item => `${item.label}@${fmtTime(item.time)}`).join(', ')}`,
-      'Rules:',
-      '- Always transcribe the spoken audio into audioTranscript when an audio track is provided.',
-      isAudio
-        ? '- This is audio-only: keep illustrationSuggestions and brollSuggestions empty. Focus on transcript, bgmSuggestions and sfxSuggestions.'
-        : '- Use only uploaded illustration indexes 1..N and B-Roll indexes 1..M. Layout must be one of: center, fullscreen, left-third, right-third.',
-      '- Use only uploaded BGM indexes 1..N and SFX indexes 1..M. startAt/at are seconds within the timeline; volume is a percent 0..100.',
-      '- Keep any array empty when there are no uploaded assets of that type.',
-      '- Suggestions must be conservative and timeline-safe.',
-      '- Accessibility findings should focus on captions/transcripts, contrast, keyboard flow, and motion sensitivity.',
-      '- Compatibility findings should focus on browser support, persistence, and failure modes.',
-      '- Bug checks should highlight likely editor regressions to manually verify.'
-    ].filter(Boolean).join('\n');
+      'This is the first message. Transcribe the audio into "transcript", give a brief "reply" summarizing the media and how you can help, and propose a few sensible "actions" if assets are uploaded.',
+      '',
+      buildProjectStateText()
+    ].join('\n');
 
-    const payload = await callGeminiAPI(prompt, parts);
-    const parsed = normalizeAiSuggestions(parseGeminiJson(extractGeminiText(payload)));
-    latestAiSuggestions = parsed;
-
-    // Auto-fill the transcript box so Gemini's transcript becomes reusable context.
-    if (parsed.audioTranscript && el('ai-transcript')) {
-      el('ai-transcript').value = parsed.audioTranscript;
-      editorSettings.aiTranscript = parsed.audioTranscript;
-      persistEditorSettings();
-      announce('Transcript generated and added to the transcript box.');
-    }
-
-    renderAiAnalysisResult(parsed, audioSample.note);
-    el('apply-ai-btn').disabled = !(
-      parsed.illustrationSuggestions.length ||
-      parsed.brollSuggestions.length ||
-      parsed.bgmSuggestions.length ||
-      parsed.sfxSuggestions.length
-    );
+    const result = await sendToGemini(firstPrompt, aiMediaParts, true);
+    if (thinking) thinking.remove();
+    handleAiResult(result);
     updateGeminiStatusText('Gemini analysis completed successfully.', 'success');
     setStatus('AI analysis complete.');
-    toast('AI analysis complete ✓', 'success');
   } catch (err) {
     console.error('[AI analysis]', err);
-    if (el('ai-analysis-result')) el('ai-analysis-result').textContent = `AI analysis failed: ${err.message}`;
+    if (thinking) thinking.remove();
+    appendChatMessage('bot', `Sorry — analysis failed: ${err.message}`);
     updateGeminiStatusText(err.message || 'Gemini analysis failed.', 'error');
     toast('AI analysis failed', 'error');
   } finally {
-    aiJobRunning = false;
-    el('analyze-project-btn').disabled = false;
+    setChatBusy(false);
   }
 }
 
-function applyAiSuggestions() {
-  if (!latestAiSuggestions) {
-    toast('Run AI analysis first', 'info');
-    return;
+// Send a follow-up chat message (text only; media context already in history).
+async function sendChatMessage() {
+  if (aiJobRunning) return;
+  const input = el('ai-chat-input');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  if (!mainVideoFile) { toast('Load a file first', 'error'); return; }
+  if (!(editorSettings.geminiApiKey || '').trim()) { toast('Add a Gemini API key first', 'error'); return; }
+
+  input.value = '';
+  input.style.height = 'auto';
+  appendChatMessage('user', text);
+  setChatBusy(true);
+  const thinking = appendChatMessage('bot', '…');
+
+  try {
+    // If the user never ran Analyze, attach media on this first turn.
+    const attachMedia = !aiMediaReady;
+    if (attachMedia) await ensureAiMedia();
+
+    const prompt = [
+      aiChatHistory.length === 0 ? aiSystemPreamble() + '\n' : '',
+      'Current project state:',
+      buildProjectStateText(),
+      '',
+      `User: ${text}`
+    ].filter(Boolean).join('\n');
+
+    const result = await sendToGemini(prompt, attachMedia ? aiMediaParts : [], attachMedia);
+    if (thinking) thinking.remove();
+    handleAiResult(result);
+  } catch (err) {
+    console.error('[AI chat]', err);
+    if (thinking) thinking.remove();
+    appendChatMessage('bot', `Sorry — that failed: ${err.message}`);
+    toast('AI request failed', 'error');
+  } finally {
+    setChatBusy(false);
+  }
+}
+
+// Low-level: appends a user turn (with optional media parts) to history,
+// calls Gemini with the full history, parses JSON, and records the model turn.
+async function sendToGemini(userText, mediaParts = [], includeMedia = false) {
+  const userParts = [];
+  if (includeMedia && mediaParts.length) userParts.push(...mediaParts);
+  userParts.push({ text: userText });
+  aiChatHistory.push({ role: 'user', parts: userParts });
+
+  const apiKey = (editorSettings.geminiApiKey || '').trim();
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(editorSettings.geminiModel || 'gemini-3-flash-preview')}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: aiChatHistory,
+        generationConfig: { temperature: 0.3, topP: 0.9, responseMimeType: 'application/json' }
+      })
+    }
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || `Gemini request failed with ${response.status}`);
+
+  const rawText = extractGeminiText(payload);
+  aiChatHistory.push({ role: 'model', parts: [{ text: rawText }] });
+
+  let parsed;
+  try { parsed = parseGeminiJson(rawText); }
+  catch (_) { parsed = { reply: rawText || 'Done.', transcript: '', actions: [] }; }
+  return parsed;
+}
+
+// Renders the model's reply, fills transcript, and applies any actions.
+function handleAiResult(result) {
+  const reply = (result && result.reply) ? String(result.reply) : 'Done.';
+  appendChatMessage('bot', reply);
+
+  if (result && typeof result.transcript === 'string' && result.transcript.trim() && el('ai-transcript')) {
+    el('ai-transcript').value = result.transcript.trim();
+    editorSettings.aiTranscript = result.transcript.trim();
+    persistEditorSettings();
+    announce('Transcript updated.');
   }
 
+  const actions = Array.isArray(result?.actions) ? result.actions : [];
+  const applied = applyAiActions(actions);
+  if (applied > 0) {
+    appendChatMessage('bot', `✓ Applied ${applied} change${applied === 1 ? '' : 's'} to your timeline.`);
+    announce(`Applied ${applied} change${applied === 1 ? '' : 's'}.`);
+  }
+}
+
+// Applies a list of AI actions to the timeline. Returns count applied.
+function applyAiActions(actions) {
+  if (!Array.isArray(actions) || !actions.length) return 0;
+  const LAYOUTS = ['center', 'fullscreen', 'left-third', 'right-third'];
   let applied = 0;
+  let changedTrim = false;
   pushHistory();
 
-  latestAiSuggestions.illustrationSuggestions.forEach(suggestion => {
-    const item = illuStack[(Number(suggestion.index) || 0) - 1];
-    if (!item) return;
-    item.at = clamp(Number(suggestion.at) || item.at, 0, times.duration || item.at);
-    item.duration = Math.max(0.5, Number(suggestion.duration) || item.duration);
-    item.layout = ['center', 'fullscreen', 'left-third', 'right-third'].includes(suggestion.layout) ? suggestion.layout : item.layout;
-    if (item.el) item.el.className = `illu-overlay-el layout-${item.layout} hidden`;
-    applied++;
+  actions.forEach(a => {
+    if (!a || typeof a !== 'object') return;
+    const type = String(a.type || '').toLowerCase();
+    const idx = (Number(a.index) || 0) - 1;
+
+    if (type === 'illu' && mediaKind === 'video') {
+      const item = illuStack[idx]; if (!item) return;
+      if (a.at != null)       item.at = clamp(Number(a.at), 0, times.duration || Number(a.at));
+      if (a.duration != null) item.duration = Math.max(0.5, Number(a.duration));
+      if (LAYOUTS.includes(a.layout)) item.layout = a.layout;
+      if (item.el) item.el.className = `illu-overlay-el layout-${item.layout} hidden`;
+      applied++;
+    } else if (type === 'broll' && mediaKind === 'video') {
+      const item = brollStack[idx]; if (!item) return;
+      if (a.at != null)       item.at = clamp(Number(a.at), 0, times.duration || Number(a.at));
+      if (a.duration != null) item.duration = Math.max(0.5, Number(a.duration));
+      if (LAYOUTS.includes(a.layout)) item.layout = a.layout;
+      applied++;
+    } else if (type === 'bgm') {
+      const item = bgmStack[idx]; if (!item) return;
+      if (a.startAt != null) item.startAt = clamp(Number(a.startAt), 0, times.duration || Number(a.startAt));
+      if (a.volume != null)  { item.volume = clamp(Math.round(Number(a.volume)), 0, 100); if (item.audio) item.audio.volume = item.volume/100; }
+      applied++;
+    } else if (type === 'sfx') {
+      const item = sfxStack[idx]; if (!item) return;
+      if (a.at != null)     item.at = clamp(Number(a.at), 0, times.duration || Number(a.at));
+      if (a.volume != null) { item.volume = clamp(Math.round(Number(a.volume)), 0, 100); if (item.audio) item.audio.volume = item.volume/100; }
+      item.triggered = false;
+      applied++;
+    } else if (type === 'trim') {
+      if (a.in != null)  times.s = clamp(Number(a.in), 0, times.duration);
+      if (a.out != null) times.e = clamp(Number(a.out), times.s + 0.1, times.duration);
+      changedTrim = true;
+      applied++;
+    }
   });
 
-  latestAiSuggestions.brollSuggestions.forEach(suggestion => {
-    const item = brollStack[(Number(suggestion.index) || 0) - 1];
-    if (!item) return;
-    item.at = clamp(Number(suggestion.at) || item.at, 0, times.duration || item.at);
-    item.duration = Math.max(0.5, Number(suggestion.duration) || item.duration);
-    item.layout = ['center', 'fullscreen', 'left-third', 'right-third'].includes(suggestion.layout) ? suggestion.layout : item.layout;
-    applied++;
-  });
-
-  // Apply BGM suggestions: start time + volume.
-  (latestAiSuggestions.bgmSuggestions || []).forEach(suggestion => {
-    const item = bgmStack[(Number(suggestion.index) || 0) - 1];
-    if (!item) return;
-    if (suggestion.startAt != null && !isNaN(Number(suggestion.startAt))) {
-      item.startAt = clamp(Number(suggestion.startAt), 0, times.duration || Number(suggestion.startAt));
-    }
-    if (suggestion.volume != null && !isNaN(Number(suggestion.volume))) {
-      item.volume = clamp(Math.round(Number(suggestion.volume)), 0, 100);
-      if (item.audio) item.audio.volume = item.volume / 100;
-    }
-    applied++;
-  });
-
-  // Apply SFX suggestions: trigger time + volume.
-  (latestAiSuggestions.sfxSuggestions || []).forEach(suggestion => {
-    const item = sfxStack[(Number(suggestion.index) || 0) - 1];
-    if (!item) return;
-    if (suggestion.at != null && !isNaN(Number(suggestion.at))) {
-      item.at = clamp(Number(suggestion.at), 0, times.duration || Number(suggestion.at));
-    }
-    if (suggestion.volume != null && !isNaN(Number(suggestion.volume))) {
-      item.volume = clamp(Math.round(Number(suggestion.volume)), 0, 100);
-      if (item.audio) item.audio.volume = item.volume / 100;
-    }
-    item.triggered = false;
-    applied++;
-  });
-
-  if (!applied) {
-    toast('AI returned review notes but no applicable asset placements', 'info');
-    return;
-  }
+  if (!applied) { editHistory.pop(); return 0; } // nothing changed; undo the snapshot
 
   renderIlluStack();
   renderBrollStack();
   renderBgmStack();
   renderSfxStack();
   renderSfxMarkers();
+  if (changedTrim) { updateTrimBar(); }
   updateSummary();
-  announce(`Applied ${applied} AI placement suggestion${applied === 1 ? '' : 's'}.`);
-  toast(`Applied ${applied} AI suggestion${applied === 1 ? '' : 's'} ✓`, 'success');
+  return applied;
+}
+
+function clearAiChat() {
+  aiChatHistory = [];
+  aiMediaParts = [];
+  aiMediaReady = false;
+  const log = chatLogEl();
+  if (log) {
+    log.innerHTML = '<div class="ai-msg ai-msg-bot"><p>Chat cleared. Press <strong>Analyze</strong> to start again, or type a message.</p></div>';
+  }
+  toast('Chat cleared', 'info');
+}
+
+// ── SETTINGS MODAL ────────────────────────────────────────────
+let settingsLastFocus = null;
+function openSettingsModal() {
+  const overlay = el('settings-overlay');
+  if (!overlay) return;
+  settingsLastFocus = document.activeElement;
+  overlay.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  // Focus the first control for keyboard/screen-reader users.
+  setTimeout(() => { el('gemini-api-key')?.focus(); }, 30);
+  document.addEventListener('keydown', settingsEscHandler);
+}
+function closeSettingsModal() {
+  const overlay = el('settings-overlay');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  document.removeEventListener('keydown', settingsEscHandler);
+  if (settingsLastFocus && settingsLastFocus.focus) settingsLastFocus.focus();
+}
+function settingsEscHandler(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeSettingsModal(); }
 }
 
 // ── ENGINE INIT ───────────────────────────────────────────────
@@ -1205,9 +1332,30 @@ function applyMediaKindUI() {
   if (player) player.classList.toggle('hidden', isAudio);
   if (audioOnlyStage) audioOnlyStage.classList.toggle('hidden', !isAudio);
   document.body.classList.toggle('audio-mode', isAudio);
-  // Video-only overlay layers (logo, illustrations, B-roll) are dimmed for audio.
+  // Video-only overlay layers (logo, illustrations, B-roll) are dimmed AND
+  // removed from the accessibility tree + tab order for audio projects, so
+  // screen readers don't announce controls that do nothing in audio mode.
   document.querySelectorAll('[data-video-only]').forEach(node => {
     node.classList.toggle('mode-disabled', isAudio);
+    if (isAudio) {
+      node.setAttribute('aria-hidden', 'true');
+      node.setAttribute('inert', '');
+      node.querySelectorAll('button, input, select, textarea, a, [tabindex]').forEach(ctrl => {
+        if (!ctrl.hasAttribute('data-prev-tabindex')) {
+          ctrl.setAttribute('data-prev-tabindex', ctrl.getAttribute('tabindex') ?? '');
+        }
+        ctrl.setAttribute('tabindex', '-1');
+      });
+    } else {
+      node.removeAttribute('aria-hidden');
+      node.removeAttribute('inert');
+      node.querySelectorAll('[data-prev-tabindex]').forEach(ctrl => {
+        const prev = ctrl.getAttribute('data-prev-tabindex');
+        if (prev === '') ctrl.removeAttribute('tabindex');
+        else ctrl.setAttribute('tabindex', prev);
+        ctrl.removeAttribute('data-prev-tabindex');
+      });
+    }
   });
 }
 
@@ -1223,6 +1371,8 @@ function finishMediaLoad(file, duration) {
   document.getElementById('export-btn').disabled  = false;
   document.getElementById('silence-btn').disabled = false;
   document.getElementById('undo-btn').disabled    = true;
+  if (el('ai-chat-input')) el('ai-chat-input').disabled = false;
+  if (el('ai-send-btn'))   el('ai-send-btn').disabled   = false;
 
   updateTimecodes();
   updateTrimBar();
@@ -1560,6 +1710,7 @@ document.getElementById('bgm-uploader').onchange = (e) => {
   audio.loop  = true;
   audio.volume = 0.18;
   bgmStack.push({ id, file, audio, startAt: 0, offset: 0, volume: 18 });
+  if (audioUnlocked) unlockAudioElement(audio);
   pushHistory();
   // Focus the new track automatically
   focusedBgmId = id;
@@ -1743,6 +1894,7 @@ document.getElementById('sfx-uploader').onchange = (e) => {
   audio.src   = URL.createObjectURL(file);
   audio.volume = 1.0;
   sfxStack.push({ id, file, audio, at: activeMedia().currentTime || 0, volume: 100, triggered: false });
+  if (audioUnlocked) unlockAudioElement(audio);
   pushHistory();
   renderSfxStack();
   renderSfxMarkers();
@@ -2536,6 +2688,20 @@ function getLogoOverlayExpr(pos) {
 }
 
 // ── AUDIO-ONLY EXPORT ─────────────────────────────────────────
+
+// Maps a time on the ORIGINAL timeline to its position on the OUTPUT
+// timeline after cut segments (gaps) are removed. Returns null if the
+// original time falls inside a removed gap.
+function mapOriginalToOutput(origTime, segs) {
+  let elapsed = 0;
+  for (const seg of segs) {
+    if (origTime < seg.s) return null;            // inside a removed gap
+    if (origTime <= seg.e) return elapsed + (origTime - seg.s);
+    elapsed += (seg.e - seg.s);
+  }
+  return null; // after the last kept segment
+}
+
 async function runAudioExport() {
   setStatus('Preparing audio export…');
   document.getElementById('progress-wrap').classList.remove('hidden');
@@ -2550,10 +2716,12 @@ async function runAudioExport() {
     for (let i = 0; i < sfxStack.length; i++) ffmpeg.FS('writeFile', `sfx${i}.mp3`, await fetchFile(sfxStack[i].file));
     setProgress(12, 'Building filter graph…');
 
-    const seg0 = segments[0] || { s: 0, e: times.duration };
-    const trimDur = Math.max(0.1, (segments[segments.length - 1]?.e || times.duration) - seg0.s);
+    const segs = (segments && segments.length) ? segments : [{ s: 0, e: times.duration }];
+    // Total kept length after all cuts are removed.
+    const outputDur = segs.reduce((sum, seg) => sum + Math.max(0, seg.e - seg.s), 0);
 
-    const args = ['-ss', seg0.s.toFixed(3), '-t', trimDur.toFixed(3), '-i', `main.${ext}`];
+    // ffmpeg inputs: main + BGM (looped) + SFX
+    const args = ['-i', `main.${ext}`];
     for (let i = 0; i < bgmStack.length; i++) args.push('-stream_loop', '-1', '-i', `bgm${i}.mp3`);
     for (let i = 0; i < sfxStack.length; i++) args.push('-i', `sfx${i}.mp3`);
 
@@ -2562,17 +2730,42 @@ async function runAudioExport() {
     const sfxIdx = sfxStack.map(() => idx++);
 
     const muteMain = audioProcessing === 'mute';
-    const filterParts = [`[0:a]volume=${muteMain ? 0 : 1.0}[main]`];
+    const filterParts = [];
+
+    // 1) Trim each kept segment of the MAIN audio, then concat to drop the gaps.
+    let mainLabel;
+    if (segs.length > 1) {
+      const segLabels = [];
+      segs.forEach((seg, i) => {
+        filterParts.push(`[0:a]atrim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},asetpts=PTS-STARTPTS[mseg${i}]`);
+        segLabels.push(`[mseg${i}]`);
+      });
+      filterParts.push(`${segLabels.join('')}concat=n=${segs.length}:v=0:a=1[mcat]`);
+      mainLabel = '[mcat]';
+    } else {
+      const seg = segs[0];
+      filterParts.push(`[0:a]atrim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},asetpts=PTS-STARTPTS[mcat]`);
+      mainLabel = '[mcat]';
+    }
+    filterParts.push(`${mainLabel}volume=${muteMain ? 0 : 1.0}[main]`);
+
     const mixLabels = ['[main]'];
 
+    // 2) BGM: place at its mapped output time (or clamp to 0 if it starts in a gap/before).
     bgmStack.forEach((item, i) => {
-      const delayMs = Math.max(0, Math.round((item.startAt - seg0.s) * 1000));
-      filterParts.push(`[${bgmIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[abgm${i}]`);
+      let outStart = mapOriginalToOutput(item.startAt, segs);
+      if (outStart === null) outStart = 0; // if inside a gap, start at project beginning
+      const delayMs = Math.max(0, Math.round(outStart * 1000));
+      filterParts.push(`[${bgmIdx[i]}:a]atrim=duration=${outputDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)},adelay=${delayMs}|${delayMs}[abgm${i}]`);
       mixLabels.push(`[abgm${i}]`);
     });
+
+    // 3) SFX: only include if its trigger time survives the cuts; map to output time.
     sfxStack.forEach((item, i) => {
-      const delayMs = Math.max(0, Math.round((item.at - seg0.s) * 1000));
-      filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
+      const outAt = mapOriginalToOutput(item.at, segs);
+      if (outAt === null) return; // SFX landed in a removed gap — skip it
+      const delayMs = Math.max(0, Math.round(outAt * 1000));
+      filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${outputDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
       mixLabels.push(`[asfx${i}]`);
     });
 
