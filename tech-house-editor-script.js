@@ -117,40 +117,6 @@ function activeMedia() {
   return mediaKind === 'audio' ? audioPlayer : player;
 }
 
-// ── iOS AUDIO UNLOCK ──────────────────────────────────────────
-// iOS Safari/Chrome block HTMLAudioElement.play() until each element has
-// been started inside a user gesture. BGM/SFX are created programmatically,
-// so we "unlock" every layer element on the first tap/click/keydown, and
-// again whenever a new track is added while already unlocked.
-let audioUnlocked = false;
-function unlockAudioElement(audioEl) {
-  if (!audioEl) return;
-  try {
-    const wasMuted = audioEl.muted;
-    audioEl.muted = true;
-    const p = audioEl.play();
-    if (p && typeof p.then === 'function') {
-      p.then(() => { audioEl.pause(); audioEl.currentTime = 0; audioEl.muted = wasMuted; })
-       .catch(() => { audioEl.muted = wasMuted; });
-    } else {
-      audioEl.pause(); audioEl.muted = wasMuted;
-    }
-  } catch (_) {}
-}
-function unlockAllLayerAudio() {
-  unlockAudioElement(swapAudio);
-  bgmStack.forEach(item => unlockAudioElement(item.audio));
-  sfxStack.forEach(item => unlockAudioElement(item.audio));
-}
-function primeAudioUnlock() {
-  if (audioUnlocked) return;
-  audioUnlocked = true;
-  unlockAllLayerAudio();
-}
-['pointerdown', 'touchend', 'keydown', 'click'].forEach(evt => {
-  window.addEventListener(evt, primeAudioUnlock, { once: false, passive: true });
-});
-
 // Single-item assets (logo, audioSwap)
 let assets = { logo: null, audioSwap: null };
 let audioProcessing = 'none';
@@ -187,7 +153,6 @@ let dragType         = null;
 let isScrubbing      = false;
 let scrubAudioCtx    = null;
 let stackIdCounter   = 0;
-let latestAiSuggestions = null;
 let aiJobRunning = false;
 
 const PROJECT_SCHEMA_VERSION = 2;
@@ -207,6 +172,7 @@ function createDefaultEditorSettings() {
     autosaveProject: true,
     reduceMotion: false,
     highContrast: false,
+    theme: 'dark',
     aiTranscript: ''
   };
 }
@@ -265,6 +231,7 @@ function clamp(value, min, max) {
 function applyAccessibilityPreferences() {
   document.body.classList.toggle('reduce-motion', !!editorSettings.reduceMotion);
   document.body.classList.toggle('high-contrast', !!editorSettings.highContrast);
+  document.body.classList.toggle('theme-dark', editorSettings.theme === 'dark');
 }
 
 function loadEditorSettings() {
@@ -298,6 +265,7 @@ function syncSettingsFromForm() {
     aiTranscript: el('ai-transcript')?.value || ''
   };
 }
+
 
 function updateSettingsForm() {
   if (el('gemini-api-key')) el('gemini-api-key').value = editorSettings.geminiApiKey || '';
@@ -372,8 +340,7 @@ function resetProjectMediaState() {
   brollStack = [];
   selectedSfxId = null;
   focusedBgmId = null;
-  latestAiSuggestions = null;
-  if (typeof clearAiChat === 'function') clearAiChat();
+  clearAiChat();
   illuContainer.innerHTML = '';
   overlayBroll.classList.add('hidden');
   brollPlayer.pause();
@@ -656,7 +623,9 @@ function initializeEnhancements() {
   el('load-project-btn')?.addEventListener('click', restoreSavedProject);
   el('analyze-project-btn')?.addEventListener('click', analyzeProjectWithGemini);
 
-  // Settings modal
+  // AI chat + settings modal wiring
+  el('ai-send-btn')?.addEventListener('click', sendChatMessage);
+  el('ai-clear-chat-btn')?.addEventListener('click', clearAiChat);
   el('open-settings-btn')?.addEventListener('click', openSettingsModal);
   el('open-settings-inline')?.addEventListener('click', openSettingsModal);
   el('settings-close-btn')?.addEventListener('click', closeSettingsModal);
@@ -664,21 +633,19 @@ function initializeEnhancements() {
   el('settings-overlay')?.addEventListener('click', (e) => {
     if (e.target === el('settings-overlay')) closeSettingsModal();
   });
-
-  // AI chat wiring
-  el('ai-send-btn')?.addEventListener('click', sendChatMessage);
-  el('ai-clear-chat-btn')?.addEventListener('click', clearAiChat);
   const chatInput = el('ai-chat-input');
   if (chatInput) {
     chatInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
     });
-    // Auto-grow the textarea up to a few rows.
+    // Auto-grow the textarea up to a few rows (fixes iOS where it wouldn't grow/scroll).
     chatInput.addEventListener('input', () => {
       chatInput.style.height = 'auto';
-      chatInput.style.height = Math.min(120, chatInput.scrollHeight) + 'px';
+      chatInput.style.height = Math.min(140, chatInput.scrollHeight) + 'px';
     });
   }
+
+  setupQuickToggles();
 
   window.addEventListener('beforeunload', () => {
     syncSettingsFromForm();
@@ -877,9 +844,10 @@ async function extractAudioSampleForAi(file) {
   }
 }
 
+
 // ── AI CHAT SUBSYSTEM ─────────────────────────────────────────
 // Conversation history sent to Gemini as multi-turn "contents".
-let aiChatHistory = [];        // [{ role:'user'|'model', text:'...' }]
+let aiChatHistory = [];        // [{ role:'user'|'model', parts:[{text},{inlineData}] }]
 let aiMediaParts = [];         // cached snapshots + audio inlineData parts
 let aiMediaReady = false;      // media has been captured & attached once
 
@@ -903,8 +871,8 @@ function setChatBusy(busy) {
   const input = el('ai-chat-input');
   const send  = el('ai-send-btn');
   const analyze = el('analyze-project-btn');
-  if (input) input.disabled = busy || !mainVideoFile;
-  if (send)  send.disabled  = busy || !mainVideoFile;
+  if (input)   input.disabled = busy || !mainVideoFile;
+  if (send)    send.disabled  = busy || !mainVideoFile;
   if (analyze) analyze.disabled = busy;
 }
 
@@ -984,7 +952,6 @@ async function analyzeProjectWithGemini() {
 
   try {
     await ensureAiMedia();
-
     const firstPrompt = [
       aiSystemPreamble(),
       '',
@@ -1025,7 +992,6 @@ async function sendChatMessage() {
   const thinking = appendChatMessage('bot', '…');
 
   try {
-    // If the user never ran Analyze, attach media on this first turn.
     const attachMedia = !aiMediaReady;
     if (attachMedia) await ensureAiMedia();
 
@@ -1050,8 +1016,7 @@ async function sendChatMessage() {
   }
 }
 
-// Low-level: appends a user turn (with optional media parts) to history,
-// calls Gemini with the full history, parses JSON, and records the model turn.
+// Low-level: appends a user turn, calls Gemini with the full history, parses JSON.
 async function sendToGemini(userText, mediaParts = [], includeMedia = false) {
   const userParts = [];
   if (includeMedia && mediaParts.length) userParts.push(...mediaParts);
@@ -1147,14 +1112,13 @@ function applyAiActions(actions) {
     }
   });
 
-  if (!applied) { editHistory.pop(); return 0; } // nothing changed; undo the snapshot
-
+  if (!applied) { editHistory.pop(); return 0; }
   renderIlluStack();
   renderBrollStack();
   renderBgmStack();
   renderSfxStack();
   renderSfxMarkers();
-  if (changedTrim) { updateTrimBar(); }
+  if (changedTrim) updateTrimBar();
   updateSummary();
   return applied;
 }
@@ -1164,9 +1128,7 @@ function clearAiChat() {
   aiMediaParts = [];
   aiMediaReady = false;
   const log = chatLogEl();
-  if (log) {
-    log.innerHTML = '<div class="ai-msg ai-msg-bot"><p>Chat cleared. Press <strong>Analyze</strong> to start again, or type a message.</p></div>';
-  }
+  if (log) log.innerHTML = '<div class="ai-msg ai-msg-bot"><p>Chat cleared. Press <strong>Analyze</strong> to start again, or type a message.</p></div>';
   toast('Chat cleared', 'info');
 }
 
@@ -1178,7 +1140,6 @@ function openSettingsModal() {
   settingsLastFocus = document.activeElement;
   overlay.classList.remove('hidden');
   document.body.classList.add('modal-open');
-  // Focus the first control for keyboard/screen-reader users.
   setTimeout(() => { el('gemini-api-key')?.focus(); }, 30);
   document.addEventListener('keydown', settingsEscHandler);
 }
@@ -1193,7 +1154,6 @@ function closeSettingsModal() {
 function settingsEscHandler(e) {
   if (e.key === 'Escape') { e.preventDefault(); closeSettingsModal(); }
 }
-
 // ── ENGINE INIT ───────────────────────────────────────────────
 (async function initEngine() {
   setStatus('Loading FFmpeg engine…');
@@ -1217,78 +1177,135 @@ function settingsEscHandler(e) {
 // Shows: [Sign In] button  when logged out
 // Signing in/out syncs across the whole Tech House suite.
 
+// ── THEME + QUICK TOGGLES (apply site-wide) ──────────────────
+function applySiteTheme() {
+  const dark = editorSettings.theme === 'dark';
+  document.body.classList.toggle('theme-dark', dark);
+  const t = el('quick-theme');
+  if (t) { t.setAttribute('aria-checked', String(dark)); t.classList.toggle('on', dark); }
+}
+function toggleSiteTheme() {
+  editorSettings.theme = editorSettings.theme === 'dark' ? 'light' : 'dark';
+  applySiteTheme();
+  persistEditorSettings();
+  toast(`Theme: ${editorSettings.theme === 'dark' ? 'Dark' : 'Light'}`, 'info');
+}
+function applyQuickToggleState() {
+  const rm = el('quick-reduce-motion');
+  const hc = el('quick-high-contrast');
+  if (rm) { rm.setAttribute('aria-checked', String(!!editorSettings.reduceMotion)); rm.classList.toggle('on', !!editorSettings.reduceMotion); }
+  if (hc) { hc.setAttribute('aria-checked', String(!!editorSettings.highContrast)); hc.classList.toggle('on', !!editorSettings.highContrast); }
+}
+function setupQuickToggles() {
+  el('quick-reduce-motion')?.addEventListener('click', () => {
+    editorSettings.reduceMotion = !editorSettings.reduceMotion;
+    applyAccessibilityPreferences(); persistEditorSettings(); applyQuickToggleState();
+  });
+  el('quick-high-contrast')?.addEventListener('click', () => {
+    editorSettings.highContrast = !editorSettings.highContrast;
+    applyAccessibilityPreferences(); persistEditorSettings(); applyQuickToggleState();
+  });
+  el('quick-theme')?.addEventListener('click', toggleSiteTheme);
+  applyQuickToggleState();
+  applySiteTheme();
+}
+
 function setupAuth() {
   const signinBtn  = document.getElementById('auth-signin-btn');
-  const loggedinEl = document.getElementById('auth-loggedin');
+  const accountBtn = document.getElementById('auth-account-btn');
   const googleBtn  = document.getElementById('auth-google-btn');
   const logoutBtn  = document.getElementById('auth-logout-btn');
   const googlePop  = document.getElementById('auth-google-popup');
   const popClose   = document.getElementById('auth-popup-close');
+  const accountMenu = document.getElementById('account-menu');
+  const settingsBtn = document.getElementById('account-settings-btn');
 
-  // "Sign In" button → show Google popup card
+  const closeAccountMenu = () => {
+    if (accountMenu) accountMenu.classList.add('hidden');
+    if (accountBtn) accountBtn.setAttribute('aria-expanded', 'false');
+  };
+  const toggleAccountMenu = (force) => {
+    if (!accountMenu || !accountBtn) return;
+    const open = force !== undefined ? force : accountMenu.classList.contains('hidden');
+    accountMenu.classList.toggle('hidden', !open);
+    accountBtn.setAttribute('aria-expanded', String(open));
+  };
+
   if (signinBtn) {
     signinBtn.addEventListener('click', () => {
       googlePop.classList.toggle('hidden');
-      signinBtn.setAttribute('aria-expanded', !googlePop.classList.contains('hidden'));
+      signinBtn.setAttribute('aria-expanded', String(!googlePop.classList.contains('hidden')));
     });
   }
-  if (popClose) {
-    popClose.addEventListener('click', () => googlePop.classList.add('hidden'));
-  }
+  if (popClose) popClose.addEventListener('click', () => googlePop.classList.add('hidden'));
 
-  // Google sign-in
   if (googleBtn) {
     googleBtn.addEventListener('click', async () => {
       googlePop.classList.add('hidden');
+      if (!gProvider || !fbSignInWithPopup) { toast('Sign-in unavailable — reload the page', 'error'); return; }
       try {
         await fbSignInWithPopup(gProvider);
         toast('Signed in to Tech House ✓', 'success');
       } catch (err) {
-        if (err.code !== 'auth/popup-closed-by-user' &&
-            err.code !== 'auth/cancelled-popup-request') {
-          fbSignInWithRedirect(gProvider);
-        }
+        // iOS / popup-blocked fallback to redirect flow.
+        if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
+        try { if (fbSignInWithRedirect) await fbSignInWithRedirect(gProvider); }
+        catch (_) { toast('Sign-in failed: ' + (err.message || err.code), 'error'); }
       }
     });
   }
 
-  // Log out
+  if (accountBtn) {
+    accountBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAccountMenu(); });
+  }
+  if (settingsBtn) settingsBtn.addEventListener('click', () => { closeAccountMenu(); openSettingsModal(); });
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
-      await fbSignOut();
-      toast('Logged out of Tech House', 'info');
+      closeAccountMenu();
+      try { if (fbSignOut) await fbSignOut(); toast('Logged out of Tech House', 'info'); }
+      catch (err) { toast('Log out failed: ' + err.message, 'error'); }
     });
   }
 
-  // Close popup on outside click
+  // Close menus on outside click / Escape
   document.addEventListener('click', e => {
     const widget = document.getElementById('auth-widget');
     if (widget && !widget.contains(e.target)) {
       googlePop.classList.add('hidden');
+      closeAccountMenu();
     }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { googlePop.classList.add('hidden'); closeAccountMenu(); }
   });
 
-  // Auth state → update inline widget
-  fbOnAuthStateChanged(user => {
-    if (user) {
-      const displayName = user.displayName || user.email.split('@')[0];
-      // Hide sign-in, show logged-in row
-      signinBtn.classList.add('hidden');
-      loggedinEl.classList.remove('hidden');
-      // Update name
-      const nameEl = document.getElementById('auth-name');
-      if (nameEl) nameEl.textContent = displayName;
-      // Update avatar
-      const avatarEl = document.getElementById('auth-avatar');
-      if (avatarEl) {
-        avatarEl.src = user.photoURL ||
+  // Auth state → update account widget
+  if (fbOnAuthStateChanged) {
+    fbOnAuthStateChanged(user => {
+      if (user) {
+        const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
+        const email = user.email || '';
+        const avatar = user.photoURL ||
           `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=f59e0b&color=000&size=80`;
+        signinBtn?.classList.add('hidden');
+        accountBtn?.classList.remove('hidden');
+        const nameEl = document.getElementById('auth-name');
+        if (nameEl) nameEl.textContent = displayName;
+        const avatarEl = document.getElementById('auth-avatar');
+        if (avatarEl) avatarEl.src = avatar;
+        const menuAvatar = document.getElementById('account-menu-avatar');
+        if (menuAvatar) menuAvatar.src = avatar;
+        const menuName = document.getElementById('account-menu-name');
+        if (menuName) menuName.textContent = displayName;
+        const menuEmail = document.getElementById('account-menu-email');
+        if (menuEmail) menuEmail.textContent = email || 'signed in';
+      } else {
+        signinBtn?.classList.remove('hidden');
+        accountBtn?.classList.add('hidden');
+        closeAccountMenu();
       }
-    } else {
-      signinBtn.classList.remove('hidden');
-      loggedinEl.classList.add('hidden');
-    }
-  });
+    });
+  }
 }
 
 // ── MEDIA UPLOAD (HYBRID: VIDEO OR AUDIO) ─────────────────────
@@ -1332,30 +1349,9 @@ function applyMediaKindUI() {
   if (player) player.classList.toggle('hidden', isAudio);
   if (audioOnlyStage) audioOnlyStage.classList.toggle('hidden', !isAudio);
   document.body.classList.toggle('audio-mode', isAudio);
-  // Video-only overlay layers (logo, illustrations, B-roll) are dimmed AND
-  // removed from the accessibility tree + tab order for audio projects, so
-  // screen readers don't announce controls that do nothing in audio mode.
+  // Video-only overlay layers (logo, illustrations, B-roll) are dimmed for audio.
   document.querySelectorAll('[data-video-only]').forEach(node => {
     node.classList.toggle('mode-disabled', isAudio);
-    if (isAudio) {
-      node.setAttribute('aria-hidden', 'true');
-      node.setAttribute('inert', '');
-      node.querySelectorAll('button, input, select, textarea, a, [tabindex]').forEach(ctrl => {
-        if (!ctrl.hasAttribute('data-prev-tabindex')) {
-          ctrl.setAttribute('data-prev-tabindex', ctrl.getAttribute('tabindex') ?? '');
-        }
-        ctrl.setAttribute('tabindex', '-1');
-      });
-    } else {
-      node.removeAttribute('aria-hidden');
-      node.removeAttribute('inert');
-      node.querySelectorAll('[data-prev-tabindex]').forEach(ctrl => {
-        const prev = ctrl.getAttribute('data-prev-tabindex');
-        if (prev === '') ctrl.removeAttribute('tabindex');
-        else ctrl.setAttribute('tabindex', prev);
-        ctrl.removeAttribute('data-prev-tabindex');
-      });
-    }
   });
 }
 
@@ -1710,7 +1706,6 @@ document.getElementById('bgm-uploader').onchange = (e) => {
   audio.loop  = true;
   audio.volume = 0.18;
   bgmStack.push({ id, file, audio, startAt: 0, offset: 0, volume: 18 });
-  if (audioUnlocked) unlockAudioElement(audio);
   pushHistory();
   // Focus the new track automatically
   focusedBgmId = id;
@@ -1894,7 +1889,6 @@ document.getElementById('sfx-uploader').onchange = (e) => {
   audio.src   = URL.createObjectURL(file);
   audio.volume = 1.0;
   sfxStack.push({ id, file, audio, at: activeMedia().currentTime || 0, volume: 100, triggered: false });
-  if (audioUnlocked) unlockAudioElement(audio);
   pushHistory();
   renderSfxStack();
   renderSfxMarkers();
@@ -2688,20 +2682,6 @@ function getLogoOverlayExpr(pos) {
 }
 
 // ── AUDIO-ONLY EXPORT ─────────────────────────────────────────
-
-// Maps a time on the ORIGINAL timeline to its position on the OUTPUT
-// timeline after cut segments (gaps) are removed. Returns null if the
-// original time falls inside a removed gap.
-function mapOriginalToOutput(origTime, segs) {
-  let elapsed = 0;
-  for (const seg of segs) {
-    if (origTime < seg.s) return null;            // inside a removed gap
-    if (origTime <= seg.e) return elapsed + (origTime - seg.s);
-    elapsed += (seg.e - seg.s);
-  }
-  return null; // after the last kept segment
-}
-
 async function runAudioExport() {
   setStatus('Preparing audio export…');
   document.getElementById('progress-wrap').classList.remove('hidden');
@@ -2716,12 +2696,10 @@ async function runAudioExport() {
     for (let i = 0; i < sfxStack.length; i++) ffmpeg.FS('writeFile', `sfx${i}.mp3`, await fetchFile(sfxStack[i].file));
     setProgress(12, 'Building filter graph…');
 
-    const segs = (segments && segments.length) ? segments : [{ s: 0, e: times.duration }];
-    // Total kept length after all cuts are removed.
-    const outputDur = segs.reduce((sum, seg) => sum + Math.max(0, seg.e - seg.s), 0);
+    const seg0 = segments[0] || { s: 0, e: times.duration };
+    const trimDur = Math.max(0.1, (segments[segments.length - 1]?.e || times.duration) - seg0.s);
 
-    // ffmpeg inputs: main + BGM (looped) + SFX
-    const args = ['-i', `main.${ext}`];
+    const args = ['-ss', seg0.s.toFixed(3), '-t', trimDur.toFixed(3), '-i', `main.${ext}`];
     for (let i = 0; i < bgmStack.length; i++) args.push('-stream_loop', '-1', '-i', `bgm${i}.mp3`);
     for (let i = 0; i < sfxStack.length; i++) args.push('-i', `sfx${i}.mp3`);
 
@@ -2730,42 +2708,17 @@ async function runAudioExport() {
     const sfxIdx = sfxStack.map(() => idx++);
 
     const muteMain = audioProcessing === 'mute';
-    const filterParts = [];
-
-    // 1) Trim each kept segment of the MAIN audio, then concat to drop the gaps.
-    let mainLabel;
-    if (segs.length > 1) {
-      const segLabels = [];
-      segs.forEach((seg, i) => {
-        filterParts.push(`[0:a]atrim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},asetpts=PTS-STARTPTS[mseg${i}]`);
-        segLabels.push(`[mseg${i}]`);
-      });
-      filterParts.push(`${segLabels.join('')}concat=n=${segs.length}:v=0:a=1[mcat]`);
-      mainLabel = '[mcat]';
-    } else {
-      const seg = segs[0];
-      filterParts.push(`[0:a]atrim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},asetpts=PTS-STARTPTS[mcat]`);
-      mainLabel = '[mcat]';
-    }
-    filterParts.push(`${mainLabel}volume=${muteMain ? 0 : 1.0}[main]`);
-
+    const filterParts = [`[0:a]volume=${muteMain ? 0 : 1.0}[main]`];
     const mixLabels = ['[main]'];
 
-    // 2) BGM: place at its mapped output time (or clamp to 0 if it starts in a gap/before).
     bgmStack.forEach((item, i) => {
-      let outStart = mapOriginalToOutput(item.startAt, segs);
-      if (outStart === null) outStart = 0; // if inside a gap, start at project beginning
-      const delayMs = Math.max(0, Math.round(outStart * 1000));
-      filterParts.push(`[${bgmIdx[i]}:a]atrim=duration=${outputDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)},adelay=${delayMs}|${delayMs}[abgm${i}]`);
+      const delayMs = Math.max(0, Math.round((item.startAt - seg0.s) * 1000));
+      filterParts.push(`[${bgmIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[abgm${i}]`);
       mixLabels.push(`[abgm${i}]`);
     });
-
-    // 3) SFX: only include if its trigger time survives the cuts; map to output time.
     sfxStack.forEach((item, i) => {
-      const outAt = mapOriginalToOutput(item.at, segs);
-      if (outAt === null) return; // SFX landed in a removed gap — skip it
-      const delayMs = Math.max(0, Math.round(outAt * 1000));
-      filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${outputDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
+      const delayMs = Math.max(0, Math.round((item.at - seg0.s) * 1000));
+      filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
       mixLabels.push(`[asfx${i}]`);
     });
 

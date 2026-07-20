@@ -37,24 +37,54 @@
               onclick="detectSilence()">🔇 Auto-Cut Silence</button>
       <button class="btn btn-sm btn-ghost" id="undo-btn" disabled
               aria-label="Undo — keyboard Control Z" onclick="doUndo()">↩ Undo</button>
+
+      <!-- Quick accessibility toggles (apply site-wide) -->
+      <button class="quick-toggle" id="quick-reduce-motion" role="switch" aria-checked="false"
+              aria-label="Toggle reduce motion" title="Reduce motion">
+        <span class="qt-icon" aria-hidden="true">🌊</span>
+      </button>
+      <button class="quick-toggle" id="quick-high-contrast" role="switch" aria-checked="false"
+              aria-label="Toggle high contrast" title="High contrast">
+        <span class="qt-icon" aria-hidden="true">◐</span>
+      </button>
+      <button class="quick-toggle" id="quick-theme" role="switch" aria-checked="false"
+              aria-label="Toggle dark / light theme" title="Theme">
+        <span class="qt-icon" aria-hidden="true">🌓</span>
+      </button>
+
       <button class="btn btn-sm btn-ghost" id="open-settings-btn"
               aria-label="Open settings" aria-haspopup="dialog">⚙ Settings</button>
 
-      <!-- Auth Widget — inline, no dropdown -->
+      <!-- Account menu (Google Gemini style) -->
       <div class="auth-widget" id="auth-widget">
-        <!-- Logged out: Sign In button -->
         <button class="auth-signin-btn" id="auth-signin-btn"
                 aria-label="Sign in to Tech House with Google">
           Sign In
         </button>
-        <!-- Logged in: avatar + "Signed in as Name" + Log Out -->
-        <div class="auth-loggedin hidden" id="auth-loggedin">
-          <img id="auth-avatar" src="" alt="Your profile picture" class="auth-avatar">
-          <span class="auth-signed-label">Signed in as</span>
+        <button class="auth-account-btn hidden" id="auth-account-btn"
+                aria-haspopup="menu" aria-expanded="false" aria-label="Account menu">
+          <img id="auth-avatar" src="" alt="" class="auth-avatar">
           <span id="auth-name" class="auth-name-text">User</span>
-          <button class="auth-logout-btn" id="auth-logout-btn"
-                  aria-label="Log out of Tech House">Log Out</button>
+          <span class="auth-caret" aria-hidden="true">▾</span>
+        </button>
+
+        <!-- Account dropdown menu -->
+        <div class="account-menu hidden" id="account-menu" role="menu" aria-label="Account">
+          <div class="account-menu-header">
+            <img id="account-menu-avatar" src="" alt="" class="auth-avatar">
+            <div>
+              <div id="account-menu-name" class="am-name">User</div>
+              <div id="account-menu-email" class="am-email">signed in</div>
+            </div>
+          </div>
+          <button class="account-menu-item" id="account-settings-btn" role="menuitem">
+            <span aria-hidden="true">⚙️</span> Settings
+          </button>
+          <button class="account-menu-item auth-logout-btn" id="auth-logout-btn" role="menuitem">
+            <span aria-hidden="true">⏻</span> Log out
+          </button>
         </div>
+
         <!-- Google sign-in popup (hidden, shown when Sign In clicked) -->
         <div class="auth-google-popup hidden" id="auth-google-popup">
           <button class="auth-google-inner" id="auth-google-btn"

@@ -156,6 +156,108 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Account button (avatar + name + caret) — Google Gemini style */
+.auth-account-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--panel);
+  border: 1px solid var(--border-hi);
+  border-radius: 100px;
+  padding: 3px 10px 3px 4px;
+  cursor: pointer;
+  font-family: var(--body);
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.auth-account-btn:hover { border-color: var(--amber); }
+.auth-account-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.auth-caret { font-size: 0.6rem; color: var(--text-dim); }
+
+/* Account dropdown menu */
+.account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 230px;
+  background: var(--panel);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 6px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+  z-index: 5000;
+  animation: dropdownIn 0.18s ease;
+}
+.account-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.account-menu-header .auth-avatar { width: 38px; height: 38px; }
+.am-name { font-weight: 700; font-size: 0.85rem; color: var(--text); }
+.am-email { font-size: 0.72rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.account-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--body);
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.account-menu-item:hover { background: var(--surface); }
+.account-menu-item:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+.account-menu-item.auth-logout-btn { color: var(--red); font-weight: 600; }
+
+/* Quick accessibility / theme toggles in header */
+.quick-toggle {
+  width: 34px; height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 1px solid var(--border-hi);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.quick-toggle:hover { border-color: var(--amber); }
+.quick-toggle:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.quick-toggle.on { background: var(--amber); border-color: var(--amber); color: #000; }
+.quick-toggle .qt-icon { pointer-events: none; }
+
+/* Site-wide light/dark theming (default is dark) */
+:root { color-scheme: dark; }
+body:not(.theme-dark) {
+  color-scheme: light;
+  --bg: #f5f7fa;
+  --bg-elev: #ffffff;
+  --surface: #eceff3;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --border: #e2e6ec;
+  --border-hi: #c8cfd9;
+  --text: #11161d;
+  --text-dim: #5b6573;
+  --text-mute: #7a838f;
+  --amber: #b9770b;
+  --cyan: #0a6f8c;
+}
+body:not(.theme-dark) .app-header { background: var(--bg-elev); border-color: var(--border); }
+
 /* ── BGM SCRUBBER / MUSIC FOCUS CONTROLLER ───────────────────── */
 .bgm-focus-controls {
   border-top: 1px solid var(--border);
@@ -829,6 +931,43 @@ body.high-contrast .inline-status {
   border-width: 2px;
 }
 
+/* ── DEVICE / OS-SPECIFIC LOOK ───────────────────────────────── */
+/* Laptop / desktop (fine pointer, hover-capable): roomier controls. */
+@media (hover: hover) and (pointer: fine) {
+  .quick-toggle { width: 36px; height: 36px; }
+  .auth-signin-btn, .auth-account-btn { padding-top: 8px; padding-bottom: 8px; }
+}
+
+/* Touch devices (phones/tablets): larger hit areas, native-ish feel. */
+@media (hover: none) and (pointer: coarse) {
+  .btn, .stack-item-remove, .trim-head, .auth-signin-btn,
+  .auth-account-btn, .account-menu-item, .auth-logout-btn, .quick-toggle {
+    min-height: 40px;
+  }
+  .quick-toggle { width: 42px; height: 42px; border-radius: 12px; }
+  .trim-head { width: 24px; }
+  .stack-ctrl-input, .stack-select, .text-input, .num-input,
+  .ai-chat-input, .setting-textarea { min-height: 42px; font-size: 16px; }
+  /* 16px font-size prevents iOS zoom-on-focus. */
+  .ai-chat-input { padding: 12px 14px; }
+  .header-right { gap: 6px; }
+  .auth-name-text { max-width: 84px; }
+}
+
+/* iPhone / iOS: respect safe-area insets (notch + home indicator). */
+@supports (padding: max(0px)) {
+  @media (hover: none) and (pointer: coarse) {
+    .app-header {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+      padding-top: max(10px, env(safe-area-inset-top));
+    }
+    .toast-wrap { bottom: max(16px, env(safe-area-inset-bottom)); }
+    .modal { margin-bottom: env(safe-area-inset-bottom); }
+    .account-menu, .auth-google-popup { margin-right: env(safe-area-inset-right); }
+  }
+}
+
 /* ── RESPONSIVE ──────────────────────────────────────────────── */
 @media (max-width: 660px) {
   .panels { grid-template-columns: 1fr; }
@@ -968,8 +1107,8 @@ body.audio-mode .mode-disabled,
 }
 .ai-msg-user { justify-content: flex-end; }
 .ai-msg-user p {
-  background: rgba(34, 211, 238, 0.14);
-  border: 1px solid rgba(34, 211, 238, 0.35);
+  background: rgba(34, 211, 239, 0.14);
+  border: 1px solid rgba(34, 211, 239, 0.35);
   border-bottom-right-radius: 4px;
   color: var(--text);
 }
@@ -978,7 +1117,7 @@ body.audio-mode .mode-disabled,
   flex: 1;
   resize: none;
   min-height: 40px;
-  max-height: 120px;
+  max-height: 140px;
   padding: 9px 11px;
   background: var(--bg);
   color: var(--text);
@@ -991,7 +1130,6 @@ body.audio-mode .mode-disabled,
 .ai-chat-input:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
 .ai-chat-input:disabled { opacity: 0.5; }
 
-/* ── SETTINGS MODAL ──────────────────────────────────────────── */
 .link-btn {
   background: none;
   border: none;
@@ -1001,6 +1139,8 @@ body.audio-mode .mode-disabled,
   text-decoration: underline;
   padding: 0;
 }
+
+/* ── SETTINGS MODAL ──────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1059,6 +1199,5 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 430px) {
   .modal { max-width: none; border-radius: var(--radius); }
 }
-
 
 
