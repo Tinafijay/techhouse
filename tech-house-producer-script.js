@@ -9,7 +9,7 @@
     tracks: [],
     trackCounter: 0,
     focusedIndex: 0,
-    armedIndex: -1,
+    armedIndex: 0,
 
     isPlaying: false,
     currentTime: 0,
@@ -91,13 +91,13 @@
     const playBtn = document.getElementById('btnPlayAll');
     if (playBtn) {
       playBtn.setAttribute('aria-pressed', String(engine.isPlaying));
-      playBtn.innerHTML = engine.isPlaying ? '⏸ Pause [Space]' : '▶ Play / Pause [Space]';
+      playBtn.innerHTML = engine.isPlaying ? 'Pause [Space]' : 'Play [Space]';
     }
     const recBtn = document.getElementById('btnRecord');
     if (recBtn) {
       recBtn.setAttribute('aria-pressed', String(engine.isRecording));
       recBtn.classList.toggle('armed', engine.isRecording);
-      recBtn.innerHTML = engine.isRecording ? '⏹ Stop Recording [R]' : '🎙️ Record [R]';
+      recBtn.innerHTML = engine.isRecording ? 'Stop Rec [R]' : 'Record [R]';
     }
   }
 
@@ -106,13 +106,7 @@
     if (!btn) return;
     btn.setAttribute('aria-pressed', String(engine.loopEnabled));
     btn.classList.toggle('active-toggle', engine.loopEnabled);
-    btn.innerHTML = engine.loopEnabled ? '🔁 Loop: ON [L]' : '🔁 Loop: OFF [L]';
-    
-    if (engine.loopEnabled) {
-      engine.tracks.forEach(t => {
-        if (t.trimOnLoop) trimTrackBuffer(t);
-      });
-    }
+    btn.innerHTML = engine.loopEnabled ? 'Loop: ON [L]' : 'Loop: OFF [L]';
   }
 
   function updateMetronomeButton() {
@@ -120,25 +114,24 @@
     if (!btn) return;
     btn.setAttribute('aria-pressed', String(engine.metronomeOn));
     btn.classList.toggle('active-toggle', engine.metronomeOn);
-    btn.innerHTML = engine.metronomeOn ? '⏱ Metronome: ON [M]' : '⏱ Metronome: OFF [M]';
+    btn.innerHTML = engine.metronomeOn ? 'Metronome: ON [M]' : 'Metronome: OFF [M]';
   }
 
   function setFocusedTrackDisplay() {
     if (engine.tracks.length === 0) return;
     const current = engine.tracks[engine.focusedIndex];
     document.getElementById('focusTrackDisplay').textContent = current.name;
-    document.getElementById('focusStatusDisplay').textContent = `${current.type.toUpperCase()} | ${current.audioBuffer ? 'Audio Ready' : 'Empty'}`;
+    document.getElementById('focusStatusDisplay').textContent = current.audioBuffer ? 'Audio Ready' : 'Empty';
   }
 
   // ============================================
   // Track Management
   // ============================================
-  function createAudioTrack(name, type) {
-    if (!name) engine.trackCounter++;
+  function createAudioTrack(name) {
+    engine.trackCounter++;
     const track = {
       id: Date.now() + Math.random(),
       name: name || `Track ${engine.trackCounter}`,
-      type: type || 'audio',
       audioBuffer: null,
       sourceNode: null,
       gainNode: null,
@@ -172,6 +165,7 @@
     engine.focusedIndex = Math.max(0, Math.min(index, engine.tracks.length - 1));
     document.querySelectorAll('.track-item').forEach((el, idx) => {
       el.classList.toggle('focused', idx === engine.focusedIndex);
+      el.setAttribute('aria-selected', String(idx === engine.focusedIndex));
     });
     setFocusedTrackDisplay();
     announce(`Focused ${engine.tracks[engine.focusedIndex].name}`);
@@ -180,7 +174,7 @@
   function armTrack(index) {
     engine.armedIndex = index;
     renderTracks();
-    announce(`Armed ${engine.tracks[index].name} for recording`);
+    announce(`Armed ${engine.tracks[index].name}`);
   }
 
   function renderTracks() {
@@ -191,18 +185,25 @@
     engine.tracks.forEach((t, i) => {
       const item = document.createElement('div');
       item.className = 'track-item' + (i === engine.focusedIndex ? ' focused' : '') + (i === engine.armedIndex ? ' armed-track' : '');
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+      item.setAttribute('aria-selected', String(i === engine.focusedIndex));
+      item.setAttribute('aria-label', `${t.name}${t.audioBuffer ? ' Audio loaded' : ' Empty'}${i === engine.armedIndex ? ' Armed' : ''}`);
       item.onclick = (e) => {
         if (!e.target.matches('button, input, select')) setFocusedTrack(i);
       };
-      item.setAttribute('role', 'button');
-      item.setAttribute('tabindex', '0');
-      item.setAttribute('aria-label', `${t.name} - ${t.audioBuffer ? 'Audio loaded' : 'Empty'}`);
+      item.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setFocusedTrack(i);
+        }
+      };
 
       item.innerHTML = `
         <div class="track-main-row">
           <div class="track-info">
             <div class="track-title">${t.name}</div>
-            <div class="track-status">${t.audioBuffer ? 'Audio Buffer Loaded' : 'Empty Track'}</div>
+            <div class="track-status">${t.audioBuffer ? 'Audio Loaded' : 'Empty'}</div>
           </div>
           <div class="btn-group">
             <button class="${i === engine.armedIndex ? 'armed' : ''}" onclick="window.armTrack(${i})">${i === engine.armedIndex ? 'ARMED' : 'Arm'}</button>
@@ -210,8 +211,8 @@
             <button class="${t.isSolo ? 'active-toggle' : ''}" onclick="window.toggleSolo(${i})">${t.isSolo ? 'SOLO' : 'Solo'}</button>
             <button class="${t.isQuantized ? 'active-toggle' : ''}" onclick="window.toggleQuantize(${i})">${t.isQuantized ? 'QUANT ON' : 'Quantize'}</button>
             <button class="${t.isLooping ? 'active-toggle' : ''}" onclick="window.toggleTrackLoop(${i})">${t.isLooping ? 'LOOP ON' : 'Loop'}</button>
-            <button class="${t.autotuneOn ? 'active-toggle' : ''}" onclick="window.toggleAutotune(${i})">${t.autotuneOn ? 'AUTO-TUNE ON' : 'Auto-Tune'}</button>
-            <button class="${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})">${t.trimOnLoop ? 'TRIM ON' : 'Trim Loop'}</button>
+            <button class="${t.autotuneOn ? 'active-toggle' : ''}" onclick="window.toggleAutotune(${i})">${t.autotuneOn ? 'TUNE ON' : 'Tune'}</button>
+            <button class="${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})">${t.trimOnLoop ? 'TRIM ON' : 'Trim'}</button>
             <button onclick="window.clearTrack(${i})">Clear</button>
           </div>
         </div>
@@ -226,29 +227,11 @@
           </div>
           <div class="control-unit">
             <label for="pitch-${i}">Pitch</label>
-            <input id="pitch-${i}" type="range" min="-12" max="12" step="1" value="${t.pitchSemitones}" oninput="window.updateTrackParam(${i}, 'pitchSemitones', this.value)" aria-label="Pitch Semitones">
-          </div>
-          <div class="control-unit">
-            <label for="eqlow-${i}">EQ Low</label>
-            <input id="eqlow-${i}" type="range" min="-12" max="12" step="1" value="${t.eqLowVal}" oninput="window.updateTrackParam(${i}, 'eqLowVal', this.value)" aria-label="EQ Low">
-          </div>
-          <div class="control-unit">
-            <label for="eqmid-${i}">EQ Mid</label>
-            <input id="eqmid-${i}" type="range" min="-12" max="12" step="1" value="${t.eqMidVal}" oninput="window.updateTrackParam(${i}, 'eqMidVal', this.value)" aria-label="EQ Mid">
-          </div>
-          <div class="control-unit">
-            <label for="eqhigh-${i}">EQ High</label>
-            <input id="eqhigh-${i}" type="range" min="-12" max="12" step="1" value="${t.eqHighVal}" oninput="window.updateTrackParam(${i}, 'eqHighVal', this.value)" aria-label="EQ High">
+            <input id="pitch-${i}" type="range" min="-12" max="12" step="${t.autotuneOn ? '1' : '0.1'}" value="${t.pitchSemitones}" oninput="window.updateTrackParam(${i}, 'pitchSemitones', this.value)" aria-label="Pitch Semitones">
           </div>
         </div>
       `;
       rack.appendChild(item);
-      item.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          setFocusedTrack(i);
-        }
-      });
     });
   }
 
@@ -266,11 +249,6 @@
     }
     if (param === 'pitchSemitones' && track.sourceNode && engine.ctx) {
       track.sourceNode.detune.setTargetAtTime(track.pitchSemitones * 100, engine.ctx.currentTime, 0.02);
-    }
-    if ((param === 'eqLowVal' || param === 'eqMidVal' || param === 'eqHighVal') && engine.ctx) {
-      if (param === 'eqLowVal' && track.eqLow) track.eqLow.gain.setTargetAtTime(track.eqLowVal, engine.ctx.currentTime, 0.02);
-      if (param === 'eqMidVal' && track.eqMid) track.eqMid.gain.setTargetAtTime(track.eqMidVal, engine.ctx.currentTime, 0.02);
-      if (param === 'eqHighVal' && track.eqHigh) track.eqHigh.gain.setTargetAtTime(track.eqHighVal, engine.ctx.currentTime, 0.02);
     }
   }
 
@@ -327,7 +305,7 @@
     renderTracks();
     announce(`${track.name} trim on loop ${track.trimOnLoop ? 'enabled' : 'disabled'}`);
     
-    if (track.trimOnLoop && engine.loopEnabled) {
+    if (track.trimOnLoop && engine.loopEnabled && engine.inPoint !== null && engine.outPoint !== null) {
       trimTrackBuffer(track);
     }
   }
@@ -401,7 +379,7 @@
   // Audio Graph & Scheduling
   // ============================================
   function buildTrackNodes(track, startTime, offset, duration) {
-    if (!track.audioBuffer) return;
+    if (!track.audioBuffer || !engine.ctx) return;
     const anySolo = engine.tracks.some(t => t.isSolo);
     const isAudible = !track.isMuted && (!anySolo || track.isSolo);
     if (!isAudible) return;
@@ -449,9 +427,12 @@
       if (regionPos >= 0) {
         effectiveOffset = regionStart + (regionPos % regionDur);
       }
+      if (effectiveOffset >= track.audioBuffer.duration) {
+        effectiveOffset = regionStart;
+      }
       source.start(startTime, effectiveOffset, regionDur);
       source.onended = () => {
-        if (engine.isPlaying) {
+        if (engine.isPlaying && engine.loopEnabled && engine.inPoint !== null && engine.outPoint !== null) {
           scheduleTrack(track);
         }
       };
@@ -464,15 +445,16 @@
         source.loopEnd = track.audioBuffer.duration;
       } else {
         if (effectiveOffset >= track.audioBuffer.duration) {
-          if (track.isLooping) {
-            effectiveOffset = effectiveOffset % track.audioBuffer.duration;
-          } else {
-            return;
-          }
+          effectiveOffset = 0;
         }
         dur = Math.max(0.01, track.audioBuffer.duration - effectiveOffset);
       }
       source.start(startTime, effectiveOffset, dur);
+      source.onended = () => {
+        if (engine.isPlaying && !engine.loopEnabled && !track.isLooping) {
+          checkAllTracksEnded();
+        }
+      };
     }
 
     track.sourceNode = source;
@@ -494,6 +476,20 @@
     engine.tracks.forEach(t => scheduleTrack(t));
   }
 
+  function checkAllTracksEnded() {
+    const anyAudible = engine.tracks.some(t => {
+      if (!t.audioBuffer || !t.sourceNode) return false;
+      const anySolo = engine.tracks.some(ts => ts.isSolo);
+      return !t.isMuted && (!anySolo || t.isSolo);
+    });
+    if (!anyAudible) {
+      stopPlayback();
+      engine.currentTime = 0;
+      updateDisplays();
+      announce('Playback finished');
+    }
+  }
+
   // ============================================
   // Transport Engine
   // ============================================
@@ -508,6 +504,8 @@
       engine.currentTime = 0;
     } else if (engine.loopEnabled && engine.inPoint !== null) {
       engine.currentTime = engine.inPoint;
+    } else {
+      engine.currentTime = 0;
     }
 
     scheduleAllTracks();
@@ -515,7 +513,7 @@
 
     engine.isPlaying = true;
     updatePlaybackButtons();
-    announce(engine.loopEnabled && engine.outPoint !== null ? `Playing loop ${engine.inPoint.toFixed(1)}-${engine.outPoint.toFixed(1)}` : 'Playing project');
+    announce(engine.loopEnabled && engine.outPoint !== null ? `Looping ${engine.inPoint.toFixed(1)}-${engine.outPoint.toFixed(1)}` : 'Playing');
     tick();
   }
 
@@ -610,7 +608,7 @@
   }
 
   // ============================================
-  // Count-In (Web Audio Scheduled, Drift-Free)
+  // Count-In (Drift-Free, Downbeat Accented)
   // ============================================
   async function runCountIn(totalBeats, callback) {
     await initAudio();
@@ -621,7 +619,8 @@
     const secondsPerBeat = 60.0 / engine.bpm;
     const now = engine.ctx.currentTime;
     for (let b = 0; b < totalBeats; b++) {
-      scheduleClick(now + b * secondsPerBeat, b % 4 === 0);
+      const isDownbeat = (b % 4 === 0);
+      scheduleClick(now + b * secondsPerBeat, isDownbeat);
     }
     const duration = totalBeats * secondsPerBeat * 1000;
     setTimeout(() => {
@@ -637,6 +636,11 @@
     await initAudio();
     if (engine.isRecording || engine.isCountingIn) return;
 
+    if (engine.armedIndex < 0 || engine.armedIndex >= engine.tracks.length) {
+      announce('No track armed for recording');
+      return;
+    }
+
     const deviceId = document.getElementById('audioSource').value;
     const constraints = { audio: deviceId ? { exact: deviceId } : true };
 
@@ -648,6 +652,8 @@
     }
 
     const totalBeats = parseInt(document.getElementById('countInSelect').value) || 0;
+    const armedTrack = engine.tracks[engine.armedIndex];
+    
     const execute = () => {
       try {
         engine.mediaRecorder = new MediaRecorder(engine.currentStream);
@@ -657,16 +663,16 @@
           const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
           const arrayBuf = await blob.arrayBuffer();
           const decoded = await engine.ctx.decodeAudioData(arrayBuf);
-          engine.tracks[engine.armedIndex].audioBuffer = decoded;
+          armedTrack.audioBuffer = decoded;
           renderTracks();
-          announce(`Recorded to ${engine.tracks[engine.armedIndex].name}`);
+          announce(`Recorded to ${armedTrack.name}`);
         };
 
         startPlayback(true);
         engine.mediaRecorder.start();
         engine.isRecording = true;
         updatePlaybackButtons();
-        announce(`Recording on ${engine.tracks[engine.armedIndex].name}`);
+        announce(`Recording on ${armedTrack.name}`);
       } catch(err) {
         announce('Failed to start recorder. Try again.');
       }
@@ -895,7 +901,10 @@
         break;
       case 'e':
       case 'E':
-        if (!ctrl) {
+        if (ctrl && engine.ctx) {
+          e.preventDefault();
+          exportMasterMix();
+        } else if (!ctrl) {
           engine.outPoint = engine.currentTime;
           updateDisplays();
           announce(`Out point at ${engine.outPoint.toFixed(2)} seconds`);
@@ -932,13 +941,6 @@
         updateDisplays();
         announce(`Loop ${engine.loopEnabled ? 'enabled' : 'disabled'}`);
         if (engine.loopEnabled) announce('Set In (S) and Out (E) points to define loop region');
-        break;
-      case 'e':
-      case 'E':
-        if (ctrl && engine.ctx) {
-          e.preventDefault();
-          exportMasterMix();
-        }
         break;
       default:
         break;
@@ -989,8 +991,9 @@
   // Initialization
   // ============================================
   window.addEventListener('load', () => {
-    createAudioTrack('Vocal Lead', 'vocal');
-    createAudioTrack('Backing Track', 'audio');
+    createAudioTrack('Track 1');
+    engine.armedIndex = 0;
+    renderTracks();
     getAudioDevices();
     updateDisplays();
   });
