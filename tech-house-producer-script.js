@@ -10,6 +10,7 @@
     trackCounter: 0,
     focusedIndex: 0,
     armedIndex: 0,
+    pendingTrackUploadIndex: null,
 
     isPlaying: false,
     currentTime: 0,
@@ -177,6 +178,12 @@
     announce(`Armed ${engine.tracks[index].name}`);
   }
 
+  function triggerTrackUpload(index) {
+    engine.pendingTrackUploadIndex = index;
+    const input = document.getElementById('trackAudioInput');
+    if (input) input.click();
+  }
+
   function renderTracks() {
     const rack = document.getElementById('trackRack');
     if (!rack) return;
@@ -213,6 +220,7 @@
             <button class="${t.isLooping ? 'active-toggle' : ''}" onclick="window.toggleTrackLoop(${i})">${t.isLooping ? 'LOOP ON' : 'Loop'}</button>
             <button class="${t.autotuneOn ? 'active-toggle' : ''}" onclick="window.toggleAutotune(${i})">${t.autotuneOn ? 'TUNE ON' : 'Tune'}</button>
             <button class="${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})">${t.trimOnLoop ? 'TRIM ON' : 'Trim'}</button>
+            <button onclick="window.triggerTrackUpload(${i})">Upload</button>
             <button onclick="window.clearTrack(${i})">Clear</button>
           </div>
         </div>
@@ -642,7 +650,11 @@
     }
 
     const deviceId = document.getElementById('audioSource').value;
-    const constraints = { audio: deviceId ? { exact: deviceId } : true };
+    const constraints = { 
+      audio: deviceId 
+        ? { exact: deviceId, echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
+        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
+    };
 
     try {
       engine.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -662,7 +674,23 @@
         engine.mediaRecorder.onstop = async () => {
           const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
           const arrayBuf = await blob.arrayBuffer();
-          const decoded = await engine.ctx.decodeAudioData(arrayBuf);
+          let decoded = await engine.ctx.decodeAudioData(arrayBuf);
+          if (decoded) {
+            const countInBeats = parseInt(document.getElementById('countInSelect').value) || 0;
+            const secondsPerBeat = 60 / engine.bpm;
+            const silenceDuration = countInBeats * secondsPerBeat;
+            const startSample = Math.floor(silenceDuration * decoded.sampleRate);
+            if (startSample > 0 && startSample < decoded.length) {
+              const newLength = decoded.length - startSample;
+              const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
+              for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+                const oldData = decoded.getChannelData(ch);
+                const newData = trimmed.getChannelData(ch);
+                for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
+              }
+              decoded = trimmed;
+            }
+          }
           armedTrack.audioBuffer = decoded;
           renderTracks();
           announce(`Recorded to ${armedTrack.name}`);
@@ -878,7 +906,15 @@
         goToStart();
         break;
       case ' ':
-        if (e.shiftKey) {
+        if (engine.isRecording && engine.mediaRecorder) {
+          if (engine.mediaRecorder.state === 'recording') {
+            engine.mediaRecorder.pause();
+            announce('Recording paused');
+          } else if (engine.mediaRecorder.state === 'paused') {
+            engine.mediaRecorder.resume();
+            announce('Recording resumed');
+          }
+        } else if (e.shiftKey) {
           e.preventDefault();
           startPlayback(true);
         } else if (engine.isPlaying) {
@@ -888,8 +924,11 @@
         }
         break;
       case 'R':
-        if (engine.isRecording) stopRecording();
-        else prepareAndRecord();
+        if (engine.isRecording) {
+          stopRecording();
+        } else if (!engine.isCountingIn) {
+          prepareAndRecord();
+        }
         break;
       case 's':
       case 'S':
@@ -979,6 +1018,23 @@
       announce(`Imported file ${file.name}`);
     } catch(err) {
       announce('Error decoding audio file. Format unsupported.');
+    }
+  });
+
+  document.getElementById('trackAudioInput').addEventListener('change', async (e) => {
+    await initAudio();
+    const file = e.target.files[0];
+    if (!file || engine.pendingTrackUploadIndex === null) return;
+    const index = engine.pendingTrackUploadIndex;
+    engine.pendingTrackUploadIndex = null;
+    try {
+      const buffer = await file.arrayBuffer();
+      const decoded = await engine.ctx.decodeAudioData(buffer);
+      engine.tracks[index].audioBuffer = decoded;
+      renderTracks();
+      announce(`Imported ${file.name} to ${engine.tracks[index].name}`);
+    } catch(err) {
+      announce('Error decoding audio file for this track.');
     }
   });
 
