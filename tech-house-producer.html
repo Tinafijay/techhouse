@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tech House Pro Producer - Accessible Studio</title>
+  <link rel="stylesheet" href="tech-house-producer-styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Tech House Accessible DAW</h1>
+      <span class="badge" id="modeBadge" aria-live="polite">Time Base: Bars & Beats</span>
+    </header>
+
+    <section class="dashboard" aria-label="Transport Status">
+      <div class="display-card">
+        <div class="card-label">Playhead Position</div>
+        <div class="card-value" id="posDisplay" aria-live="polite">01:01:00</div>
+        <div class="card-sub" id="posSubDisplay">Bar 1, Beat 1</div>
+      </div>
+
+      <div class="display-card">
+        <div class="card-label">Selection Region</div>
+        <div class="card-value" id="regionDisplay" aria-live="polite">IN: -- | OUT: --</div>
+        <div class="card-sub" id="regionSubDisplay">Press S (In) / E (Out)</div>
+      </div>
+
+      <div class="display-card">
+        <div class="card-label">Focused Track</div>
+        <div class="card-value" id="focusTrackDisplay" aria-live="polite">Track 1</div>
+        <div class="card-sub" id="focusStatusDisplay">Ready</div>
+      </div>
+    </section>
+
+    <section class="hardware-bar" aria-label="Project Settings">
+      <div class="btn-group">
+        <label for="audioSource"><strong>Audio Input:</strong></label>
+        <select id="audioSource" aria-label="Select Input Hardware"></select>
+        <button id="btnScanHardware" type="button">Scan Hardware</button>
+      </div>
+
+      <div class="btn-group">
+        <label for="bpmInput"><strong>BPM:</strong></label>
+        <input type="number" id="bpmInput" value="120" min="40" max="240" aria-label="BPM Tempo">
+
+        <label for="countInSelect"><strong>Count-In:</strong></label>
+        <select id="countInSelect" aria-label="Select Count In Duration">
+          <option value="4">1 Bar (4 Beats)</option>
+          <option value="8" selected>2 Bars (8 Beats)</option>
+          <option value="0">Off (Instant)</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="toolbar" aria-label="Transport Controls">
+      <div class="btn-group">
+        <button id="btnAddTrack" type="button">+ Add Track</button>
+        <label class="btn-upload">
+          📁 Import File
+          <input type="file" id="audioFileInput" accept="audio/*" aria-label="Import Audio File">
+        </label>
+        <button id="btnToggleTime" type="button">Mode: Bars/Sec (T)</button>
+      </div>
+
+      <div class="btn-group">
+        <button id="btnRecord" type="button" aria-pressed="false">🎙️ Record [R]</button>
+        <button id="btnPlayAll" type="button" aria-pressed="false">▶ Play / Pause [Space]</button>
+        <button id="btnStop" type="button">⏹ Stop [Esc]</button>
+        <button id="btnGoStart" type="button">⏮ Go to Start [Home]</button>
+        <button id="btnGlobalLoop" type="button" aria-pressed="false">🔁 Loop: OFF [L]</button>
+        <button id="btnMetronome" type="button" aria-pressed="false">⏱ Metronome: OFF [M]</button>
+        <button id="btnExport" type="button" style="background: var(--highlight); color:#000;">💾 Export WAV [Ctrl+E]</button>
+      </div>
+    </section>
+
+    <section class="track-rack" id="trackRack" role="region" aria-label="Track Rack List"></section>
+
+    <section class="instructions" aria-label="Keyboard Shortcuts">
+      <h3>Keyboard Shortcuts Quick Guide:</h3>
+      <ul>
+        <li><strong>Home:</strong> Return playhead to start (0)</li>
+        <li><strong>Up / Down Arrows:</strong> Navigate focus between tracks</li>
+        <li><strong>Left / Right Arrows:</strong> Move playhead by 1 beat</li>
+        <li><strong>Shift + Left / Right:</strong> Move playhead by 1 bar</li>
+        <li><strong>Ctrl + Left / Right:</strong> Move playhead by 1/16 note</li>
+        <li><strong>Space:</strong> Play or Pause playback</li>
+        <li><strong>Shift + Space:</strong> Go to start and play</li>
+        <li><strong>R:</strong> Start / Stop recording on armed track</li>
+        <li><strong>S / E:</strong> Mark In and Out region selection points</li>
+        <li><strong>Esc:</strong> Stop playback and clear In/Out selection</li>
+        <li><strong>T:</strong> Toggle time display between Bars & Beats / Seconds</li>
+        <li><strong>M:</strong> Toggle metronome click</li>
+        <li><strong>L:</strong> Toggle global loop using In/Out region</li>
+        <li><strong>Ctrl+E:</strong> Export master WAV mixdown</li>
+      </ul>
+    </section>
+  </div>
+
+  <div id="srAnnouncer" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+
+  <script src="tech-house-producer-script.js"></script>
+</body>
+</html>
