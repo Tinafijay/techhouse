@@ -107,6 +107,12 @@
     btn.setAttribute('aria-pressed', String(engine.loopEnabled));
     btn.classList.toggle('active-toggle', engine.loopEnabled);
     btn.innerHTML = engine.loopEnabled ? '🔁 Loop: ON [L]' : '🔁 Loop: OFF [L]';
+    
+    if (engine.loopEnabled) {
+      engine.tracks.forEach(t => {
+        if (t.trimOnLoop) trimTrackBuffer(t);
+      });
+    }
   }
 
   function updateMetronomeButton() {
@@ -146,6 +152,7 @@
       isQuantized: false,
       quantizedStart: null,
       autotuneOn: false,
+      trimOnLoop: false,
       volume: 0.8,
       pan: 0,
       pitchSemitones: 0,
@@ -204,6 +211,7 @@
             <button class="${t.isQuantized ? 'active-toggle' : ''}" onclick="window.toggleQuantize(${i})">${t.isQuantized ? 'QUANT ON' : 'Quantize'}</button>
             <button class="${t.isLooping ? 'active-toggle' : ''}" onclick="window.toggleTrackLoop(${i})">${t.isLooping ? 'LOOP ON' : 'Loop'}</button>
             <button class="${t.autotuneOn ? 'active-toggle' : ''}" onclick="window.toggleAutotune(${i})">${t.autotuneOn ? 'AUTO-TUNE ON' : 'Auto-Tune'}</button>
+            <button class="${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})">${t.trimOnLoop ? 'TRIM ON' : 'Trim Loop'}</button>
             <button onclick="window.clearTrack(${i})">Clear</button>
           </div>
         </div>
@@ -311,6 +319,53 @@
     }
     renderTracks();
     announce(`${track.name} auto-tune ${track.autotuneOn ? 'enabled' : 'disabled'}`);
+  }
+
+  function toggleTrimOnLoop(index) {
+    const track = engine.tracks[index];
+    track.trimOnLoop = !track.trimOnLoop;
+    renderTracks();
+    announce(`${track.name} trim on loop ${track.trimOnLoop ? 'enabled' : 'disabled'}`);
+    
+    if (track.trimOnLoop && engine.loopEnabled) {
+      trimTrackBuffer(track);
+    }
+  }
+
+  function trimTrackBuffer(track) {
+    if (!engine.ctx) {
+      announce('Audio system not ready');
+      return;
+    }
+    if (!track.audioBuffer || engine.inPoint === null || engine.outPoint === null) {
+      announce('Set In and Out points first');
+      return;
+    }
+    
+    const sr = track.audioBuffer.sampleRate;
+    const startSample = Math.max(0, Math.floor(engine.inPoint * sr));
+    const endSample = Math.min(track.audioBuffer.length, Math.floor(engine.outPoint * sr));
+    const newLength = endSample - startSample;
+    
+    if (newLength <= 0) {
+      announce('Invalid loop region for trimming');
+      return;
+    }
+    
+    const newBuffer = engine.ctx.createBuffer(track.audioBuffer.numberOfChannels, newLength, sr);
+    
+    for (let ch = 0; ch < track.audioBuffer.numberOfChannels; ch++) {
+      const oldData = track.audioBuffer.getChannelData(ch);
+      const newData = newBuffer.getChannelData(ch);
+      for (let i = 0; i < newLength; i++) {
+        newData[i] = oldData[startSample + i];
+      }
+    }
+    
+    track.audioBuffer = newBuffer;
+    track.startTimeOffset = 0;
+    renderTracks();
+    announce(`${track.name} trimmed to loop region`);
   }
 
   function clearTrack(index) {
