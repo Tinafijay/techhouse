@@ -10,41 +10,25 @@
   <div class="container">
     <header>
       <h1>Tech House Accessible DAW</h1>
-<<<<<<< ours
-      <span class="badge" id="modeBadge" aria-live="polite">Time Base: Bars & Beats</span>
-=======
       <span class="badge" id="modeBadge">Time Base: Bars & Beats</span>
->>>>>>> theirs
     </header>
 
     <section class="dashboard" aria-label="Transport Status">
       <div class="display-card">
         <div class="card-label">Playhead Position</div>
-<<<<<<< ours
-        <div class="card-value" id="posDisplay" aria-live="polite">01:01:00</div>
-=======
         <div class="card-value" id="posDisplay">01:01:00</div>
->>>>>>> theirs
         <div class="card-sub" id="posSubDisplay">Bar 1, Beat 1</div>
       </div>
 
       <div class="display-card">
         <div class="card-label">Selection Region</div>
-<<<<<<< ours
-        <div class="card-value" id="regionDisplay" aria-live="polite">IN: -- | OUT: --</div>
-=======
         <div class="card-value" id="regionDisplay">IN: -- | OUT: --</div>
->>>>>>> theirs
         <div class="card-sub" id="regionSubDisplay">Press S (In) / E (Out)</div>
       </div>
 
       <div class="display-card">
         <div class="card-label">Focused Track</div>
-<<<<<<< ours
-        <div class="card-value" id="focusTrackDisplay" aria-live="polite">Track 1</div>
-=======
         <div class="card-value" id="focusTrackDisplay">Track 1</div>
->>>>>>> theirs
         <div class="card-sub" id="focusStatusDisplay">Ready</div>
       </div>
     </section>
@@ -84,7 +68,7 @@
         <button id="btnPlayAll" type="button" aria-pressed="false">▶ Play / Pause [Space]</button>
         <button id="btnStop" type="button">⏹ Stop [Esc]</button>
         <button id="btnGoStart" type="button">⏮ Go to Start [Home]</button>
-        <button id="btnGlobalLoop" type="button" aria-pressed="false">🔁 Loop: OFF [L]</button>
+        <button id="btnGlobalLoop" type="button" aria-pressed="false">🔁 Loop: OFF [Ctrl+L]</button>
         <button id="btnMetronome" type="button" aria-pressed="false">⏱ Metronome: OFF [M]</button>
         <button id="btnExport" type="button" style="background: var(--highlight); color:#000;">💾 Export WAV [Ctrl+E]</button>
       </div>
@@ -105,8 +89,10 @@
         <li><strong>S / E:</strong> Mark In and Out region selection points</li>
         <li><strong>Esc:</strong> Stop playback and clear In/Out selection</li>
         <li><strong>T:</strong> Toggle time display between Bars & Beats / Seconds</li>
+        <li><strong>Shift + T:</strong> Add new track</li>
         <li><strong>M:</strong> Toggle metronome click</li>
-        <li><strong>L:</strong> Toggle global loop using In/Out region</li>
+        <li><strong>L:</strong> Toggle loop on focused track</li>
+        <li><strong>Ctrl + L:</strong> Toggle global project loop</li>
         <li><strong>Ctrl+E:</strong> Export master WAV mixdown</li>
       </ul>
     </section>
@@ -114,11 +100,8 @@
 
   <div id="srAnnouncer" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
 
-<<<<<<< ours
-=======
   <input type="file" id="trackAudioInput" accept="audio/*" style="display:none" aria-label="Import audio to track">
 
->>>>>>> theirs
   <script src="tech-house-producer-script.js"></script>
 </body>
 </html>

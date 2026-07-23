@@ -10,21 +10,18 @@
     trackCounter: 0,
     focusedIndex: 0,
     armedIndex: 0,
-    pendingTrackUploadIndex: null,
 
     isPlaying: false,
     currentTime: 0,
     playStartTime: 0,
     bpm: 120,
     timeMode: 'bars',
-    loopEnabled: false,
 
     inPoint: null,
     outPoint: null,
 
     isRecording: false,
     isRecordingPaused: false,
-    isCountingIn: false,
     mediaRecorder: null,
     recordedChunks: [],
     currentStream: null,
@@ -83,7 +80,7 @@
     const inStr = engine.inPoint !== null ? engine.inPoint.toFixed(2) + 's' : '--';
     const outStr = engine.outPoint !== null ? engine.outPoint.toFixed(2) + 's' : '--';
     regDisp.textContent = `IN: ${inStr} | OUT: ${outStr}`;
-    regSub.textContent = engine.loopEnabled ? 'Loop Active' : 'Press S (In) / E (Out)';
+    regSub.textContent = 'Press S (In) / E (Out)';
   }
 
   function updatePlaybackButtons() {
@@ -98,22 +95,6 @@
       recBtn.classList.toggle('armed', engine.isRecording);
       recBtn.textContent = engine.isRecording ? 'Stop Rec' : 'Record';
     }
-  }
-
-  function updateLoopButton() {
-    const btn = document.getElementById('btnGlobalLoop');
-    if (!btn) return;
-    btn.setAttribute('aria-pressed', String(engine.loopEnabled));
-    btn.classList.toggle('active-toggle', engine.loopEnabled);
-    btn.textContent = engine.loopEnabled ? 'Loop: ON' : 'Loop: OFF';
-  }
-
-  function updateMetronomeButton() {
-    const btn = document.getElementById('btnMetronome');
-    if (!btn) return;
-    btn.setAttribute('aria-pressed', String(engine.metronomeOn));
-    btn.classList.toggle('active-toggle', engine.metronomeOn);
-    btn.textContent = engine.metronomeOn ? 'Metronome: ON' : 'Metronome: OFF';
   }
 
   function setFocusedTrackDisplay() {
@@ -194,12 +175,6 @@
       item.onclick = (e) => {
         if (!e.target.matches('button, input, select')) setFocusedTrack(i);
       };
-      item.onkeydown = (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          setFocusedTrack(i);
-        }
-      };
 
       item.innerHTML = `
         <div class="track-main-row">
@@ -211,9 +186,7 @@
             <button class="${i === engine.armedIndex ? 'armed' : ''}" onclick="window.armTrack(${i})">${i === engine.armedIndex ? 'ARMED' : 'Arm'}</button>
             <button class="${t.isMuted ? 'active-toggle' : ''}" onclick="window.toggleMute(${i})">${t.isMuted ? 'MUTED' : 'Mute'}</button>
             <button class="${t.isSolo ? 'active-toggle' : ''}" onclick="window.toggleSolo(${i})">${t.isSolo ? 'SOLO' : 'Solo'}</button>
-            <button class="${t.isQuantized ? 'active-toggle' : ''}" onclick="window.toggleQuantize(${i})">${t.isQuantized ? 'QUANT ON' : 'Quantize'}</button>
             <button class="${t.isLooping ? 'active-toggle' : ''}" onclick="window.toggleTrackLoop(${i})">${t.isLooping ? 'LOOP ON' : 'Loop'}</button>
-            <button class="${t.autotuneOn ? 'active-toggle' : ''}" onclick="window.toggleAutotune(${i})">${t.autotuneOn ? 'TUNE ON' : 'Tune'}</button>
             <button class="${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})">${t.trimOnLoop ? 'TRIM ON' : 'Trim'}</button>
             <button onclick="window.triggerTrackUpload(${i})">Upload</button>
             <button onclick="window.clearTrack(${i})">Clear</button>
@@ -230,7 +203,7 @@
           </div>
           <div class="control-unit">
             <label for="pitch-${i}">Pitch</label>
-            <input id="pitch-${i}" type="range" min="-12" max="12" step="${t.autotuneOn ? '1' : '0.1'}" value="${t.pitchSemitones}" oninput="window.updateTrackParam(${i}, 'pitchSemitones', this.value)" aria-label="Pitch Semitones">
+            <input id="pitch-${i}" type="range" min="-12" max="12" step="0.1" value="${t.pitchSemitones}" oninput="window.updateTrackParam(${i}, 'pitchSemitones', this.value)" aria-label="Pitch Semitones">
           </div>
         </div>
       `;
@@ -307,7 +280,7 @@
     track.trimOnLoop = !track.trimOnLoop;
     renderTracks();
     announce(track.name + ' trim on loop ' + (track.trimOnLoop ? 'enabled' : 'disabled'));
-    if (track.trimOnLoop && engine.loopEnabled && engine.inPoint !== null && engine.outPoint !== null) {
+    if (track.trimOnLoop && engine.inPoint !== null && engine.outPoint !== null) {
       trimTrackBuffer(track);
     }
   }
@@ -377,10 +350,10 @@
     updatePlaybackButtons();
   }
 
-  function buildTrackNodes(track, startTime, offset, duration) {
+  function buildTrackNodes(track, startTime, offset) {
     if (!track.audioBuffer || !engine.ctx) return;
     const anySolo = engine.tracks.some(t => t.isSolo);
-    const isAudible = !track.isMuted && (!anySolo || track.isSolo);
+    const isAudible = !track.isMuted && (!anySolo || t.isSolo);
     if (!isAudible) return;
 
     const source = engine.ctx.createBufferSource();
@@ -416,7 +389,7 @@
     last.connect(gainNode);
     gainNode.connect(engine.masterGain);
 
-    const useLoopRegion = engine.loopEnabled && engine.inPoint !== null && engine.outPoint !== null;
+    const useLoopRegion = engine.inPoint !== null && engine.outPoint !== null;
     if (useLoopRegion) {
       const regionStart = engine.inPoint;
       const regionDur = engine.outPoint - engine.inPoint;
@@ -431,7 +404,7 @@
       }
       source.start(startTime, effectiveOffset, regionDur);
       source.onended = () => {
-        if (engine.isPlaying && engine.loopEnabled && engine.inPoint !== null && engine.outPoint !== null) {
+        if (engine.isPlaying && engine.inPoint !== null && engine.outPoint !== null) {
           scheduleTrack(track);
         }
       };
@@ -450,7 +423,7 @@
       }
       source.start(startTime, effectiveOffset, dur);
       source.onended = () => {
-        if (engine.isPlaying && !engine.loopEnabled && !track.isLooping) {
+        if (engine.isPlaying && !track.isLooping) {
           checkAllTracksEnded();
         }
       };
@@ -468,7 +441,7 @@
     if (!track.audioBuffer || !engine.ctx) return;
     const now = engine.ctx.currentTime;
     const offset = engine.currentTime;
-    buildTrackNodes(track, now, offset, null);
+    buildTrackNodes(track, now, offset);
   }
 
   function scheduleAllTracks() {
@@ -498,8 +471,6 @@
 
     if (fromStart) {
       engine.currentTime = 0;
-    } else if (engine.loopEnabled && engine.inPoint !== null) {
-      engine.currentTime = engine.inPoint;
     } else {
       engine.currentTime = 0;
     }
@@ -541,7 +512,7 @@
     const now = engine.ctx.currentTime;
     engine.currentTime = now - engine.playStartTime;
 
-    const useLoopRegion = engine.loopEnabled && engine.inPoint !== null && engine.outPoint !== null;
+    const useLoopRegion = engine.inPoint !== null && engine.outPoint !== null;
     if (useLoopRegion) {
       const regionDur = engine.outPoint - engine.inPoint;
       if (regionDur > 0 && engine.currentTime >= engine.outPoint) {
@@ -602,7 +573,7 @@
 
   async function runCountIn(totalBeats, callback) {
     await initAudio();
-    if (engine.isCountingIn) return;
+    if (engine.isRecording || engine.isCountingIn) return;
     engine.isCountingIn = true;
     announce('Count-in: ' + totalBeats + ' beats');
 
@@ -860,12 +831,22 @@
   }
 
   window.addEventListener('keydown', (e) => {
-    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-
     const ctrl = e.ctrlKey || e.metaKey;
+    const shift = e.shiftKey;
 
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Home'].includes(e.code)) {
+    if (ctrl && e.key.toLowerCase() === 'r') {
+      return;
+    }
+
+    if (e.key === 'r' || e.key === 'R' || e.key === 's' || e.key === 'S' || e.key === 'e' || e.key === 'E' || e.key === 't' || e.key === 'T' || e.key === 'm' || e.key === 'M' || e.key === 'l' || e.key === 'L' || e.key === 'Escape' || e.code === 'Space' || e.code === 'Home' || e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
+    }
+
+    if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+      if (e.key === 'Escape') {
+        document.activeElement.blur();
+      }
+      return;
     }
 
     switch (e.key) {
@@ -877,13 +858,13 @@
         break;
       case 'ArrowLeft':
         if (engine.isPlaying) break;
-        const stepL = e.shiftKey ? -(60 / engine.bpm) * 4 : (e.ctrlKey ? -(60 / engine.bpm) / 4 : -(60 / engine.bpm));
+        const stepL = shift ? -(60 / engine.bpm) * 4 : (ctrl ? -(60 / engine.bpm) / 4 : -(60 / engine.bpm));
         engine.currentTime = Math.max(0, engine.currentTime + stepL);
         updateDisplays();
         break;
       case 'ArrowRight':
         if (engine.isPlaying) break;
-        const stepR = e.shiftKey ? (60 / engine.bpm) * 4 : (e.ctrlKey ? (60 / engine.bpm) / 4 : (60 / engine.bpm));
+        const stepR = shift ? (60 / engine.bpm) * 4 : (ctrl ? (60 / engine.bpm) / 4 : (60 / engine.bpm));
         engine.currentTime += stepR;
         updateDisplays();
         break;
@@ -917,10 +898,9 @@
         break;
       case 'e':
       case 'E':
-        if (ctrl && engine.ctx) {
-          e.preventDefault();
+        if (ctrl) {
           exportMasterMix();
-        } else if (!ctrl) {
+        } else {
           engine.outPoint = engine.currentTime;
           updateDisplays();
           announce('Out point at ' + engine.outPoint.toFixed(2) + ' seconds');
@@ -935,11 +915,14 @@
         break;
       case 't':
       case 'T':
-        if (!ctrl) {
+        if (!ctrl && !shift) {
           engine.timeMode = engine.timeMode === 'bars' ? 'seconds' : 'bars';
           document.getElementById('modeBadge').textContent = 'Time Base: ' + (engine.timeMode === 'bars' ? 'Bars & Beats' : 'Seconds & MS');
           updateDisplays();
           announce('Time mode: ' + engine.timeMode);
+        } else if (shift && !ctrl) {
+          createAudioTrack();
+          announce('New track added');
         }
         break;
       case 'm':
@@ -952,23 +935,47 @@
         break;
       case 'l':
       case 'L':
-        engine.loopEnabled = !engine.loopEnabled;
-        updateLoopButton();
-        updateDisplays();
-        announce('Loop ' + (engine.loopEnabled ? 'enabled' : 'disabled'));
-        if (engine.loopEnabled) announce('Set In (S) and Out (E) points to define loop region');
+        if (ctrl) {
+          engine.loopEnabled = !engine.loopEnabled;
+          updateLoopButton();
+          updateDisplays();
+          announce('Global loop ' + (engine.loopEnabled ? 'enabled' : 'disabled'));
+        } else {
+          const focused = engine.tracks[engine.focusedIndex];
+          if (focused) {
+            focused.isLooping = !focused.isLooping;
+            renderTracks();
+            announce(focused.name + ' loop ' + (focused.isLooping ? 'enabled' : 'disabled'));
+          }
+        }
         break;
       default:
         break;
     }
   });
 
+  function updateMetronomeButton() {
+    const btn = document.getElementById('btnMetronome');
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', String(engine.metronomeOn));
+    btn.classList.toggle('active-toggle', engine.metronomeOn);
+    btn.textContent = engine.metronomeOn ? 'Metronome: ON' : 'Metronome: OFF';
+  }
+
+  function updateLoopButton() {
+    const btn = document.getElementById('btnGlobalLoop');
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', String(engine.loopEnabled));
+    btn.classList.toggle('active-toggle', engine.loopEnabled);
+    btn.textContent = engine.loopEnabled ? 'Loop: ON' : 'Loop: OFF';
+  }
+
   document.getElementById('btnAddTrack').onclick = () => createAudioTrack();
   document.getElementById('btnRecord').onclick = () => engine.isRecording ? stopRecording() : prepareAndRecord();
   document.getElementById('btnPlayAll').onclick = () => engine.isPlaying ? stopPlayback() : startPlayback(false);
   document.getElementById('btnStop').onclick = () => { if (engine.isRecording) stopRecording(); stopPlayback(); engine.currentTime = 0; updateDisplays(); };
   document.getElementById('btnGoStart').onclick = goToStart;
-  document.getElementById('btnGlobalLoop').onclick = () => { engine.loopEnabled = !engine.loopEnabled; updateLoopButton(); updateDisplays(); announce('Loop ' + (engine.loopEnabled ? 'enabled' : 'disabled')); };
+  document.getElementById('btnGlobalLoop').onclick = () => { engine.loopEnabled = !engine.loopEnabled; updateLoopButton(); updateDisplays(); announce('Global loop ' + (engine.loopEnabled ? 'enabled' : 'disabled')); };
   document.getElementById('btnMetronome').onclick = () => { engine.metronomeOn = !engine.metronomeOn; updateMetronomeButton(); if (engine.metronomeOn && engine.isPlaying) startMetronome(); else stopMetronome(); announce('Metronome ' + (engine.metronomeOn ? 'on' : 'off')); };
   document.getElementById('btnExport').onclick = exportMasterMix;
   document.getElementById('btnToggleTime').onclick = () => {
