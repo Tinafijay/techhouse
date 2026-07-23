@@ -23,6 +23,7 @@
     outPoint: null,
 
     isRecording: false,
+    isRecordingPaused: false,
     isCountingIn: false,
     mediaRecorder: null,
     recordedChunks: [],
@@ -35,9 +36,6 @@
     rafId: null
   };
 
-  // ============================================
-  // Core Helpers
-  // ============================================
   async function initAudio() {
     if (!engine.ctx) {
       engine.ctx = new AudioCtx();
@@ -92,13 +90,13 @@
     const playBtn = document.getElementById('btnPlayAll');
     if (playBtn) {
       playBtn.setAttribute('aria-pressed', String(engine.isPlaying));
-      playBtn.innerHTML = engine.isPlaying ? 'Pause [Space]' : 'Play [Space]';
+      playBtn.textContent = engine.isPlaying ? 'Pause' : 'Play';
     }
     const recBtn = document.getElementById('btnRecord');
     if (recBtn) {
       recBtn.setAttribute('aria-pressed', String(engine.isRecording));
       recBtn.classList.toggle('armed', engine.isRecording);
-      recBtn.innerHTML = engine.isRecording ? 'Stop Rec [R]' : 'Record [R]';
+      recBtn.textContent = engine.isRecording ? 'Stop Rec' : 'Record';
     }
   }
 
@@ -107,7 +105,7 @@
     if (!btn) return;
     btn.setAttribute('aria-pressed', String(engine.loopEnabled));
     btn.classList.toggle('active-toggle', engine.loopEnabled);
-    btn.innerHTML = engine.loopEnabled ? 'Loop: ON [L]' : 'Loop: OFF [L]';
+    btn.textContent = engine.loopEnabled ? 'Loop: ON' : 'Loop: OFF';
   }
 
   function updateMetronomeButton() {
@@ -115,7 +113,7 @@
     if (!btn) return;
     btn.setAttribute('aria-pressed', String(engine.metronomeOn));
     btn.classList.toggle('active-toggle', engine.metronomeOn);
-    btn.innerHTML = engine.metronomeOn ? 'Metronome: ON [M]' : 'Metronome: OFF [M]';
+    btn.textContent = engine.metronomeOn ? 'Metronome: ON' : 'Metronome: OFF';
   }
 
   function setFocusedTrackDisplay() {
@@ -125,14 +123,11 @@
     document.getElementById('focusStatusDisplay').textContent = current.audioBuffer ? 'Audio Ready' : 'Empty';
   }
 
-  // ============================================
-  // Track Management
-  // ============================================
   function createAudioTrack(name) {
     engine.trackCounter++;
     const track = {
       id: Date.now() + Math.random(),
-      name: name || `Track ${engine.trackCounter}`,
+      name: name || 'Track ' + engine.trackCounter,
       audioBuffer: null,
       sourceNode: null,
       gainNode: null,
@@ -158,7 +153,7 @@
     engine.tracks.push(track);
     renderTracks();
     setFocusedTrack(engine.tracks.length - 1);
-    announce(`Created ${track.name}`);
+    announce('Created ' + track.name);
   }
 
   function setFocusedTrack(index) {
@@ -169,13 +164,13 @@
       el.setAttribute('aria-selected', String(idx === engine.focusedIndex));
     });
     setFocusedTrackDisplay();
-    announce(`Focused ${engine.tracks[engine.focusedIndex].name}`);
+    announce('Focused ' + engine.tracks[engine.focusedIndex].name);
   }
 
   function armTrack(index) {
     engine.armedIndex = index;
     renderTracks();
-    announce(`Armed ${engine.tracks[index].name}`);
+    announce('Armed ' + engine.tracks[index].name);
   }
 
   function triggerTrackUpload(index) {
@@ -195,7 +190,7 @@
       item.setAttribute('role', 'button');
       item.setAttribute('tabindex', '0');
       item.setAttribute('aria-selected', String(i === engine.focusedIndex));
-      item.setAttribute('aria-label', `${t.name}${t.audioBuffer ? ' Audio loaded' : ' Empty'}${i === engine.armedIndex ? ' Armed' : ''}`);
+      item.setAttribute('aria-label', t.name + (t.audioBuffer ? ' Audio loaded' : ' Empty') + (i === engine.armedIndex ? ' Armed' : ''));
       item.onclick = (e) => {
         if (!e.target.matches('button, input, select')) setFocusedTrack(i);
       };
@@ -263,7 +258,7 @@
   function toggleMute(index) {
     engine.tracks[index].isMuted = !engine.tracks[index].isMuted;
     renderTracks();
-    announce(`${engine.tracks[index].name} ${engine.tracks[index].isMuted ? 'muted' : 'unmuted'}`);
+    announce(engine.tracks[index].name + (engine.tracks[index].isMuted ? ' muted' : ' unmuted'));
   }
 
   function toggleSolo(index) {
@@ -273,7 +268,7 @@
       stopAllSources();
       scheduleAllTracks();
     }
-    announce(`${engine.tracks[index].name} solo ${engine.tracks[index].isSolo ? 'on' : 'off'}`);
+    announce(engine.tracks[index].name + ' solo ' + (engine.tracks[index].isSolo ? 'on' : 'off'));
   }
 
   function toggleQuantize(index) {
@@ -288,13 +283,13 @@
       track.startTimeOffset = 0.0;
     }
     renderTracks();
-    announce(`${track.name} quantization ${track.isQuantized ? 'enabled' : 'disabled'}`);
+    announce(track.name + ' quantization ' + (track.isQuantized ? 'enabled' : 'disabled'));
   }
 
   function toggleTrackLoop(index) {
     engine.tracks[index].isLooping = !engine.tracks[index].isLooping;
     renderTracks();
-    announce(`${engine.tracks[index].name} loop ${engine.tracks[index].isLooping ? 'enabled' : 'disabled'}`);
+    announce(engine.tracks[index].name + ' loop ' + (engine.tracks[index].isLooping ? 'enabled' : 'disabled'));
   }
 
   function toggleAutotune(index) {
@@ -304,15 +299,14 @@
       track.pitchSemitones = Math.round(track.pitchSemitones);
     }
     renderTracks();
-    announce(`${track.name} auto-tune ${track.autotuneOn ? 'enabled' : 'disabled'}`);
+    announce(track.name + ' auto-tune ' + (track.autotuneOn ? 'enabled' : 'disabled'));
   }
 
   function toggleTrimOnLoop(index) {
     const track = engine.tracks[index];
     track.trimOnLoop = !track.trimOnLoop;
     renderTracks();
-    announce(`${track.name} trim on loop ${track.trimOnLoop ? 'enabled' : 'disabled'}`);
-    
+    announce(track.name + ' trim on loop ' + (track.trimOnLoop ? 'enabled' : 'disabled'));
     if (track.trimOnLoop && engine.loopEnabled && engine.inPoint !== null && engine.outPoint !== null) {
       trimTrackBuffer(track);
     }
@@ -327,19 +321,19 @@
       announce('Set In and Out points first');
       return;
     }
-    
+
     const sr = track.audioBuffer.sampleRate;
     const startSample = Math.max(0, Math.floor(engine.inPoint * sr));
     const endSample = Math.min(track.audioBuffer.length, Math.floor(engine.outPoint * sr));
     const newLength = endSample - startSample;
-    
+
     if (newLength <= 0) {
       announce('Invalid loop region for trimming');
       return;
     }
-    
+
     const newBuffer = engine.ctx.createBuffer(track.audioBuffer.numberOfChannels, newLength, sr);
-    
+
     for (let ch = 0; ch < track.audioBuffer.numberOfChannels; ch++) {
       const oldData = track.audioBuffer.getChannelData(ch);
       const newData = newBuffer.getChannelData(ch);
@@ -347,11 +341,11 @@
         newData[i] = oldData[startSample + i];
       }
     }
-    
+
     track.audioBuffer = newBuffer;
     track.startTimeOffset = 0;
     renderTracks();
-    announce(`${track.name} trimmed to loop region`);
+    announce(track.name + ' trimmed to loop region');
   }
 
   function clearTrack(index) {
@@ -359,21 +353,21 @@
     cleanupTrackNodes(track);
     track.audioBuffer = null;
     renderTracks();
-    announce(`${track.name} cleared`);
+    announce(track.name + ' cleared');
   }
 
   function cleanupTrackNodes(track) {
     if (track.sourceNode) {
       track.sourceNode.onended = null;
-      try { track.sourceNode.stop(); } catch(e){}
-      try { track.sourceNode.disconnect(); } catch(e){}
+      try { track.sourceNode.stop(); } catch (e) {}
+      try { track.sourceNode.disconnect(); } catch (e) {}
       track.sourceNode = null;
     }
-    if (track.gainNode) { try { track.gainNode.disconnect(); } catch(e){} track.gainNode = null; }
-    if (track.pannerNode) { try { track.pannerNode.disconnect(); } catch(e){} track.pannerNode = null; }
-    if (track.eqLow) { try { track.eqLow.disconnect(); } catch(e){} track.eqLow = null; }
-    if (track.eqMid) { try { track.eqMid.disconnect(); } catch(e){} track.eqMid = null; }
-    if (track.eqHigh) { try { track.eqHigh.disconnect(); } catch(e){} track.eqHigh = null; }
+    if (track.gainNode) { try { track.gainNode.disconnect(); } catch (e) {} track.gainNode = null; }
+    if (track.pannerNode) { try { track.pannerNode.disconnect(); } catch (e) {} track.pannerNode = null; }
+    if (track.eqLow) { try { track.eqLow.disconnect(); } catch (e) {} track.eqLow = null; }
+    if (track.eqMid) { try { track.eqMid.disconnect(); } catch (e) {} track.eqMid = null; }
+    if (track.eqHigh) { try { track.eqHigh.disconnect(); } catch (e) {} track.eqHigh = null; }
   }
 
   function stopAllSources() {
@@ -383,9 +377,6 @@
     updatePlaybackButtons();
   }
 
-  // ============================================
-  // Audio Graph & Scheduling
-  // ============================================
   function buildTrackNodes(track, startTime, offset, duration) {
     if (!track.audioBuffer || !engine.ctx) return;
     const anySolo = engine.tracks.some(t => t.isSolo);
@@ -498,9 +489,6 @@
     }
   }
 
-  // ============================================
-  // Transport Engine
-  // ============================================
   async function startPlayback(fromStart = false) {
     await initAudio();
     stopPlayback();
@@ -521,7 +509,7 @@
 
     engine.isPlaying = true;
     updatePlaybackButtons();
-    announce(engine.loopEnabled && engine.outPoint !== null ? `Looping ${engine.inPoint.toFixed(1)}-${engine.outPoint.toFixed(1)}` : 'Playing');
+    announce('Playing');
     tick();
   }
 
@@ -571,9 +559,6 @@
     engine.rafId = requestAnimationFrame(tick);
   }
 
-  // ============================================
-  // Metronome (Lookahead Scheduler)
-  // ============================================
   function startMetronome() {
     stopMetronome();
     engine.metronomeNextNote = engine.ctx.currentTime + 0.05;
@@ -615,20 +600,16 @@
     engine.schedulerTimer = setTimeout(schedulerMetronome, engine._metronomeLookahead);
   }
 
-  // ============================================
-  // Count-In (Drift-Free, Downbeat Accented)
-  // ============================================
   async function runCountIn(totalBeats, callback) {
     await initAudio();
     if (engine.isCountingIn) return;
     engine.isCountingIn = true;
-    announce(`Count-in: ${totalBeats} beats`);
+    announce('Count-in: ' + totalBeats + ' beats');
 
     const secondsPerBeat = 60.0 / engine.bpm;
     const now = engine.ctx.currentTime;
     for (let b = 0; b < totalBeats; b++) {
-      const isDownbeat = (b % 4 === 0);
-      scheduleClick(now + b * secondsPerBeat, isDownbeat);
+      scheduleClick(now + b * secondsPerBeat, b % 4 === 0);
     }
     const duration = totalBeats * secondsPerBeat * 1000;
     setTimeout(() => {
@@ -637,9 +618,6 @@
     }, duration);
   }
 
-  // ============================================
-  // Recording Engine
-  // ============================================
   async function prepareAndRecord() {
     await initAudio();
     if (engine.isRecording || engine.isCountingIn) return;
@@ -650,22 +628,22 @@
     }
 
     const deviceId = document.getElementById('audioSource').value;
-    const constraints = { 
-      audio: deviceId 
-        ? { exact: deviceId, echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
-        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
+    const constraints = {
+      audio: deviceId
+        ? { exact: deviceId, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     };
 
     try {
       engine.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch(err) {
+    } catch (err) {
       announce('Microphone access denied or no input found.');
       return;
     }
 
     const totalBeats = parseInt(document.getElementById('countInSelect').value) || 0;
     const armedTrack = engine.tracks[engine.armedIndex];
-    
+
     const execute = () => {
       try {
         engine.mediaRecorder = new MediaRecorder(engine.currentStream);
@@ -693,39 +671,52 @@
           }
           armedTrack.audioBuffer = decoded;
           renderTracks();
-          announce(`Recorded to ${armedTrack.name}`);
+          announce('Recorded to ' + armedTrack.name);
         };
 
-        startPlayback(true);
-        engine.mediaRecorder.start();
         engine.isRecording = true;
+        engine.isRecordingPaused = false;
         updatePlaybackButtons();
-        announce(`Recording on ${armedTrack.name}`);
-      } catch(err) {
+        announce('Recording on ' + armedTrack.name);
+        engine.mediaRecorder.start();
+      } catch (err) {
         announce('Failed to start recorder. Try again.');
       }
     };
 
     if (totalBeats > 0) {
-      runCountIn(totalBeats, execute);
+      await runCountIn(totalBeats, execute);
     } else {
       execute();
     }
   }
 
+  function pauseRecording() {
+    if (!engine.isRecording || !engine.mediaRecorder) return;
+    if (engine.mediaRecorder.state === 'recording') {
+      engine.mediaRecorder.pause();
+      engine.isRecordingPaused = true;
+      announce('Recording paused');
+    } else if (engine.mediaRecorder.state === 'paused') {
+      engine.mediaRecorder.resume();
+      engine.isRecordingPaused = false;
+      announce('Recording resumed');
+    }
+  }
+
   function stopRecording() {
     if (!engine.isRecording) return;
-    engine.mediaRecorder.stop();
+    if (engine.mediaRecorder && engine.mediaRecorder.state !== 'inactive') {
+      engine.mediaRecorder.stop();
+    }
     if (engine.currentStream) engine.currentStream.getTracks().forEach(tr => tr.stop());
     stopPlayback();
     engine.isRecording = false;
+    engine.isRecordingPaused = false;
     updatePlaybackButtons();
     announce('Recording stopped');
   }
 
-  // ============================================
-  // Master WAV Downmix Export
-  // ============================================
   async function exportMasterMix() {
     await initAudio();
     const active = engine.tracks.filter(t => t.audioBuffer && !t.isMuted);
@@ -783,7 +774,7 @@
       const wav = bufferToWav(rendered);
       downloadBlob(wav, 'Master_Studio_Mixdown.wav');
       announce('Mixdown exported!');
-    } catch(e) {
+    } catch (e) {
       announce('Export failed. Try again.');
     }
   }
@@ -849,9 +840,6 @@
     document.body.removeChild(a);
   }
 
-  // ============================================
-  // Hardware Input Enumeration
-  // ============================================
   async function getAudioDevices() {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -862,24 +850,21 @@
       inputs.forEach((d, i) => {
         const opt = document.createElement('option');
         opt.value = d.deviceId;
-        opt.textContent = d.label || `Hardware Input ${i + 1}`;
+        opt.textContent = d.label || 'Hardware Input ' + (i + 1);
         sel.appendChild(opt);
       });
-      announce(`Found ${inputs.length} audio input device(s).`);
-    } catch(e) {
+      announce('Found ' + inputs.length + ' audio input device(s).');
+    } catch (e) {
       announce('Hardware permission pending or no devices found.');
     }
   }
 
-  // ============================================
-  // Keyboard Shortcuts
-  // ============================================
   window.addEventListener('keydown', (e) => {
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
     const ctrl = e.ctrlKey || e.metaKey;
 
-    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Home'].includes(e.code)) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Home'].includes(e.code)) {
       e.preventDefault();
     }
 
@@ -906,23 +891,15 @@
         goToStart();
         break;
       case ' ':
-        if (engine.isRecording && engine.mediaRecorder) {
-          if (engine.mediaRecorder.state === 'recording') {
-            engine.mediaRecorder.pause();
-            announce('Recording paused');
-          } else if (engine.mediaRecorder.state === 'paused') {
-            engine.mediaRecorder.resume();
-            announce('Recording resumed');
-          }
-        } else if (e.shiftKey) {
-          e.preventDefault();
-          startPlayback(true);
+        if (engine.isRecording) {
+          pauseRecording();
         } else if (engine.isPlaying) {
           stopPlayback();
         } else {
           startPlayback(false);
         }
         break;
+      case 'r':
       case 'R':
         if (engine.isRecording) {
           stopRecording();
@@ -935,7 +912,7 @@
         if (!ctrl) {
           engine.inPoint = engine.currentTime;
           updateDisplays();
-          announce(`In point at ${engine.inPoint.toFixed(2)} seconds`);
+          announce('In point at ' + engine.inPoint.toFixed(2) + ' seconds');
         }
         break;
       case 'e':
@@ -946,7 +923,7 @@
         } else if (!ctrl) {
           engine.outPoint = engine.currentTime;
           updateDisplays();
-          announce(`Out point at ${engine.outPoint.toFixed(2)} seconds`);
+          announce('Out point at ' + engine.outPoint.toFixed(2) + ' seconds');
         }
         break;
       case 'Escape':
@@ -960,9 +937,9 @@
       case 'T':
         if (!ctrl) {
           engine.timeMode = engine.timeMode === 'bars' ? 'seconds' : 'bars';
-          document.getElementById('modeBadge').textContent = `Time Base: ${engine.timeMode === 'bars' ? 'Bars & Beats' : 'Seconds & MS'}`;
+          document.getElementById('modeBadge').textContent = 'Time Base: ' + (engine.timeMode === 'bars' ? 'Bars & Beats' : 'Seconds & MS');
           updateDisplays();
-          announce(`Time mode: ${engine.timeMode}`);
+          announce('Time mode: ' + engine.timeMode);
         }
         break;
       case 'm':
@@ -971,14 +948,14 @@
         updateMetronomeButton();
         if (engine.metronomeOn && engine.isPlaying) startMetronome();
         else stopMetronome();
-        announce(`Metronome ${engine.metronomeOn ? 'on' : 'off'}`);
+        announce('Metronome ' + (engine.metronomeOn ? 'on' : 'off'));
         break;
       case 'l':
       case 'L':
         engine.loopEnabled = !engine.loopEnabled;
         updateLoopButton();
         updateDisplays();
-        announce(`Loop ${engine.loopEnabled ? 'enabled' : 'disabled'}`);
+        announce('Loop ' + (engine.loopEnabled ? 'enabled' : 'disabled'));
         if (engine.loopEnabled) announce('Set In (S) and Out (E) points to define loop region');
         break;
       default:
@@ -986,22 +963,19 @@
     }
   });
 
-  // ============================================
-  // UI Button Bindings
-  // ============================================
   document.getElementById('btnAddTrack').onclick = () => createAudioTrack();
   document.getElementById('btnRecord').onclick = () => engine.isRecording ? stopRecording() : prepareAndRecord();
   document.getElementById('btnPlayAll').onclick = () => engine.isPlaying ? stopPlayback() : startPlayback(false);
   document.getElementById('btnStop').onclick = () => { if (engine.isRecording) stopRecording(); stopPlayback(); engine.currentTime = 0; updateDisplays(); };
   document.getElementById('btnGoStart').onclick = goToStart;
-  document.getElementById('btnGlobalLoop').onclick = () => { engine.loopEnabled = !engine.loopEnabled; updateLoopButton(); updateDisplays(); announce(`Loop ${engine.loopEnabled ? 'enabled' : 'disabled'}`); };
-  document.getElementById('btnMetronome').onclick = () => { engine.metronomeOn = !engine.metronomeOn; updateMetronomeButton(); if (engine.metronomeOn && engine.isPlaying) startMetronome(); else stopMetronome(); announce(`Metronome ${engine.metronomeOn ? 'on' : 'off'}`); };
+  document.getElementById('btnGlobalLoop').onclick = () => { engine.loopEnabled = !engine.loopEnabled; updateLoopButton(); updateDisplays(); announce('Loop ' + (engine.loopEnabled ? 'enabled' : 'disabled')); };
+  document.getElementById('btnMetronome').onclick = () => { engine.metronomeOn = !engine.metronomeOn; updateMetronomeButton(); if (engine.metronomeOn && engine.isPlaying) startMetronome(); else stopMetronome(); announce('Metronome ' + (engine.metronomeOn ? 'on' : 'off')); };
   document.getElementById('btnExport').onclick = exportMasterMix;
   document.getElementById('btnToggleTime').onclick = () => {
     engine.timeMode = engine.timeMode === 'bars' ? 'seconds' : 'bars';
-    document.getElementById('modeBadge').textContent = `Time Base: ${engine.timeMode === 'bars' ? 'Bars & Beats' : 'Seconds & MS'}`;
+    document.getElementById('modeBadge').textContent = 'Time Base: ' + (engine.timeMode === 'bars' ? 'Bars & Beats' : 'Seconds & MS');
     updateDisplays();
-    announce(`Time mode: ${engine.timeMode}`);
+    announce('Time mode: ' + engine.timeMode);
   };
   document.getElementById('btnScanHardware').onclick = getAudioDevices;
 
@@ -1013,10 +987,10 @@
     try {
       const buffer = await file.arrayBuffer();
       const decoded = await engine.ctx.decodeAudioData(buffer);
-      createAudioTrack(file.name.replace(/\.[^/.]+$/, ""), 'audio');
+      createAudioTrack(file.name.replace(/\.[^/.]+$/, ''), 'audio');
       engine.tracks[engine.tracks.length - 1].audioBuffer = decoded;
-      announce(`Imported file ${file.name}`);
-    } catch(err) {
+      announce('Imported file ' + file.name);
+    } catch (err) {
       announce('Error decoding audio file. Format unsupported.');
     }
   });
@@ -1032,20 +1006,17 @@
       const decoded = await engine.ctx.decodeAudioData(buffer);
       engine.tracks[index].audioBuffer = decoded;
       renderTracks();
-      announce(`Imported ${file.name} to ${engine.tracks[index].name}`);
-    } catch(err) {
+      announce('Imported ' + file.name + ' to ' + engine.tracks[index].name);
+    } catch (err) {
       announce('Error decoding audio file for this track.');
     }
   });
 
   document.getElementById('bpmInput').addEventListener('change', (e) => {
     engine.bpm = parseInt(e.target.value) || 120;
-    announce(`BPM set to ${engine.bpm}`);
+    announce('BPM set to ' + engine.bpm);
   });
 
-  // ============================================
-  // Initialization
-  // ============================================
   window.addEventListener('load', () => {
     createAudioTrack('Track 1');
     engine.armedIndex = 0;
