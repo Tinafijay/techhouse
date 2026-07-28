@@ -230,11 +230,11 @@ input[type="file"] { display: none; }
   gap: 0.15rem;
   font-size: 0.7rem;
   color: var(--text-muted);
-  min-width: 60px;
+  min-width: 55px;
 }
 
 .control-unit input[type="range"] {
-  width: 70px;
+  width: 65px;
   accent-color: var(--accent);
 }
 

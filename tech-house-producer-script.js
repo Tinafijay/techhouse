@@ -53,9 +53,9 @@
   function secondsToBars(sec) {
     const beatSec = 60 / engine.bpm;
     const totalBeats = sec / beatSec;
-    const bar = Math.floor(totalBeats / 4) + 1;
-    const beat = Math.floor(totalBeats % 4) + 1;
-    const sixteenth = Math.floor((totalBeats % 1) * 4) + 1;
+    const bar = Math.max(1, Math.floor(totalBeats / 4) + 1);
+    const beat = Math.max(1, Math.min(4, Math.floor(totalBeats % 4) + 1));
+    const sixteenth = Math.max(1, Math.min(4, Math.floor((totalBeats % 1) * 4) + 1));
     return { bar, beat, sixteenth };
   }
 
@@ -201,6 +201,18 @@
             <label for="pan-${i}">Pan</label>
             <input id="pan-${i}" type="range" min="-1" max="1" step="0.1" value="${t.pan}" oninput="window.updateTrackParam(${i}, 'pan', this.value)" aria-label="Pan">
           </div>
+          <div class="control-unit">
+            <label for="eqLow-${i}">Low</label>
+            <input id="eqLow-${i}" type="range" min="-12" max="12" step="1" value="${t.eqLowVal}" oninput="window.updateTrackParam(${i}, 'eqLowVal', this.value)" aria-label="Low EQ">
+          </div>
+          <div class="control-unit">
+            <label for="eqMid-${i}">Mid</label>
+            <input id="eqMid-${i}" type="range" min="-12" max="12" step="1" value="${t.eqMidVal}" oninput="window.updateTrackParam(${i}, 'eqMidVal', this.value)" aria-label="Mid EQ">
+          </div>
+          <div class="control-unit">
+            <label for="eqHigh-${i}">High</label>
+            <input id="eqHigh-${i}" type="range" min="-12" max="12" step="1" value="${t.eqHighVal}" oninput="window.updateTrackParam(${i}, 'eqHighVal', this.value)" aria-label="High EQ">
+          </div>
         </div>
       `;
       rack.appendChild(item);
@@ -221,6 +233,15 @@
     }
     if (param === 'pitchSemitones' && track.sourceNode && engine.ctx) {
       track.sourceNode.detune.setTargetAtTime(track.pitchSemitones * 100, engine.ctx.currentTime, 0.02);
+    }
+    if (param === 'eqLowVal' && track.eqLow && engine.ctx) {
+      track.eqLow.gain.setTargetAtTime(track.eqLowVal, engine.ctx.currentTime, 0.02);
+    }
+    if (param === 'eqMidVal' && track.eqMid && engine.ctx) {
+      track.eqMid.gain.setTargetAtTime(track.eqMidVal, engine.ctx.currentTime, 0.02);
+    }
+    if (param === 'eqHighVal' && track.eqHigh && engine.ctx) {
+      track.eqHigh.gain.setTargetAtTime(track.eqHighVal, engine.ctx.currentTime, 0.02);
     }
   }
 
@@ -402,7 +423,7 @@
   function buildTrackNodes(track, startTime, offset) {
     if (!track.audioBuffer || !engine.ctx) return;
     const anySolo = engine.tracks.some(t => t.isSolo);
-    const isAudible = !track.isMuted && (!anySolo || t.isSolo);
+    const isAudible = !track.isMuted && (!anySolo || track.isSolo);
     if (!isAudible) return;
 
     const source = engine.ctx.createBufferSource();
@@ -470,7 +491,11 @@
         }
         dur = Math.max(0.01, track.audioBuffer.duration - effectiveOffset);
       }
-      source.start(startTime, effectiveOffset, dur);
+      if (dur !== null) {
+        source.start(startTime, effectiveOffset, dur);
+      } else {
+        source.start(startTime, effectiveOffset);
+      }
       source.onended = () => {
         if (engine.isPlaying && !track.isLooping) {
           checkAllTracksEnded();
@@ -645,11 +670,8 @@
       return;
     }
 
-    const deviceId = document.getElementById('audioSource').value;
     const constraints = {
-      audio: deviceId
-        ? { exact: deviceId, echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
-        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
     };
 
     try {
@@ -661,15 +683,8 @@
 
     const totalBeats = parseInt(document.getElementById('countInSelect').value) || 0;
     const armedTrack = engine.tracks[engine.armedIndex];
-    const savedTime = engine.currentTime;
 
-    if (!engine.isPlaying) {
-      engine.playStartTime = engine.ctx.currentTime;
-      scheduleAllTracks();
-      engine.isPlaying = true;
-      updatePlaybackButtons();
-      tick();
-    }
+    engine.currentTime = 0;
 
     const execute = () => {
       try {
@@ -711,7 +726,6 @@
 
         engine.isRecording = true;
         engine.isRecordingPaused = false;
-        engine.currentTime = savedTime;
         updatePlaybackButtons();
         announce('Recording on ' + armedTrack.name);
         engine.mediaRecorder.start();
@@ -876,25 +890,6 @@
     document.body.removeChild(a);
   }
 
-  async function getAudioDevices() {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const inputs = devices.filter(d => d.kind === 'audioinput');
-      const sel = document.getElementById('audioSource');
-      sel.innerHTML = '';
-      inputs.forEach((d, i) => {
-        const opt = document.createElement('option');
-        opt.value = d.deviceId;
-        opt.textContent = d.label || 'Hardware Input ' + (i + 1);
-        sel.appendChild(opt);
-      });
-      announce('Found ' + inputs.length + ' audio input device(s).');
-    } catch (e) {
-      announce('Hardware permission pending or no devices found.');
-    }
-  }
-
   window.addEventListener('keydown', (e) => {
     const ctrl = e.ctrlKey || e.metaKey;
     const shift = e.shiftKey;
@@ -974,7 +969,8 @@
       case 'Escape':
         if (engine.isRecording) stopRecording();
         stopPlayback();
-        engine.currentTime = 0;
+    engine.currentTime = 0;
+    updateDisplays();
         updateDisplays();
         announce('Stopped, playhead at start, regions cleared');
         break;
@@ -1033,7 +1029,6 @@
     updateDisplays();
     announce('Time mode: ' + engine.timeMode);
   };
-  document.getElementById('btnScanHardware').onclick = getAudioDevices;
 
   document.getElementById('audioFileInput').addEventListener('change', async (e) => {
     await initAudio();
@@ -1077,7 +1072,6 @@
     createAudioTrack('Track 1');
     engine.armedIndex = 0;
     renderTracks();
-    getAudioDevices();
     updateDisplays();
   });
 })();
