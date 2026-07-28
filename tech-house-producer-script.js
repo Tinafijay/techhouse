@@ -1127,6 +1127,47 @@
     }
   });
 
+  const dropZone = document.getElementById('dropZone');
+  if (dropZone) {
+    dropZone.addEventListener('click', () => {
+      const input = document.getElementById('trackAudioInput');
+      if (input) input.click();
+    });
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+    dropZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      await initAudio();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|ogg|m4a|aac|flac|webm|aiff|au|mp2)$/i)) {
+        announce('File type not supported. Please use an audio file.');
+        return;
+      }
+      if (engine.pendingTrackUploadIndex === null) {
+        announce('Select a track first by clicking on it, then drop the file');
+        return;
+      }
+      const index = engine.pendingTrackUploadIndex;
+      engine.pendingTrackUploadIndex = null;
+      try {
+        const buffer = await file.arrayBuffer();
+        const decoded = await engine.ctx.decodeAudioData(buffer);
+        engine.tracks[index].audioBuffer = decoded;
+        renderTracks();
+        announce('Imported ' + file.name + ' to ' + engine.tracks[index].name);
+      } catch (err) {
+        announce('Error decoding audio file for this track.');
+      }
+    });
+  }
+
   document.getElementById('bpmInput').addEventListener('change', (e) => {
     engine.bpm = parseInt(e.target.value) || 120;
     announce('BPM set to ' + engine.bpm);
