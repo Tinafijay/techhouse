@@ -133,6 +133,17 @@
       startTimeOffset: 0.0
     };
     engine.tracks.push(track);
+    window.armTrack = armTrack;
+    window.toggleMute = toggleMute;
+    window.toggleSolo = toggleSolo;
+    window.toggleQuantize = toggleQuantize;
+    window.toggleTrackLoop = toggleTrackLoop;
+    window.toggleAutotune = toggleAutotune;
+    window.toggleTrimOnLoop = toggleTrimOnLoop;
+    window.triggerTrackUpload = triggerTrackUpload;
+    window.clearTrack = clearTrack;
+    window.updateTrackParam = updateTrackParam;
+
     renderTracks();
     setFocusedTrack(engine.tracks.length - 1);
     announce('Created ' + track.name);
@@ -701,38 +712,36 @@
     engine.mediaRecorder = new MediaRecorder(engine.currentStream);
     engine.recordedChunks = [];
     engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
-    engine.mediaRecorder.onstop = async () => {
-      const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
-      const arrayBuf = await blob.arrayBuffer();
-      let decoded = await engine.ctx.decodeAudioData(arrayBuf);
-      if (decoded) {
-        const countInBeats = parseInt(document.getElementById('countInSelect').value) || 0;
-        const secondsPerBeat = 60 / engine.bpm;
-        const silenceDuration = countInBeats * secondsPerBeat;
-        const startSample = Math.floor(silenceDuration * decoded.sampleRate);
-        if (startSample > 0 && startSample < decoded.length) {
-          const newLength = decoded.length - startSample;
-          const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
-          for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-            const oldData = decoded.getChannelData(ch);
-            const newData = trimmed.getChannelData(ch);
-            for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
+        const arrayBuf = await blob.arrayBuffer();
+        let decoded = await engine.ctx.decodeAudioData(arrayBuf);
+        if (decoded && totalBeats > 0) {
+          const secondsPerBeat = 60 / engine.bpm;
+          const countInDuration = totalBeats * secondsPerBeat;
+          const startSample = Math.floor(countInDuration * decoded.sampleRate);
+          if (startSample > 0 && startSample < decoded.length) {
+            const newLength = decoded.length - startSample;
+            const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
+            for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+              const oldData = decoded.getChannelData(ch);
+              const newData = trimmed.getChannelData(ch);
+              for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
+            }
+            decoded = trimmed;
           }
-          decoded = trimmed;
         }
-
-        if (armedTrack.trimOnLoop) {
+        if (decoded && armedTrack.trimOnLoop) {
           const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
           if (trimmedBuffer !== decoded) {
             decoded = trimmedBuffer;
             announce('Auto-trimmed silence from ' + armedTrack.name);
           }
         }
-      }
-      armedTrack.audioBuffer = decoded;
-      renderTracks();
-      announce('Recorded to ' + armedTrack.name);
-    };
+        armedTrack.audioBuffer = decoded;
+        renderTracks();
+        announce('Recorded to ' + armedTrack.name);
+      };
 
     const execute = () => {
       try {
@@ -908,13 +917,15 @@
       const devices = await navigator.mediaDevices.enumerateDevices();
       const inputs = devices.filter(d => d.kind === 'audioinput');
       const sel = document.getElementById('audioSource');
-      sel.innerHTML = '';
-      inputs.forEach((d, i) => {
-        const opt = document.createElement('option');
-        opt.value = d.deviceId;
-        opt.textContent = d.label || 'Hardware Input ' + (i + 1);
-        sel.appendChild(opt);
-      });
+      if (sel) {
+        sel.innerHTML = '';
+        inputs.forEach((d, i) => {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          opt.textContent = d.label || 'Hardware Input ' + (i + 1);
+          sel.appendChild(opt);
+        });
+      }
       announce('Found ' + inputs.length + ' audio input device(s).');
     } catch (e) {
       announce('Hardware permission pending or no devices found.');
@@ -1059,7 +1070,8 @@
     updateDisplays();
     announce('Time mode: ' + engine.timeMode);
   };
-  document.getElementById('btnScanHardware').onclick = getAudioDevices;
+  const scanBtn = document.getElementById('btnScanHardware');
+  if (scanBtn) scanBtn.onclick = getAudioDevices;
 
   document.getElementById('audioFileInput').addEventListener('change', async (e) => {
     await initAudio();
