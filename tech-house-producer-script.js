@@ -22,6 +22,7 @@
 
     isRecording: false,
     isRecordingPaused: false,
+    isCountingIn: false,
     mediaRecorder: null,
     recordedChunks: [],
     currentStream: null,
@@ -180,16 +181,15 @@
         <div class="track-main-row">
           <div class="track-info">
             <div class="track-title">${t.name}</div>
-            <div class="track-status">${t.audioBuffer ? 'Audio Loaded' : 'Empty'}</div>
+            <div class="track-status">${t.audioBuffer ? 'Audio Loaded' : 'Empty'}${i === engine.armedIndex ? ' | ARMED' : ''}</div>
           </div>
           <div class="btn-group">
-            <button class="${i === engine.armedIndex ? 'armed' : ''}" onclick="window.armTrack(${i})">${i === engine.armedIndex ? 'ARMED' : 'Arm'}</button>
-            <button class="${t.isMuted ? 'active-toggle' : ''}" onclick="window.toggleMute(${i})">${t.isMuted ? 'MUTED' : 'Mute'}</button>
-            <button class="${t.isSolo ? 'active-toggle' : ''}" onclick="window.toggleSolo(${i})">${t.isSolo ? 'SOLO' : 'Solo'}</button>
-            <button class="${t.isLooping ? 'active-toggle' : ''}" onclick="window.toggleTrackLoop(${i})">${t.isLooping ? 'LOOP ON' : 'Loop'}</button>
-            <button class="${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})">${t.trimOnLoop ? 'TRIM ON' : 'Trim'}</button>
-            <button onclick="window.triggerTrackUpload(${i})">Upload</button>
-            <button onclick="window.clearTrack(${i})">Clear</button>
+            <button class="arm-btn ${i === engine.armedIndex ? 'armed' : ''}" onclick="window.armTrack(${i})" aria-pressed="${i === engine.armedIndex}">${i === engine.armedIndex ? 'ARMED' : 'Arm'}</button>
+            <button class="toggle-btn ${t.isMuted ? 'active-toggle' : ''}" onclick="window.toggleMute(${i})" aria-pressed="${t.isMuted}">Mute</button>
+            <button class="toggle-btn ${t.isLooping ? 'active-toggle' : ''}" onclick="window.toggleTrackLoop(${i})" aria-pressed="${t.isLooping}">Loop</button>
+            <button class="toggle-btn ${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})" aria-pressed="${t.trimOnLoop}">Trim</button>
+            <button class="upload-btn" onclick="window.triggerTrackUpload(${i})">Upload</button>
+            <button class="clear-btn" onclick="window.clearTrack(${i})">Clear</button>
           </div>
         </div>
         <div class="track-controls">
@@ -200,10 +200,6 @@
           <div class="control-unit">
             <label for="pan-${i}">Pan</label>
             <input id="pan-${i}" type="range" min="-1" max="1" step="0.1" value="${t.pan}" oninput="window.updateTrackParam(${i}, 'pan', this.value)" aria-label="Pan">
-          </div>
-          <div class="control-unit">
-            <label for="pitch-${i}">Pitch</label>
-            <input id="pitch-${i}" type="range" min="-12" max="12" step="0.1" value="${t.pitchSemitones}" oninput="window.updateTrackParam(${i}, 'pitchSemitones', this.value)" aria-label="Pitch Semitones">
           </div>
         </div>
       `;
@@ -327,6 +323,59 @@
     track.audioBuffer = null;
     renderTracks();
     announce(track.name + ' cleared');
+  }
+
+  function detectSilenceEnd(buffer, threshold, minSilenceMs) {
+    threshold = threshold || 0.01;
+    minSilenceMs = minSilenceMs || 100;
+    const sr = buffer.sampleRate;
+    const minSilenceSamples = Math.floor((minSilenceMs / 1000) * sr);
+    let silenceStart = buffer.length;
+
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      const sample = buffer.getChannelData(0)[i];
+      if (Math.abs(sample) > threshold) {
+        silenceStart = i + 1;
+        break;
+      }
+    }
+
+    if (buffer.length - silenceStart >= minSilenceSamples) {
+      return silenceStart / sr;
+    }
+    return null;
+  }
+
+  function autoTrimSilenceAtEnd(buffer) {
+    const sr = buffer.sampleRate;
+    const minSilenceMs = 100;
+    const threshold = 0.01;
+    const minSilenceSamples = Math.floor((minSilenceMs / 1000) * sr);
+    let silenceStart = buffer.length;
+
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      const sample = buffer.getChannelData(0)[i];
+      if (Math.abs(sample) > threshold) {
+        silenceStart = i + 1;
+        break;
+      }
+    }
+
+    if (buffer.length - silenceStart >= minSilenceSamples) {
+      const newLength = silenceStart;
+      if (newLength > 0 && newLength < buffer.length) {
+        const newBuffer = engine.ctx.createBuffer(buffer.numberOfChannels, newLength, sr);
+        for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+          const oldData = buffer.getChannelData(ch);
+          const newData = newBuffer.getChannelData(ch);
+          for (let i = 0; i < newLength; i++) {
+            newData[i] = oldData[i];
+          }
+        }
+        return newBuffer;
+      }
+    }
+    return buffer;
   }
 
   function cleanupTrackNodes(track) {
@@ -471,8 +520,6 @@
 
     if (fromStart) {
       engine.currentTime = 0;
-    } else {
-      engine.currentTime = 0;
     }
 
     scheduleAllTracks();
@@ -601,8 +648,8 @@
     const deviceId = document.getElementById('audioSource').value;
     const constraints = {
       audio: deviceId
-        ? { exact: deviceId, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        ? { exact: deviceId, echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
+        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
     };
 
     try {
@@ -614,6 +661,15 @@
 
     const totalBeats = parseInt(document.getElementById('countInSelect').value) || 0;
     const armedTrack = engine.tracks[engine.armedIndex];
+    const savedTime = engine.currentTime;
+
+    if (!engine.isPlaying) {
+      engine.playStartTime = engine.ctx.currentTime;
+      scheduleAllTracks();
+      engine.isPlaying = true;
+      updatePlaybackButtons();
+      tick();
+    }
 
     const execute = () => {
       try {
@@ -639,6 +695,14 @@
               }
               decoded = trimmed;
             }
+
+            if (armedTrack.trimOnLoop) {
+              const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
+              if (trimmedBuffer !== decoded) {
+                decoded = trimmedBuffer;
+                announce('Auto-trimmed silence from ' + armedTrack.name);
+              }
+            }
           }
           armedTrack.audioBuffer = decoded;
           renderTracks();
@@ -647,6 +711,7 @@
 
         engine.isRecording = true;
         engine.isRecordingPaused = false;
+        engine.currentTime = savedTime;
         updatePlaybackButtons();
         announce('Recording on ' + armedTrack.name);
         engine.mediaRecorder.start();
@@ -935,18 +1000,11 @@
         break;
       case 'l':
       case 'L':
-        if (ctrl) {
-          engine.loopEnabled = !engine.loopEnabled;
-          updateLoopButton();
-          updateDisplays();
-          announce('Global loop ' + (engine.loopEnabled ? 'enabled' : 'disabled'));
-        } else {
-          const focused = engine.tracks[engine.focusedIndex];
-          if (focused) {
-            focused.isLooping = !focused.isLooping;
-            renderTracks();
-            announce(focused.name + ' loop ' + (focused.isLooping ? 'enabled' : 'disabled'));
-          }
+        const focused = engine.tracks[engine.focusedIndex];
+        if (focused) {
+          focused.isLooping = !focused.isLooping;
+          renderTracks();
+          announce(focused.name + ' loop ' + (focused.isLooping ? 'enabled' : 'disabled'));
         }
         break;
       default:
@@ -962,20 +1020,11 @@
     btn.textContent = engine.metronomeOn ? 'Metronome: ON' : 'Metronome: OFF';
   }
 
-  function updateLoopButton() {
-    const btn = document.getElementById('btnGlobalLoop');
-    if (!btn) return;
-    btn.setAttribute('aria-pressed', String(engine.loopEnabled));
-    btn.classList.toggle('active-toggle', engine.loopEnabled);
-    btn.textContent = engine.loopEnabled ? 'Loop: ON' : 'Loop: OFF';
-  }
-
   document.getElementById('btnAddTrack').onclick = () => createAudioTrack();
   document.getElementById('btnRecord').onclick = () => engine.isRecording ? stopRecording() : prepareAndRecord();
   document.getElementById('btnPlayAll').onclick = () => engine.isPlaying ? stopPlayback() : startPlayback(false);
   document.getElementById('btnStop').onclick = () => { if (engine.isRecording) stopRecording(); stopPlayback(); engine.currentTime = 0; updateDisplays(); };
   document.getElementById('btnGoStart').onclick = goToStart;
-  document.getElementById('btnGlobalLoop').onclick = () => { engine.loopEnabled = !engine.loopEnabled; updateLoopButton(); updateDisplays(); announce('Global loop ' + (engine.loopEnabled ? 'enabled' : 'disabled')); };
   document.getElementById('btnMetronome').onclick = () => { engine.metronomeOn = !engine.metronomeOn; updateMetronomeButton(); if (engine.metronomeOn && engine.isPlaying) startMetronome(); else stopMetronome(); announce('Metronome ' + (engine.metronomeOn ? 'on' : 'off')); };
   document.getElementById('btnExport').onclick = exportMasterMix;
   document.getElementById('btnToggleTime').onclick = () => {

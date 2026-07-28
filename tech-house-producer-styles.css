@@ -116,14 +116,14 @@ button, label.btn-upload, select, input[type="number"] {
   background: #1e293b;
   color: var(--text);
   border: 1px solid #334155;
-  padding: 0.5rem 0.8rem;
+  padding: 0.4rem 0.6rem;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   cursor: pointer;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.3rem;
   transition: all 0.15s ease;
   font-family: inherit;
 }
@@ -144,11 +144,33 @@ button.active-toggle {
   border-color: var(--success);
 }
 
-button.armed {
+button.armed, button.arm-btn.armed {
   background: var(--danger);
   color: #fff;
   font-weight: 800;
   border-color: var(--danger);
+}
+
+button.toggle-btn {
+  min-width: 50px;
+  justify-content: center;
+}
+
+button.upload-btn {
+  background: #334155;
+  border-color: #475569;
+}
+
+button.clear-btn {
+  background: transparent;
+  border-color: #475569;
+  color: var(--text-muted);
+}
+
+button.clear-btn:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 
 input[type="file"] { display: none; }
@@ -162,11 +184,11 @@ input[type="file"] { display: none; }
 .track-item {
   background: var(--card);
   border: 2px solid var(--border);
-  border-radius: 10px;
-  padding: 1rem;
+  border-radius: 8px;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
   transition: all 0.15s ease;
 }
 
@@ -187,16 +209,16 @@ input[type="file"] { display: none; }
   gap: 0.5rem;
 }
 
-.track-info { display: flex; flex-direction: column; gap: 0.25rem; }
-.track-title { font-weight: 700; font-size: 1.05rem; }
-.track-status { font-size: 0.8rem; color: var(--text-muted); }
+.track-info { display: flex; flex-direction: column; gap: 0.15rem; }
+.track-title { font-weight: 700; font-size: 0.95rem; }
+.track-status { font-size: 0.75rem; color: var(--text-muted); }
 
 .track-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.5rem;
   background: #0f172a;
-  padding: 0.75rem;
+  padding: 0.5rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   align-items: center;
@@ -205,14 +227,14 @@ input[type="file"] { display: none; }
 .control-unit {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.75rem;
+  gap: 0.15rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
-  min-width: 70px;
+  min-width: 60px;
 }
 
 .control-unit input[type="range"] {
-  width: 80px;
+  width: 70px;
   accent-color: var(--accent);
 }
 
