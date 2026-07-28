@@ -757,13 +757,6 @@
       const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
       const arrayBuf = await blob.arrayBuffer();
       let decoded = await engine.ctx.decodeAudioData(arrayBuf);
-      if (decoded && armedTrack.trimOnLoop) {
-        const trimmedBuffer = autoTrimSilenceStartAndEnd(decoded);
-        if (trimmedBuffer !== decoded) {
-          decoded = trimmedBuffer;
-          announce('Auto-trimmed silence from ' + armedTrack.name);
-        }
-      }
       armedTrack.audioBuffer = decoded;
       renderTracks();
       announce('Recorded to ' + armedTrack.name);
