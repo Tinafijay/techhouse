@@ -219,6 +219,15 @@
     if (param === 'pan' && track.pannerNode && engine.ctx) {
       track.pannerNode.pan.setTargetAtTime(track.pan, engine.ctx.currentTime, 0.02);
     }
+    if (param === 'eqLowVal' && track.eqLow && engine.ctx) {
+      track.eqLow.gain.setTargetAtTime(track.eqLowVal, engine.ctx.currentTime, 0.02);
+    }
+    if (param === 'eqMidVal' && track.eqMid && engine.ctx) {
+      track.eqMid.gain.setTargetAtTime(track.eqMidVal, engine.ctx.currentTime, 0.02);
+    }
+    if (param === 'eqHighVal' && track.eqHigh && engine.ctx) {
+      track.eqHigh.gain.setTargetAtTime(track.eqHighVal, engine.ctx.currentTime, 0.02);
+    }
     if (param === 'pitchSemitones' && track.sourceNode && engine.ctx) {
       track.sourceNode.detune.setTargetAtTime(track.pitchSemitones * 100, engine.ctx.currentTime, 0.02);
     }
@@ -256,9 +265,25 @@
   }
 
   function toggleTrackLoop(index) {
-    engine.tracks[index].isLooping = !engine.tracks[index].isLooping;
+    const track = engine.tracks[index];
+    track.isLooping = !track.isLooping;
+    if (track.isLooping && track.sourceNode) {
+      track.sourceNode.loop = true;
+      track.sourceNode.loopStart = 0;
+      track.sourceNode.loopEnd = track.audioBuffer.duration;
+    } else if (!track.isLooping && track.sourceNode) {
+      track.sourceNode.loop = false;
+    }
     renderTracks();
-    announce(engine.tracks[index].name + ' loop ' + (engine.tracks[index].isLooping ? 'enabled' : 'disabled'));
+    announce(track.name + ' loop ' + (track.isLooping ? 'enabled' : 'disabled'));
+    if (track.isLooping && track.trimOnLoop && track.audioBuffer) {
+      const trimmed = autoTrimSilenceAtEnd(track.audioBuffer);
+      if (trimmed !== track.audioBuffer) {
+        track.audioBuffer = trimmed;
+        renderTracks();
+        announce(track.name + ' auto-trimmed silence for loop');
+      }
+    }
   }
 
   function toggleAutotune(index) {
@@ -276,8 +301,17 @@
     track.trimOnLoop = !track.trimOnLoop;
     renderTracks();
     announce(track.name + ' trim on loop ' + (track.trimOnLoop ? 'enabled' : 'disabled'));
-    if (track.trimOnLoop && engine.inPoint !== null && engine.outPoint !== null) {
-      trimTrackBuffer(track);
+    if (track.trimOnLoop && track.audioBuffer) {
+      if (engine.inPoint !== null && engine.outPoint !== null) {
+        trimTrackBuffer(track);
+      } else {
+        const trimmed = autoTrimSilenceAtEnd(track.audioBuffer);
+        if (trimmed !== track.audioBuffer) {
+          track.audioBuffer = trimmed;
+          renderTracks();
+          announce(track.name + ' trimmed silence');
+        }
+      }
     }
   }
 
@@ -464,13 +498,18 @@
         source.loop = true;
         source.loopStart = 0;
         source.loopEnd = track.audioBuffer.duration;
+        effectiveOffset = 0;
       } else {
         if (effectiveOffset >= track.audioBuffer.duration) {
           effectiveOffset = 0;
         }
         dur = Math.max(0.01, track.audioBuffer.duration - effectiveOffset);
       }
-      source.start(startTime, effectiveOffset, dur);
+      if (track.isLooping) {
+        source.start(startTime, effectiveOffset);
+      } else {
+        source.start(startTime, effectiveOffset, dur);
+      }
       source.onended = () => {
         if (engine.isPlaying && !track.isLooping) {
           checkAllTracksEnded();
@@ -645,11 +684,8 @@
       return;
     }
 
-    const deviceId = document.getElementById('audioSource').value;
     const constraints = {
-      audio: deviceId
-        ? { exact: deviceId, echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
-        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 }
     };
 
     try {
@@ -661,57 +697,47 @@
 
     const totalBeats = parseInt(document.getElementById('countInSelect').value) || 0;
     const armedTrack = engine.tracks[engine.armedIndex];
-    const savedTime = engine.currentTime;
 
-    if (!engine.isPlaying) {
-      engine.playStartTime = engine.ctx.currentTime;
-      scheduleAllTracks();
-      engine.isPlaying = true;
-      updatePlaybackButtons();
-      tick();
-    }
+    engine.mediaRecorder = new MediaRecorder(engine.currentStream);
+    engine.recordedChunks = [];
+    engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
+    engine.mediaRecorder.onstop = async () => {
+      const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      let decoded = await engine.ctx.decodeAudioData(arrayBuf);
+      if (decoded) {
+        const countInBeats = parseInt(document.getElementById('countInSelect').value) || 0;
+        const secondsPerBeat = 60 / engine.bpm;
+        const silenceDuration = countInBeats * secondsPerBeat;
+        const startSample = Math.floor(silenceDuration * decoded.sampleRate);
+        if (startSample > 0 && startSample < decoded.length) {
+          const newLength = decoded.length - startSample;
+          const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
+          for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+            const oldData = decoded.getChannelData(ch);
+            const newData = trimmed.getChannelData(ch);
+            for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
+          }
+          decoded = trimmed;
+        }
+
+        if (armedTrack.trimOnLoop) {
+          const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
+          if (trimmedBuffer !== decoded) {
+            decoded = trimmedBuffer;
+            announce('Auto-trimmed silence from ' + armedTrack.name);
+          }
+        }
+      }
+      armedTrack.audioBuffer = decoded;
+      renderTracks();
+      announce('Recorded to ' + armedTrack.name);
+    };
 
     const execute = () => {
       try {
-        engine.mediaRecorder = new MediaRecorder(engine.currentStream);
-        engine.recordedChunks = [];
-        engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
-        engine.mediaRecorder.onstop = async () => {
-          const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
-          const arrayBuf = await blob.arrayBuffer();
-          let decoded = await engine.ctx.decodeAudioData(arrayBuf);
-          if (decoded) {
-            const countInBeats = parseInt(document.getElementById('countInSelect').value) || 0;
-            const secondsPerBeat = 60 / engine.bpm;
-            const silenceDuration = countInBeats * secondsPerBeat;
-            const startSample = Math.floor(silenceDuration * decoded.sampleRate);
-            if (startSample > 0 && startSample < decoded.length) {
-              const newLength = decoded.length - startSample;
-              const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
-              for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-                const oldData = decoded.getChannelData(ch);
-                const newData = trimmed.getChannelData(ch);
-                for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
-              }
-              decoded = trimmed;
-            }
-
-            if (armedTrack.trimOnLoop) {
-              const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
-              if (trimmedBuffer !== decoded) {
-                decoded = trimmedBuffer;
-                announce('Auto-trimmed silence from ' + armedTrack.name);
-              }
-            }
-          }
-          armedTrack.audioBuffer = decoded;
-          renderTracks();
-          announce('Recorded to ' + armedTrack.name);
-        };
-
         engine.isRecording = true;
         engine.isRecordingPaused = false;
-        engine.currentTime = savedTime;
         updatePlaybackButtons();
         announce('Recording on ' + armedTrack.name);
         engine.mediaRecorder.start();
