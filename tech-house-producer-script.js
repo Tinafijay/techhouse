@@ -31,7 +31,8 @@
     metronomeNextNote: 0,
     schedulerTimer: null,
 
-    rafId: null
+    rafId: null,
+    pendingTrackUploadIndex: null
   };
 
   async function initAudio() {
@@ -712,7 +713,7 @@
     engine.mediaRecorder = new MediaRecorder(engine.currentStream);
     engine.recordedChunks = [];
     engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
-      mediaRecorder.onstop = async () => {
+    engine.mediaRecorder.onstop = async () => {
         const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
         const arrayBuf = await blob.arrayBuffer();
         let decoded = await engine.ctx.decodeAudioData(arrayBuf);
