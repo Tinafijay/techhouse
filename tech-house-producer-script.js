@@ -277,9 +277,18 @@
   }
 
   function toggleTrackLoop(index) {
-    engine.tracks[index].isLooping = !engine.tracks[index].isLooping;
+    const track = engine.tracks[index];
+    track.isLooping = !track.isLooping;
     renderTracks();
-    announce(engine.tracks[index].name + ' loop ' + (engine.tracks[index].isLooping ? 'enabled' : 'disabled'));
+    announce(track.name + ' loop ' + (track.isLooping ? 'enabled' : 'disabled'));
+    if (track.isLooping && track.trimOnLoop && track.audioBuffer) {
+      const trimmed = autoTrimSilenceAtEnd(track.audioBuffer);
+      if (trimmed !== track.audioBuffer) {
+        track.audioBuffer = trimmed;
+        renderTracks();
+        announce(track.name + ' auto-trimmed silence for loop');
+      }
+    }
   }
 
   function toggleAutotune(index) {
@@ -604,7 +613,7 @@
 
   function startMetronome() {
     stopMetronome();
-    engine.metronomeNextNote = engine.ctx.currentTime + 0.05;
+    engine.metronomeNextNote = engine.ctx.currentTime;
     engine._metronomeLookahead = 25;
     engine._metronomeScheduleAheadTime = 0.1;
     schedulerMetronome();
@@ -647,6 +656,11 @@
     await initAudio();
     if (engine.isRecording || engine.isCountingIn) return;
     engine.isCountingIn = true;
+
+    if (engine.metronomeOn) {
+      stopMetronome();
+    }
+
     announce('Count-in: ' + totalBeats + ' beats');
 
     const secondsPerBeat = 60.0 / engine.bpm;
@@ -689,6 +703,8 @@
         if (armedTrack.sourceNode) {
           try { armedTrack.sourceNode.stop(); } catch(e) {}
         }
+
+        engine.tracks.forEach(t => cleanupTrackNodes(t));
 
         engine.mediaRecorder = new MediaRecorder(engine.currentStream);
         engine.recordedChunks = [];
@@ -974,8 +990,7 @@
       case 'Escape':
         if (engine.isRecording) stopRecording();
         stopPlayback();
-    engine.currentTime = 0;
-    updateDisplays();
+        engine.currentTime = 0;
         updateDisplays();
         announce('Stopped, playhead at start, regions cleared');
         break;
@@ -989,6 +1004,20 @@
         } else if (shift && !ctrl) {
           createAudioTrack();
           announce('New track added');
+        } else if (ctrl && !shift) {
+          const focused = engine.tracks[engine.focusedIndex];
+          if (focused && focused.audioBuffer) {
+            if (engine.inPoint !== null && engine.outPoint !== null) {
+              trimTrackBuffer(focused);
+            } else {
+              const trimmed = autoTrimSilenceAtEnd(focused.audioBuffer);
+              if (trimmed !== focused.audioBuffer) {
+                focused.audioBuffer = trimmed;
+                renderTracks();
+                announce(focused.name + ' trimmed silence');
+              }
+            }
+          }
         }
         break;
       case 'm':
@@ -1006,6 +1035,14 @@
           focused.isLooping = !focused.isLooping;
           renderTracks();
           announce(focused.name + ' loop ' + (focused.isLooping ? 'enabled' : 'disabled'));
+          if (focused.isLooping && focused.trimOnLoop && focused.audioBuffer) {
+            const trimmed = autoTrimSilenceAtEnd(focused.audioBuffer);
+            if (trimmed !== focused.audioBuffer) {
+              focused.audioBuffer = trimmed;
+              renderTracks();
+              announce(focused.name + ' auto-trimmed silence for loop');
+            }
+          }
         }
         break;
       default:
@@ -1079,4 +1116,13 @@
     renderTracks();
     updateDisplays();
   });
+
+  window.armTrack = armTrack;
+  window.toggleMute = toggleMute;
+  window.toggleSolo = toggleSolo;
+  window.toggleTrackLoop = toggleTrackLoop;
+  window.toggleTrimOnLoop = toggleTrimOnLoop;
+  window.triggerTrackUpload = triggerTrackUpload;
+  window.clearTrack = clearTrack;
+  window.updateTrackParam = updateTrackParam;
 })();
