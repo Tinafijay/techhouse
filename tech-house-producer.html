@@ -35,12 +35,6 @@
 
     <section class="hardware-bar" aria-label="Project Settings">
       <div class="btn-group">
-        <label for="audioSource"><strong>Audio Input:</strong></label>
-        <select id="audioSource" aria-label="Select Input Hardware"></select>
-        <button id="btnScanHardware" type="button">Scan Hardware</button>
-      </div>
-
-      <div class="btn-group">
         <label for="bpmInput"><strong>BPM:</strong></label>
         <input type="number" id="bpmInput" value="120" min="40" max="240" aria-label="BPM Tempo">
 
@@ -89,6 +83,7 @@
         <li><strong>Esc:</strong> Stop playback and clear In/Out selection</li>
         <li><strong>T:</strong> Toggle time display between Bars & Beats / Seconds</li>
         <li><strong>Shift + T:</strong> Add new track</li>
+        <li><strong>Ctrl + T:</strong> Trim silence on focused track</li>
         <li><strong>M:</strong> Toggle metronome click</li>
         <li><strong>L:</strong> Toggle loop on focused track</li>
         <li><strong>Ctrl+E:</strong> Export master WAV mixdown</li>
