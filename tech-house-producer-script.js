@@ -317,11 +317,11 @@
       if (engine.inPoint !== null && engine.outPoint !== null) {
         trimTrackBuffer(track);
       } else {
-        const trimmed = autoTrimSilenceAtEnd(track.audioBuffer);
+        const trimmed = autoTrimSilenceStartAndEnd(track.audioBuffer);
         if (trimmed !== track.audioBuffer) {
           track.audioBuffer = trimmed;
           renderTracks();
-          announce(track.name + ' trimmed silence');
+          announce(track.name + ' trimmed silence from start and end');
         }
       }
     }
@@ -422,6 +422,46 @@
       }
     }
     return buffer;
+  }
+
+  function autoTrimSilenceStartAndEnd(buffer) {
+    const sr = buffer.sampleRate;
+    const minSilenceMs = 100;
+    const threshold = 0.01;
+    const minSilenceSamples = Math.floor((minSilenceMs / 1000) * sr);
+
+    let startSample = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const sample = buffer.getChannelData(0)[i];
+      if (Math.abs(sample) > threshold) {
+        startSample = i;
+        break;
+      }
+    }
+    if (startSample >= minSilenceSamples) startSample = 0;
+
+    let endSample = buffer.length;
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      const sample = buffer.getChannelData(0)[i];
+      if (Math.abs(sample) > threshold) {
+        endSample = i + 1;
+        break;
+      }
+    }
+    if (buffer.length - endSample >= minSilenceSamples) endSample = buffer.length;
+
+    const newLength = endSample - startSample;
+    if (newLength <= 0 || newLength >= buffer.length) return buffer;
+
+    const newBuffer = engine.ctx.createBuffer(buffer.numberOfChannels, newLength, sr);
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const oldData = buffer.getChannelData(ch);
+      const newData = newBuffer.getChannelData(ch);
+      for (let i = 0; i < newLength; i++) {
+        newData[i] = oldData[startSample + i];
+      }
+    }
+    return newBuffer;
   }
 
   function cleanupTrackNodes(track) {
@@ -540,7 +580,7 @@
   function scheduleTrack(track) {
     if (!track.audioBuffer || !engine.ctx) return;
     const now = engine.ctx.currentTime;
-    const offset = engine.currentTime;
+    const offset = engine.currentTime - (track.startTimeOffset || 0);
     buildTrackNodes(track, now, offset);
   }
 
@@ -712,37 +752,22 @@
 
     engine.mediaRecorder = new MediaRecorder(engine.currentStream);
     engine.recordedChunks = [];
-    engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
+engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
     engine.mediaRecorder.onstop = async () => {
-        const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
-        const arrayBuf = await blob.arrayBuffer();
-        let decoded = await engine.ctx.decodeAudioData(arrayBuf);
-        if (decoded && totalBeats > 0) {
-          const secondsPerBeat = 60 / engine.bpm;
-          const countInDuration = totalBeats * secondsPerBeat;
-          const startSample = Math.floor(countInDuration * decoded.sampleRate);
-          if (startSample > 0 && startSample < decoded.length) {
-            const newLength = decoded.length - startSample;
-            const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
-            for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-              const oldData = decoded.getChannelData(ch);
-              const newData = trimmed.getChannelData(ch);
-              for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
-            }
-            decoded = trimmed;
-          }
+      const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      let decoded = await engine.ctx.decodeAudioData(arrayBuf);
+      if (decoded && armedTrack.trimOnLoop) {
+        const trimmedBuffer = autoTrimSilenceStartAndEnd(decoded);
+        if (trimmedBuffer !== decoded) {
+          decoded = trimmedBuffer;
+          announce('Auto-trimmed silence from ' + armedTrack.name);
         }
-        if (decoded && armedTrack.trimOnLoop) {
-          const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
-          if (trimmedBuffer !== decoded) {
-            decoded = trimmedBuffer;
-            announce('Auto-trimmed silence from ' + armedTrack.name);
-          }
-        }
-        armedTrack.audioBuffer = decoded;
-        renderTracks();
-        announce('Recorded to ' + armedTrack.name);
-      };
+      }
+      armedTrack.audioBuffer = decoded;
+      renderTracks();
+      announce('Recorded to ' + armedTrack.name);
+    };
 
     const execute = () => {
       try {
