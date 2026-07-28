@@ -53,9 +53,9 @@
   function secondsToBars(sec) {
     const beatSec = 60 / engine.bpm;
     const totalBeats = sec / beatSec;
-    const bar = Math.max(1, Math.floor(totalBeats / 4) + 1);
-    const beat = Math.max(1, Math.min(4, Math.floor(totalBeats % 4) + 1));
-    const sixteenth = Math.max(1, Math.min(4, Math.floor((totalBeats % 1) * 4) + 1));
+    const bar = Math.floor(totalBeats / 4) + 1;
+    const beat = Math.floor(totalBeats % 4) + 1;
+    const sixteenth = Math.floor((totalBeats % 1) * 4) + 1;
     return { bar, beat, sixteenth };
   }
 
@@ -201,18 +201,6 @@
             <label for="pan-${i}">Pan</label>
             <input id="pan-${i}" type="range" min="-1" max="1" step="0.1" value="${t.pan}" oninput="window.updateTrackParam(${i}, 'pan', this.value)" aria-label="Pan">
           </div>
-          <div class="control-unit">
-            <label for="eqLow-${i}">Low</label>
-            <input id="eqLow-${i}" type="range" min="-12" max="12" step="1" value="${t.eqLowVal}" oninput="window.updateTrackParam(${i}, 'eqLowVal', this.value)" aria-label="Low EQ">
-          </div>
-          <div class="control-unit">
-            <label for="eqMid-${i}">Mid</label>
-            <input id="eqMid-${i}" type="range" min="-12" max="12" step="1" value="${t.eqMidVal}" oninput="window.updateTrackParam(${i}, 'eqMidVal', this.value)" aria-label="Mid EQ">
-          </div>
-          <div class="control-unit">
-            <label for="eqHigh-${i}">High</label>
-            <input id="eqHigh-${i}" type="range" min="-12" max="12" step="1" value="${t.eqHighVal}" oninput="window.updateTrackParam(${i}, 'eqHighVal', this.value)" aria-label="High EQ">
-          </div>
         </div>
       `;
       rack.appendChild(item);
@@ -231,9 +219,6 @@
     if (param === 'pan' && track.pannerNode && engine.ctx) {
       track.pannerNode.pan.setTargetAtTime(track.pan, engine.ctx.currentTime, 0.02);
     }
-    if (param === 'pitchSemitones' && track.sourceNode && engine.ctx) {
-      track.sourceNode.detune.setTargetAtTime(track.pitchSemitones * 100, engine.ctx.currentTime, 0.02);
-    }
     if (param === 'eqLowVal' && track.eqLow && engine.ctx) {
       track.eqLow.gain.setTargetAtTime(track.eqLowVal, engine.ctx.currentTime, 0.02);
     }
@@ -242,6 +227,9 @@
     }
     if (param === 'eqHighVal' && track.eqHigh && engine.ctx) {
       track.eqHigh.gain.setTargetAtTime(track.eqHighVal, engine.ctx.currentTime, 0.02);
+    }
+    if (param === 'pitchSemitones' && track.sourceNode && engine.ctx) {
+      track.sourceNode.detune.setTargetAtTime(track.pitchSemitones * 100, engine.ctx.currentTime, 0.02);
     }
   }
 
@@ -279,6 +267,13 @@
   function toggleTrackLoop(index) {
     const track = engine.tracks[index];
     track.isLooping = !track.isLooping;
+    if (track.isLooping && track.sourceNode) {
+      track.sourceNode.loop = true;
+      track.sourceNode.loopStart = 0;
+      track.sourceNode.loopEnd = track.audioBuffer.duration;
+    } else if (!track.isLooping && track.sourceNode) {
+      track.sourceNode.loop = false;
+    }
     renderTracks();
     announce(track.name + ' loop ' + (track.isLooping ? 'enabled' : 'disabled'));
     if (track.isLooping && track.trimOnLoop && track.audioBuffer) {
@@ -306,8 +301,17 @@
     track.trimOnLoop = !track.trimOnLoop;
     renderTracks();
     announce(track.name + ' trim on loop ' + (track.trimOnLoop ? 'enabled' : 'disabled'));
-    if (track.trimOnLoop && engine.inPoint !== null && engine.outPoint !== null) {
-      trimTrackBuffer(track);
+    if (track.trimOnLoop && track.audioBuffer) {
+      if (engine.inPoint !== null && engine.outPoint !== null) {
+        trimTrackBuffer(track);
+      } else {
+        const trimmed = autoTrimSilenceAtEnd(track.audioBuffer);
+        if (trimmed !== track.audioBuffer) {
+          track.audioBuffer = trimmed;
+          renderTracks();
+          announce(track.name + ' trimmed silence');
+        }
+      }
     }
   }
 
@@ -432,7 +436,7 @@
   function buildTrackNodes(track, startTime, offset) {
     if (!track.audioBuffer || !engine.ctx) return;
     const anySolo = engine.tracks.some(t => t.isSolo);
-    const isAudible = !track.isMuted && (!anySolo || track.isSolo);
+    const isAudible = !track.isMuted && (!anySolo || t.isSolo);
     if (!isAudible) return;
 
     const source = engine.ctx.createBufferSource();
@@ -494,16 +498,17 @@
         source.loop = true;
         source.loopStart = 0;
         source.loopEnd = track.audioBuffer.duration;
+        effectiveOffset = 0;
       } else {
         if (effectiveOffset >= track.audioBuffer.duration) {
           effectiveOffset = 0;
         }
         dur = Math.max(0.01, track.audioBuffer.duration - effectiveOffset);
       }
-      if (dur !== null) {
-        source.start(startTime, effectiveOffset, dur);
-      } else {
+      if (track.isLooping) {
         source.start(startTime, effectiveOffset);
+      } else {
+        source.start(startTime, effectiveOffset, dur);
       }
       source.onended = () => {
         if (engine.isPlaying && !track.isLooping) {
@@ -613,7 +618,7 @@
 
   function startMetronome() {
     stopMetronome();
-    engine.metronomeNextNote = engine.ctx.currentTime;
+    engine.metronomeNextNote = engine.ctx.currentTime + 0.05;
     engine._metronomeLookahead = 25;
     engine._metronomeScheduleAheadTime = 0.1;
     schedulerMetronome();
@@ -656,11 +661,6 @@
     await initAudio();
     if (engine.isRecording || engine.isCountingIn) return;
     engine.isCountingIn = true;
-
-    if (engine.metronomeOn) {
-      stopMetronome();
-    }
-
     announce('Count-in: ' + totalBeats + ' beats');
 
     const secondsPerBeat = 60.0 / engine.bpm;
@@ -698,53 +698,44 @@
     const totalBeats = parseInt(document.getElementById('countInSelect').value) || 0;
     const armedTrack = engine.tracks[engine.armedIndex];
 
-    const execute = () => {
-      try {
-        if (armedTrack.sourceNode) {
-          try { armedTrack.sourceNode.stop(); } catch(e) {}
+    engine.mediaRecorder = new MediaRecorder(engine.currentStream);
+    engine.recordedChunks = [];
+    engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
+    engine.mediaRecorder.onstop = async () => {
+      const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      let decoded = await engine.ctx.decodeAudioData(arrayBuf);
+      if (decoded) {
+        const countInBeats = parseInt(document.getElementById('countInSelect').value) || 0;
+        const secondsPerBeat = 60 / engine.bpm;
+        const silenceDuration = countInBeats * secondsPerBeat;
+        const startSample = Math.floor(silenceDuration * decoded.sampleRate);
+        if (startSample > 0 && startSample < decoded.length) {
+          const newLength = decoded.length - startSample;
+          const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
+          for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+            const oldData = decoded.getChannelData(ch);
+            const newData = trimmed.getChannelData(ch);
+            for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
+          }
+          decoded = trimmed;
         }
 
-        engine.tracks.forEach(t => cleanupTrackNodes(t));
-
-        engine.mediaRecorder = new MediaRecorder(engine.currentStream);
-        engine.recordedChunks = [];
-        engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
-        engine.mediaRecorder.onstop = async () => {
-          const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
-          const arrayBuf = await blob.arrayBuffer();
-          let decoded = await engine.ctx.decodeAudioData(arrayBuf);
-          if (decoded) {
-            const countInBeats = parseInt(document.getElementById('countInSelect').value) || 0;
-            const secondsPerBeat = 60 / engine.bpm;
-            const silenceDuration = countInBeats * secondsPerBeat;
-            const startSample = Math.floor(silenceDuration * decoded.sampleRate);
-            if (startSample > 0 && startSample < decoded.length) {
-              const newLength = decoded.length - startSample;
-              const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
-              for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-                const oldData = decoded.getChannelData(ch);
-                const newData = trimmed.getChannelData(ch);
-                for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
-              }
-              decoded = trimmed;
-            }
-
-            if (armedTrack.trimOnLoop) {
-              const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
-              if (trimmedBuffer !== decoded) {
-                decoded = trimmedBuffer;
-                announce('Auto-trimmed silence from ' + armedTrack.name);
-              }
-            }
+        if (armedTrack.trimOnLoop) {
+          const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
+          if (trimmedBuffer !== decoded) {
+            decoded = trimmedBuffer;
+            announce('Auto-trimmed silence from ' + armedTrack.name);
           }
-          armedTrack.audioBuffer = decoded;
-          renderTracks();
-          announce('Recorded to ' + armedTrack.name);
-        };
+        }
+      }
+      armedTrack.audioBuffer = decoded;
+      renderTracks();
+      announce('Recorded to ' + armedTrack.name);
+    };
 
-        scheduleAllTracks();
-        if (engine.metronomeOn) startMetronome();
-
+    const execute = () => {
+      try {
         engine.isRecording = true;
         engine.isRecordingPaused = false;
         updatePlaybackButtons();
@@ -911,6 +902,25 @@
     document.body.removeChild(a);
   }
 
+  async function getAudioDevices() {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter(d => d.kind === 'audioinput');
+      const sel = document.getElementById('audioSource');
+      sel.innerHTML = '';
+      inputs.forEach((d, i) => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || 'Hardware Input ' + (i + 1);
+        sel.appendChild(opt);
+      });
+      announce('Found ' + inputs.length + ' audio input device(s).');
+    } catch (e) {
+      announce('Hardware permission pending or no devices found.');
+    }
+  }
+
   window.addEventListener('keydown', (e) => {
     const ctrl = e.ctrlKey || e.metaKey;
     const shift = e.shiftKey;
@@ -1004,20 +1014,6 @@
         } else if (shift && !ctrl) {
           createAudioTrack();
           announce('New track added');
-        } else if (ctrl && !shift) {
-          const focused = engine.tracks[engine.focusedIndex];
-          if (focused && focused.audioBuffer) {
-            if (engine.inPoint !== null && engine.outPoint !== null) {
-              trimTrackBuffer(focused);
-            } else {
-              const trimmed = autoTrimSilenceAtEnd(focused.audioBuffer);
-              if (trimmed !== focused.audioBuffer) {
-                focused.audioBuffer = trimmed;
-                renderTracks();
-                announce(focused.name + ' trimmed silence');
-              }
-            }
-          }
         }
         break;
       case 'm':
@@ -1035,14 +1031,6 @@
           focused.isLooping = !focused.isLooping;
           renderTracks();
           announce(focused.name + ' loop ' + (focused.isLooping ? 'enabled' : 'disabled'));
-          if (focused.isLooping && focused.trimOnLoop && focused.audioBuffer) {
-            const trimmed = autoTrimSilenceAtEnd(focused.audioBuffer);
-            if (trimmed !== focused.audioBuffer) {
-              focused.audioBuffer = trimmed;
-              renderTracks();
-              announce(focused.name + ' auto-trimmed silence for loop');
-            }
-          }
         }
         break;
       default:
@@ -1071,6 +1059,7 @@
     updateDisplays();
     announce('Time mode: ' + engine.timeMode);
   };
+  document.getElementById('btnScanHardware').onclick = getAudioDevices;
 
   document.getElementById('audioFileInput').addEventListener('change', async (e) => {
     await initAudio();
@@ -1114,15 +1103,7 @@
     createAudioTrack('Track 1');
     engine.armedIndex = 0;
     renderTracks();
+    getAudioDevices();
     updateDisplays();
   });
-
-  window.armTrack = armTrack;
-  window.toggleMute = toggleMute;
-  window.toggleSolo = toggleSolo;
-  window.toggleTrackLoop = toggleTrackLoop;
-  window.toggleTrimOnLoop = toggleTrimOnLoop;
-  window.triggerTrackUpload = triggerTrackUpload;
-  window.clearTrack = clearTrack;
-  window.updateTrackParam = updateTrackParam;
 })();
