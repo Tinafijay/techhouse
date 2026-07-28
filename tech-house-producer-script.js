@@ -684,10 +684,12 @@
     const totalBeats = parseInt(document.getElementById('countInSelect').value) || 0;
     const armedTrack = engine.tracks[engine.armedIndex];
 
-    engine.currentTime = 0;
-
     const execute = () => {
       try {
+        if (armedTrack.sourceNode) {
+          try { armedTrack.sourceNode.stop(); } catch(e) {}
+        }
+
         engine.mediaRecorder = new MediaRecorder(engine.currentStream);
         engine.recordedChunks = [];
         engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
@@ -723,6 +725,9 @@
           renderTracks();
           announce('Recorded to ' + armedTrack.name);
         };
+
+        scheduleAllTracks();
+        if (engine.metronomeOn) startMetronome();
 
         engine.isRecording = true;
         engine.isRecordingPaused = false;
