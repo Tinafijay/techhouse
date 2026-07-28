@@ -752,7 +752,7 @@
 
     engine.mediaRecorder = new MediaRecorder(engine.currentStream);
     engine.recordedChunks = [];
-engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
+    engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
     engine.mediaRecorder.onstop = async () => {
       const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
       const arrayBuf = await blob.arrayBuffer();
@@ -824,12 +824,14 @@ engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.record
 
     let maxLen = 0;
     active.forEach(t => {
-      const len = t.audioBuffer.length;
+      const offset = t.startTimeOffset || 0;
+      const len = t.audioBuffer.length / t.audioBuffer.sampleRate + offset;
       if (len > maxLen) maxLen = len;
     });
 
     const sampleRate = engine.ctx.sampleRate;
-    const offline = new OfflineAudioContext(2, maxLen, sampleRate);
+    const maxLenSamples = Math.ceil(maxLen * sampleRate);
+    const offline = new OfflineAudioContext(2, maxLenSamples, sampleRate);
 
     active.forEach(t => {
       const src = offline.createBufferSource();
