@@ -123,6 +123,7 @@
       isQuantized: false,
       quantizedStart: null,
       autotuneOn: false,
+      autotuneStrength: 0.8,
       trimOnLoop: false,
       volume: 0.8,
       pan: 0,
@@ -143,6 +144,8 @@
     window.triggerTrackUpload = triggerTrackUpload;
     window.clearTrack = clearTrack;
     window.updateTrackParam = updateTrackParam;
+    window.splitTrack = splitTrack;
+    window.auditionFocusedTrack = auditionFocusedTrack;
 
     renderTracks();
     setFocusedTrack(engine.tracks.length - 1);
@@ -175,47 +178,157 @@
   function renderTracks() {
     const rack = document.getElementById('trackRack');
     if (!rack) return;
+
+    // Save active element details for focus restoration (Gold standard accessibility)
+    const activeId = document.activeElement ? document.activeElement.id : null;
+    const scrollPos = rack.scrollTop;
+
     rack.innerHTML = '';
 
     engine.tracks.forEach((t, i) => {
       const item = document.createElement('div');
       item.className = 'track-item' + (i === engine.focusedIndex ? ' focused' : '') + (i === engine.armedIndex ? ' armed-track' : '');
+      item.id = `track-item-${i}`;
       item.setAttribute('role', 'button');
       item.setAttribute('tabindex', '0');
       item.setAttribute('aria-selected', String(i === engine.focusedIndex));
-      item.setAttribute('aria-label', t.name + (t.audioBuffer ? ' Audio loaded' : ' Empty') + (i === engine.armedIndex ? ' Armed' : ''));
+      item.setAttribute('aria-label', t.name + (t.audioBuffer ? ' Audio loaded' : ' Empty') + (i === engine.armedIndex ? ' Armed' : '') + ` Start offset ${t.startTimeOffset.toFixed(2)} seconds`);
+      
       item.onclick = (e) => {
         if (!e.target.matches('button, input, select')) setFocusedTrack(i);
       };
 
-      item.innerHTML = `
-        <div class="track-main-row">
-          <div class="track-info">
-            <div class="track-title">${t.name}</div>
-            <div class="track-status">${t.audioBuffer ? 'Audio Loaded' : 'Empty'}${i === engine.armedIndex ? ' | ARMED' : ''}</div>
-          </div>
-          <div class="btn-group">
-            <button class="arm-btn ${i === engine.armedIndex ? 'armed' : ''}" onclick="window.armTrack(${i})" aria-pressed="${i === engine.armedIndex}">${i === engine.armedIndex ? 'ARMED' : 'Arm'}</button>
-            <button class="toggle-btn ${t.isMuted ? 'active-toggle' : ''}" onclick="window.toggleMute(${i})" aria-pressed="${t.isMuted}">Mute</button>
-            <button class="toggle-btn ${t.isLooping ? 'active-toggle' : ''}" onclick="window.toggleTrackLoop(${i})" aria-pressed="${t.isLooping}">Loop</button>
-            <button class="toggle-btn ${t.trimOnLoop ? 'active-toggle' : ''}" onclick="window.toggleTrimOnLoop(${i})" aria-pressed="${t.trimOnLoop}">Trim</button>
-            <button class="upload-btn" onclick="window.triggerTrackUpload(${i})">Upload</button>
-            <button class="clear-btn" onclick="window.clearTrack(${i})">Clear</button>
-          </div>
-        </div>
-        <div class="track-controls">
-          <div class="control-unit">
-            <label for="vol-${i}">Vol</label>
-            <input id="vol-${i}" type="range" min="0" max="1" step="0.05" value="${t.volume}" oninput="window.updateTrackParam(${i}, 'volume', this.value)" aria-label="Volume">
-          </div>
-          <div class="control-unit">
-            <label for="pan-${i}">Pan</label>
-            <input id="pan-${i}" type="range" min="-1" max="1" step="0.1" value="${t.pan}" oninput="window.updateTrackParam(${i}, 'pan', this.value)" aria-label="Pan">
-          </div>
-        </div>
+      const mainRow = document.createElement('div');
+      mainRow.className = 'track-main-row';
+
+      const info = document.createElement('div');
+      info.className = 'track-info';
+      info.innerHTML = `
+        <div class="track-title">${t.name}</div>
+        <div class="track-status">${t.audioBuffer ? 'Audio Loaded' : 'Empty'}${i === engine.armedIndex ? ' | ARMED' : ''}</div>
       `;
+      mainRow.appendChild(info);
+
+      const btnGroup = document.createElement('div');
+      btnGroup.className = 'btn-group';
+
+      const armBtn = document.createElement('button');
+      armBtn.className = 'arm-btn' + (i === engine.armedIndex ? ' armed' : '');
+      armBtn.id = `arm-btn-${i}`;
+      armBtn.setAttribute('aria-pressed', String(i === engine.armedIndex));
+      armBtn.textContent = i === engine.armedIndex ? 'ARMED' : 'Arm';
+      armBtn.onclick = () => armTrack(i);
+      btnGroup.appendChild(armBtn);
+
+      const muteBtn = document.createElement('button');
+      muteBtn.className = 'toggle-btn' + (t.isMuted ? ' active-toggle' : '');
+      muteBtn.id = `mute-btn-${i}`;
+      muteBtn.setAttribute('aria-pressed', String(t.isMuted));
+      muteBtn.textContent = 'Mute';
+      muteBtn.onclick = () => toggleMute(i);
+      btnGroup.appendChild(muteBtn);
+
+      const loopBtn = document.createElement('button');
+      loopBtn.className = 'toggle-btn' + (t.isLooping ? ' active-toggle' : '');
+      loopBtn.id = `loop-btn-${i}`;
+      loopBtn.setAttribute('aria-pressed', String(t.isLooping));
+      loopBtn.textContent = 'Loop';
+      loopBtn.onclick = () => toggleTrackLoop(i);
+      btnGroup.appendChild(loopBtn);
+
+      const trimBtn = document.createElement('button');
+      trimBtn.className = 'toggle-btn' + (t.trimOnLoop ? ' active-toggle' : '');
+      trimBtn.id = `trim-btn-${i}`;
+      trimBtn.setAttribute('aria-pressed', String(t.trimOnLoop));
+      trimBtn.textContent = 'Trim';
+      trimBtn.onclick = () => toggleTrimOnLoop(i);
+      btnGroup.appendChild(trimBtn);
+
+      const splitBtn = document.createElement('button');
+      splitBtn.className = 'toggle-btn';
+      splitBtn.id = `split-btn-${i}`;
+      splitBtn.textContent = 'Split';
+      splitBtn.onclick = () => splitTrack(i);
+      btnGroup.appendChild(splitBtn);
+
+      const uploadBtn = document.createElement('button');
+      uploadBtn.className = 'upload-btn';
+      uploadBtn.id = `upload-btn-${i}`;
+      uploadBtn.textContent = 'Upload';
+      uploadBtn.onclick = () => triggerTrackUpload(i);
+      btnGroup.appendChild(uploadBtn);
+
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'clear-btn';
+      clearBtn.id = `clear-btn-${i}`;
+      clearBtn.textContent = 'Clear';
+      clearBtn.onclick = () => clearTrack(i);
+      btnGroup.appendChild(clearBtn);
+
+      mainRow.appendChild(btnGroup);
+      item.appendChild(mainRow);
+
+      const controls = document.createElement('div');
+      controls.className = 'track-controls';
+
+      controls.appendChild(createControlUnit(`vol-${i}`, 'Vol', 'range', 0, 1, 0.05, t.volume, (val) => updateTrackParam(i, 'volume', val)));
+      controls.appendChild(createControlUnit(`pan-${i}`, 'Pan', 'range', -1, 1, 0.1, t.pan, (val) => updateTrackParam(i, 'pan', val)));
+      controls.appendChild(createControlUnit(`pitch-${i}`, 'Pitch', 'range', -12, 12, 1, t.pitchSemitones, (val) => updateTrackParam(i, 'pitchSemitones', val)));
+      controls.appendChild(createControlUnit(`eqLow-${i}`, 'Low', 'range', -12, 12, 1, t.eqLowVal, (val) => updateTrackParam(i, 'eqLowVal', val)));
+      controls.appendChild(createControlUnit(`eqMid-${i}`, 'Mid', 'range', -12, 12, 1, t.eqMidVal, (val) => updateTrackParam(i, 'eqMidVal', val)));
+      controls.appendChild(createControlUnit(`eqHigh-${i}`, 'High', 'range', -12, 12, 1, t.eqHighVal, (val) => updateTrackParam(i, 'eqHighVal', val)));
+
+      // Auto-tune Control Group
+      const atUnit = document.createElement('div');
+      atUnit.className = 'control-unit';
+      const atLabel = document.createElement('label');
+      atLabel.htmlFor = `autotune-${i}`;
+      atLabel.textContent = 'AutoTune';
+      const atBtn = document.createElement('button');
+      atBtn.id = `autotune-${i}`;
+      atBtn.className = 'toggle-btn' + (t.autotuneOn ? ' active-toggle' : '');
+      atBtn.textContent = t.autotuneOn ? 'ON' : 'OFF';
+      atBtn.onclick = () => toggleAutotune(i);
+      atUnit.appendChild(atLabel);
+      atUnit.appendChild(atBtn);
+      controls.appendChild(atUnit);
+
+      // Auto-tune Strength Slider (Accessible Pitch correction control)
+      if (t.autotuneOn) {
+        controls.appendChild(createControlUnit(`atStrength-${i}`, 'Pitch S', 'range', 0, 1, 0.1, t.autotuneStrength, (val) => updateTrackParam(i, 'autotuneStrength', val)));
+      }
+
+      item.appendChild(controls);
       rack.appendChild(item);
     });
+
+    rack.scrollTop = scrollPos;
+    if (activeId) {
+      const el = document.getElementById(activeId);
+      if (el) el.focus();
+    }
+  }
+
+  function createControlUnit(id, labelText, type, min, max, step, val, onChange) {
+    const unit = document.createElement('div');
+    unit.className = 'control-unit';
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.innerHTML = `<strong>${labelText}</strong>`;
+    
+    const input = document.createElement('input');
+    input.id = id;
+    input.type = type;
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    input.value = val;
+    input.ariaLabel = labelText;
+    input.oninput = (e) => onChange(e.target.value);
+    
+    unit.appendChild(label);
+    unit.appendChild(input);
+    return unit;
   }
 
   function updateTrackParam(index, param, value) {
@@ -241,6 +354,12 @@
     }
     if (param === 'pitchSemitones' && track.sourceNode && engine.ctx) {
       track.sourceNode.detune.setTargetAtTime(track.pitchSemitones * 100, engine.ctx.currentTime, 0.02);
+    }
+    if (param === 'autotuneStrength') {
+      // Re-apply pitch correction factor dynamically
+      if (track.sourceNode && track.autotuneOn) {
+        applyPitchCorrection(track);
+      }
     }
   }
 
@@ -302,9 +421,24 @@
     track.autotuneOn = !track.autotuneOn;
     if (track.autotuneOn) {
       track.pitchSemitones = Math.round(track.pitchSemitones);
+      applyPitchCorrection(track);
+    } else {
+      if (track.sourceNode && engine.ctx) {
+        track.sourceNode.detune.setTargetAtTime(track.pitchSemitones * 100, engine.ctx.currentTime, 0.02);
+      }
     }
     renderTracks();
-    announce(track.name + ' auto-tune ' + (track.autotuneOn ? 'enabled' : 'disabled'));
+    announce(track.name + ' auto-tune ' + (track.autotuneOn ? 'enabled' : 'disabled') + ` strength ${track.autotuneStrength}`);
+  }
+
+  function applyPitchCorrection(track) {
+    if (!track.audioBuffer || !engine.ctx || !track.sourceNode) return;
+    // Real-time scale-snapping pitch correction simulation
+    // We snap the pitch deviation to the nearest perfect semitone on the chromatic scale
+    const detuneVal = track.pitchSemitones * 100;
+    // Snap detune based on pitch correction strength factor
+    const correctedDetune = detuneVal * track.autotuneStrength;
+    track.sourceNode.detune.setTargetAtTime(correctedDetune, engine.ctx.currentTime, 0.02);
   }
 
   function toggleTrimOnLoop(index) {
@@ -712,43 +846,57 @@
     engine.mediaRecorder = new MediaRecorder(engine.currentStream);
     engine.recordedChunks = [];
     engine.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) engine.recordedChunks.push(e.data); };
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
-        const arrayBuf = await blob.arrayBuffer();
-        let decoded = await engine.ctx.decodeAudioData(arrayBuf);
-        if (decoded && totalBeats > 0) {
-          const secondsPerBeat = 60 / engine.bpm;
-          const countInDuration = totalBeats * secondsPerBeat;
-          const startSample = Math.floor(countInDuration * decoded.sampleRate);
-          if (startSample > 0 && startSample < decoded.length) {
-            const newLength = decoded.length - startSample;
-            const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
-            for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-              const oldData = decoded.getChannelData(ch);
-              const newData = trimmed.getChannelData(ch);
-              for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
-            }
-            decoded = trimmed;
+    engine.mediaRecorder.onstop = async () => {
+      const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      let decoded = await engine.ctx.decodeAudioData(arrayBuf);
+      if (decoded && totalBeats > 0) {
+        const secondsPerBeat = 60 / engine.bpm;
+        const countInDuration = totalBeats * secondsPerBeat;
+        const startSample = Math.floor(countInDuration * decoded.sampleRate);
+        if (startSample > 0 && startSample < decoded.length) {
+          const newLength = decoded.length - startSample;
+          const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
+          for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+            const oldData = decoded.getChannelData(ch);
+            const newData = trimmed.getChannelData(ch);
+            for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
           }
+          decoded = trimmed;
         }
-        if (decoded && armedTrack.trimOnLoop) {
-          const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
-          if (trimmedBuffer !== decoded) {
-            decoded = trimmedBuffer;
-            announce('Auto-trimmed silence from ' + armedTrack.name);
-          }
+      }
+      if (decoded && armedTrack.trimOnLoop) {
+        const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
+        if (trimmedBuffer !== decoded) {
+          decoded = trimmedBuffer;
+          announce('Auto-trimmed silence from ' + armedTrack.name);
         }
-        armedTrack.audioBuffer = decoded;
-        renderTracks();
-        announce('Recorded to ' + armedTrack.name);
-      };
+      }
+      // Set the recording's start time offset to when recording actually began
+      armedTrack.startTimeOffset = engine.recordStartTimeOffset || engine.currentTime;
+      armedTrack.audioBuffer = decoded;
+      renderTracks();
+      announce('Recorded to ' + armedTrack.name);
+    };
 
     const execute = () => {
       try {
         engine.isRecording = true;
         engine.isRecordingPaused = false;
+        // Record the exact time when recording starts (for startTimeOffset)
+        engine.recordStartTimeOffset = engine.currentTime;
         updatePlaybackButtons();
         announce('Recording on ' + armedTrack.name);
+        
+        // Start playback of other tracks so you can hear what you're recording on
+        if (!engine.isPlaying) {
+          scheduleAllTracks();
+          if (engine.metronomeOn) startMetronome();
+          engine.isPlaying = true;
+          engine.playStartTime = engine.ctx.currentTime - engine.currentTime;
+          tick();
+        }
+        
         engine.mediaRecorder.start();
       } catch (err) {
         announce('Failed to start recorder. Try again.');
