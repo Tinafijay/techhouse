@@ -46,6 +46,12 @@
           <option value="0">Off (Instant)</option>
         </select>
       </div>
+      <div class="btn-group">
+        <button id="btnScanHardware" type="button" aria-label="Scan Audio Input Devices">Scan Hardware</button>
+        <select id="audioSource" aria-label="Audio Input Device">
+          <option value="">Default Input</option>
+        </select>
+      </div>
     </section>
 
     <section class="toolbar" aria-label="Transport Controls">
@@ -70,6 +76,20 @@
 
     <section class="track-rack" id="trackRack" role="region" aria-label="Track Rack List"></section>
 
+    <section class="upload-zone" aria-label="Upload Audio Files">
+      <h3>Upload Audio to Track</h3>
+      <p>Select a track first, then drop an audio file here or click to browse.</p>
+      <p class="file-types">Supported: MP3, WAV, OGG, M4A, AAC, FLAC, WEBM, AIFF, AU, MP2</p>
+      <div id="dropZone" class="drop-area">
+        <span class="drop-icon">📁</span>
+        <span>Drop audio file here</span>
+      </div>
+      <label class="btn-upload drop-label">
+        📁 Browse Files
+        <input type="file" id="trackAudioInput" accept="audio/*" aria-label="Import audio to track">
+      </label>
+    </section>
+
     <section class="instructions" aria-label="Keyboard Shortcuts">
       <h3>Keyboard Shortcuts Quick Guide:</h3>
       <ul>
@@ -93,8 +113,6 @@
   </div>
 
   <div id="srAnnouncer" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
-
-  <input type="file" id="trackAudioInput" accept="audio/*" style="display:none" aria-label="Import audio to track">
 
   <script src="tech-house-producer-script.js"></script>
 </body>
