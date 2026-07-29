@@ -1088,7 +1088,7 @@
       return;
     }
 
-    if (e.key === 'r' || e.key === 'R' || e.key === 's' || e.key === 'S' || e.key === 'e' || e.key === 'E' || e.key === 't' || e.key === 'T' || e.key === 'm' || e.key === 'M' || e.key === 'l' || e.key === 'L' || e.key === 'Escape' || e.code === 'Space' || e.code === 'Home' || e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+    if (e.key === 'r' || e.key === 'R' || e.key === 's' || e.key === 'S' || e.key === 'e' || e.key === 'E' || e.key === 't' || e.key === 'T' || e.key === 'm' || e.key === 'M' || e.key === 'l' || e.key === 'L' || e.key === 'j' || e.key === 'J' || e.key === 'k' || e.key === 'K' || e.key === 'Escape' || e.code === 'Space' || e.code === 'Home' || e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
     }
 
@@ -1185,11 +1185,45 @@
         break;
       case 'l':
       case 'L':
-        const focused = engine.tracks[engine.focusedIndex];
-        if (focused) {
-          focused.isLooping = !focused.isLooping;
-          renderTracks();
-          announce(focused.name + ' loop ' + (focused.isLooping ? 'enabled' : 'disabled'));
+        if (!ctrl && !shift) {
+          engine.metronomeOn = !engine.metronomeOn;
+          updateMetronomeButton();
+          if (engine.metronomeOn && engine.isPlaying) startMetronome();
+          else stopMetronome();
+          announce('Metronome ' + (engine.metronomeOn ? 'on' : 'off'));
+        } else if (shift && !ctrl) {
+          // Shift+L = toggle loop on focused track
+          const focused = engine.tracks[engine.focusedIndex];
+          if (focused) {
+            focused.isLooping = !focused.isLooping;
+            renderTracks();
+            announce(focused.name + ' loop ' + (focused.isLooping ? 'enabled' : 'disabled'));
+          }
+        }
+        break;
+      case 'j':
+      case 'J':
+        if (!ctrl && !shift && engine.tracks.length > 0) {
+          const focused = engine.tracks[engine.focusedIndex];
+          if (focused && focused.audioBuffer) {
+            const beatSec = 60 / engine.bpm;
+            const step = shift ? beatSec * 4 : (ctrl ? beatSec / 4 : beatSec);
+            focused.startTimeOffset = Math.max(0, focused.startTimeOffset - step);
+            renderTracks();
+            announce(focused.name + ' start offset ' + focused.startTimeOffset.toFixed(2) + 's');
+          }
+        }
+        break;
+      case 'k':
+      case 'K':
+        if (!ctrl && !shift) {
+          auditionFocusedTrack();
+        }
+        break;
+      case 'x':
+      case 'X':
+        if (!ctrl && !shift) {
+          splitTrack(engine.focusedIndex);
         }
         break;
       default:
