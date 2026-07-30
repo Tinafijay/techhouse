@@ -31,7 +31,8 @@
     metronomeNextNote: 0,
     schedulerTimer: null,
 
-    rafId: null
+    rafId: null,
+    pendingTrackUploadIndex: null
   };
 
   async function initAudio() {
@@ -450,11 +451,11 @@
       if (engine.inPoint !== null && engine.outPoint !== null) {
         trimTrackBuffer(track);
       } else {
-        const trimmed = autoTrimSilenceAtEnd(track.audioBuffer);
+        const trimmed = autoTrimSilenceStartAndEnd(track.audioBuffer);
         if (trimmed !== track.audioBuffer) {
           track.audioBuffer = trimmed;
           renderTracks();
-          announce(track.name + ' trimmed silence');
+          announce(track.name + ' trimmed silence from start and end');
         }
       }
     }
@@ -555,6 +556,46 @@
       }
     }
     return buffer;
+  }
+
+  function autoTrimSilenceStartAndEnd(buffer) {
+    const sr = buffer.sampleRate;
+    const minSilenceMs = 100;
+    const threshold = 0.01;
+    const minSilenceSamples = Math.floor((minSilenceMs / 1000) * sr);
+
+    let startSample = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const sample = buffer.getChannelData(0)[i];
+      if (Math.abs(sample) > threshold) {
+        startSample = i;
+        break;
+      }
+    }
+    if (startSample >= minSilenceSamples) startSample = 0;
+
+    let endSample = buffer.length;
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      const sample = buffer.getChannelData(0)[i];
+      if (Math.abs(sample) > threshold) {
+        endSample = i + 1;
+        break;
+      }
+    }
+    if (buffer.length - endSample >= minSilenceSamples) endSample = buffer.length;
+
+    const newLength = endSample - startSample;
+    if (newLength <= 0 || newLength >= buffer.length) return buffer;
+
+    const newBuffer = engine.ctx.createBuffer(buffer.numberOfChannels, newLength, sr);
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const oldData = buffer.getChannelData(ch);
+      const newData = newBuffer.getChannelData(ch);
+      for (let i = 0; i < newLength; i++) {
+        newData[i] = oldData[startSample + i];
+      }
+    }
+    return newBuffer;
   }
 
   function cleanupTrackNodes(track) {
@@ -673,7 +714,7 @@
   function scheduleTrack(track) {
     if (!track.audioBuffer || !engine.ctx) return;
     const now = engine.ctx.currentTime;
-    const offset = engine.currentTime;
+    const offset = engine.currentTime - (track.startTimeOffset || 0);
     buildTrackNodes(track, now, offset);
   }
 
@@ -850,21 +891,6 @@
       const blob = new Blob(engine.recordedChunks, { type: 'audio/webm' });
       const arrayBuf = await blob.arrayBuffer();
       let decoded = await engine.ctx.decodeAudioData(arrayBuf);
-      if (decoded && totalBeats > 0) {
-        const secondsPerBeat = 60 / engine.bpm;
-        const countInDuration = totalBeats * secondsPerBeat;
-        const startSample = Math.floor(countInDuration * decoded.sampleRate);
-        if (startSample > 0 && startSample < decoded.length) {
-          const newLength = decoded.length - startSample;
-          const trimmed = engine.ctx.createBuffer(decoded.numberOfChannels, newLength, decoded.sampleRate);
-          for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-            const oldData = decoded.getChannelData(ch);
-            const newData = trimmed.getChannelData(ch);
-            for (let i = 0; i < newLength; i++) newData[i] = oldData[startSample + i];
-          }
-          decoded = trimmed;
-        }
-      }
       if (decoded && armedTrack.trimOnLoop) {
         const trimmedBuffer = autoTrimSilenceAtEnd(decoded);
         if (trimmedBuffer !== decoded) {
@@ -946,12 +972,14 @@
 
     let maxLen = 0;
     active.forEach(t => {
-      const len = t.audioBuffer.length;
+      const offset = t.startTimeOffset || 0;
+      const len = t.audioBuffer.length / t.audioBuffer.sampleRate + offset;
       if (len > maxLen) maxLen = len;
     });
 
     const sampleRate = engine.ctx.sampleRate;
-    const offline = new OfflineAudioContext(2, maxLen, sampleRate);
+    const maxLenSamples = Math.ceil(maxLen * sampleRate);
+    const offline = new OfflineAudioContext(2, maxLenSamples, sampleRate);
 
     active.forEach(t => {
       const src = offline.createBufferSource();
@@ -1287,6 +1315,47 @@
       announce('Error decoding audio file for this track.');
     }
   });
+
+  const dropZone = document.getElementById('dropZone');
+  if (dropZone) {
+    dropZone.addEventListener('click', () => {
+      const input = document.getElementById('trackAudioInput');
+      if (input) input.click();
+    });
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+    dropZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      await initAudio();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|ogg|m4a|aac|flac|webm|aiff|au|mp2)$/i)) {
+        announce('File type not supported. Please use an audio file.');
+        return;
+      }
+      if (engine.pendingTrackUploadIndex === null) {
+        announce('Select a track first by clicking on it, then drop the file');
+        return;
+      }
+      const index = engine.pendingTrackUploadIndex;
+      engine.pendingTrackUploadIndex = null;
+      try {
+        const buffer = await file.arrayBuffer();
+        const decoded = await engine.ctx.decodeAudioData(buffer);
+        engine.tracks[index].audioBuffer = decoded;
+        renderTracks();
+        announce('Imported ' + file.name + ' to ' + engine.tracks[index].name);
+      } catch (err) {
+        announce('Error decoding audio file for this track.');
+      }
+    });
+  }
 
   document.getElementById('bpmInput').addEventListener('change', (e) => {
     engine.bpm = parseInt(e.target.value) || 120;
