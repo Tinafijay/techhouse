@@ -144,6 +144,8 @@
     window.toggleTrimOnLoop = toggleTrimOnLoop;
     window.triggerTrackUpload = triggerTrackUpload;
     window.clearTrack = clearTrack;
+    window.deleteTrack = deleteTrack;
+    window.deleteLoopRegion = deleteLoopRegion;
     window.updateTrackParam = updateTrackParam;
     window.splitTrack = splitTrack;
     window.auditionFocusedTrack = auditionFocusedTrack;
@@ -265,6 +267,20 @@
       clearBtn.textContent = 'Clear';
       clearBtn.onclick = () => clearTrack(i);
       btnGroup.appendChild(clearBtn);
+
+      const delSecBtn = document.createElement('button');
+      delSecBtn.className = 'toggle-btn';
+      delSecBtn.id = `del-sec-btn-${i}`;
+      delSecBtn.textContent = 'Del Sec';
+      delSecBtn.onclick = () => deleteLoopRegion(i);
+      btnGroup.appendChild(delSecBtn);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.id = `delete-btn-${i}`;
+      deleteBtn.textContent = 'Delete Track';
+      deleteBtn.onclick = () => deleteTrack(i);
+      btnGroup.appendChild(deleteBtn);
 
       mainRow.appendChild(btnGroup);
       item.appendChild(mainRow);
@@ -503,6 +519,72 @@
     track.audioBuffer = null;
     renderTracks();
     announce(track.name + ' cleared');
+  }
+
+  function deleteTrack(index) {
+    if (engine.tracks.length <= 1) {
+      announce('Cannot delete the last track');
+      return;
+    }
+    const name = engine.tracks[index].name;
+    cleanupTrackNodes(engine.tracks[index]);
+    engine.tracks.splice(index, 1);
+    engine.focusedIndex = Math.max(0, index - 1);
+    if (engine.armedIndex >= engine.tracks.length) {
+      engine.armedIndex = Math.max(0, engine.tracks.length - 1);
+    }
+    renderTracks();
+    announce(name + ' deleted');
+  }
+
+  function deleteLoopRegion(index) {
+    const track = engine.tracks[index];
+    if (!track.audioBuffer) {
+      announce('Track is empty');
+      return;
+    }
+    if (engine.inPoint === null || engine.outPoint === null) {
+      announce('Set In (S) and Out (E) markers first');
+      return;
+    }
+
+    const sr = track.audioBuffer.sampleRate;
+    const inSec = Math.min(engine.inPoint, engine.outPoint);
+    const outSec = Math.max(engine.inPoint, engine.outPoint);
+    const startSample = Math.floor(inSec * sr);
+    const endSample = Math.floor(outSec * sr);
+    const oldLen = track.audioBuffer.length;
+
+    if (startSample >= oldLen) {
+      announce('In/Out region is past the track audio end');
+      return;
+    }
+
+    const cutStart = Math.max(0, startSample);
+    const cutEnd = Math.min(oldLen, endSample);
+    const removedLen = cutEnd - cutStart;
+    const newLen = oldLen - removedLen;
+
+    if (newLen <= 0) {
+      track.audioBuffer = null;
+      renderTracks();
+      announce(track.name + ' audio deleted in section');
+      return;
+    }
+
+    const newBuffer = engine.ctx.createBuffer(track.audioBuffer.numberOfChannels, newLen, sr);
+    for (let ch = 0; ch < track.audioBuffer.numberOfChannels; ch++) {
+      const oldData = track.audioBuffer.getChannelData(ch);
+      const newData = newBuffer.getChannelData(ch);
+      // copy before section
+      for (let i = 0; i < cutStart; i++) newData[i] = oldData[i];
+      // copy after section
+      for (let i = cutEnd; i < oldLen; i++) newData[i - removedLen] = oldData[i];
+    }
+
+    track.audioBuffer = newBuffer;
+    renderTracks();
+    announce('Deleted region section from ' + track.name);
   }
 
   function detectSilenceEnd(buffer, threshold, minSilenceMs) {
@@ -1362,11 +1444,289 @@
     announce('BPM set to ' + engine.bpm);
   });
 
+  // Synthesizer, Web MIDI, and Online Sample Browser Integration
+  const synthState = {
+    preset: 'subBass',
+    octave: 3,
+    activeNotes: new Map(),
+    midiAccess: null,
+    isRecordingMidi: false
+  };
+
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const keyboardKeys = ['a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j'];
+
+  function noteToFrequency(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
+  }
+
+  function renderPianoKeyboard() {
+    const container = document.getElementById('pianoKeyboard');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const baseNote = (synthState.octave + 1) * 12; // e.g. Octave 3 => C4 (MIDI 60)
+    for (let i = 0; i < 12; i++) {
+      const noteNum = baseNote + i;
+      const noteName = noteNames[i % 12];
+      const isSharp = noteName.includes('#');
+      const keyEl = document.createElement('div');
+      keyEl.className = 'piano-key ' + (isSharp ? 'black-key' : 'white-key');
+      keyEl.dataset.note = noteNum;
+
+      const label = document.createElement('span');
+      label.className = 'key-label';
+      label.textContent = `${noteName} [${keyboardKeys[i].toUpperCase()}]`;
+      keyEl.appendChild(label);
+
+      keyEl.onmousedown = (e) => { e.preventDefault(); noteOn(noteNum); };
+      keyEl.onmouseup = () => noteOff(noteNum);
+      keyEl.onmouseleave = () => noteOff(noteNum);
+      keyEl.ontouchstart = (e) => { e.preventDefault(); noteOn(noteNum); };
+      keyEl.ontouchend = () => noteOff(noteNum);
+
+      container.appendChild(keyEl);
+    }
+  }
+
+  function noteOn(noteNumber) {
+    initAudio();
+    if (synthState.activeNotes.has(noteNumber)) return;
+
+    const freq = noteToFrequency(noteNumber);
+    const now = engine.ctx.currentTime;
+    const osc = engine.ctx.createOscillator();
+    const gain = engine.ctx.createGain();
+
+    switch (synthState.preset) {
+      case 'subBass':
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.8, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+        break;
+      case 'acidSynth':
+        osc.type = 'sawtooth';
+        const filter = engine.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, now);
+        filter.frequency.exponentialRampToValueAtTime(150, now + 0.4);
+        gain.gain.setValueAtTime(0.5, now);
+        osc.connect(filter);
+        filter.connect(gain);
+        break;
+      case 'techPluck':
+        osc.type = 'triangle';
+        gain.gain.setValueAtTime(0.9, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        break;
+      case 'stabs':
+        osc.type = 'square';
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        break;
+      default: // grooveLead
+        osc.type = 'sawtooth';
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
+        break;
+    }
+
+    osc.frequency.setValueAtTime(freq, now);
+    if (!synthState.preset.includes('acid')) osc.connect(gain);
+    gain.connect(engine.masterGain);
+
+    osc.start(now);
+    synthState.activeNotes.set(noteNumber, { osc, gain });
+
+    // Highlight key UI
+    const keyEl = document.querySelector(`.piano-key[data-note="${noteNumber}"]`);
+    if (keyEl) keyEl.classList.add('active');
+
+    const noteName = noteNames[noteNumber % 12];
+    announce(`Playing ${noteName}`);
+  }
+
+  function noteOff(noteNumber) {
+    if (!synthState.activeNotes.has(noteNumber)) return;
+    const { osc, gain } = synthState.activeNotes.get(noteNumber);
+    if (engine.ctx) {
+      const now = engine.ctx.currentTime;
+      gain.gain.linearRampToValueAtTime(0.001, now + 0.05);
+      osc.stop(now + 0.06);
+    }
+    synthState.activeNotes.delete(noteNumber);
+
+    const keyEl = document.querySelector(`.piano-key[data-note="${noteNumber}"]`);
+    if (keyEl) keyEl.classList.remove('active');
+  }
+
+  async function initWebMIDI() {
+    const badge = document.getElementById('midiStatusBadge');
+    if (!navigator.requestMIDIAccess) {
+      if (badge) badge.textContent = 'MIDI: Web MIDI unsupported in browser';
+      announce('Web MIDI is not supported in this browser.');
+      return;
+    }
+
+    try {
+      synthState.midiAccess = await navigator.requestMIDIAccess();
+      let connectedCount = 0;
+      for (let input of synthState.midiAccess.inputs.values()) {
+        input.onmidimessage = handleMIDIMessage;
+        connectedCount++;
+      }
+      if (badge) badge.textContent = connectedCount > 0 ? `MIDI: ${connectedCount} Device(s) Connected` : 'MIDI: Ready (Plug in USB Keyboard)';
+      announce(connectedCount > 0 ? `Connected ${connectedCount} MIDI input device.` : 'MIDI ready for connection.');
+    } catch (err) {
+      if (badge) badge.textContent = 'MIDI: Access Denied';
+      announce('MIDI access denied by browser.');
+    }
+  }
+
+  function handleMIDIMessage(e) {
+    const [status, note, velocity] = e.data;
+    const command = status >> 4;
+    if (command === 9 && velocity > 0) {
+      noteOn(note);
+    } else if (command === 8 || (command === 9 && velocity === 0)) {
+      noteOff(note);
+    }
+  }
+
+  // Synthesizer Audio Generator for Cloud Sample Library
+  window.loadOnlineSample = async function(sampleType) {
+    await initAudio();
+    const sampleTrackIndex = engine.focusedIndex;
+    const track = engine.tracks[sampleTrackIndex];
+    if (!track) {
+      announce('No track selected');
+      return;
+    }
+
+    const sr = engine.ctx.sampleRate;
+    let duration = 1.0;
+    let buffer = null;
+
+    if (sampleType === 'techKick') {
+      duration = 0.5;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        const freq = 130 * Math.exp(-t * 30) + 40;
+        data[i] = Math.sin(2 * Math.PI * freq * t) * Math.exp(-t * 12);
+      }
+    } else if (sampleType === 'snare') {
+      duration = 0.4;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        const noise = (Math.random() * 2 - 1) * Math.exp(-t * 15);
+        const tone = Math.sin(2 * Math.PI * 180 * t) * Math.exp(-t * 20);
+        data[i] = (noise * 0.7 + tone * 0.3);
+      }
+    } else if (sampleType === 'hihat') {
+      duration = 0.2;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 35);
+      }
+    } else if (sampleType === 'openHat') {
+      duration = 0.6;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 8);
+      }
+    } else if (sampleType === 'subBassLoop') {
+      duration = 2.0;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        const f = 55; // A1
+        data[i] = Math.sin(2 * Math.PI * f * t) * 0.8;
+      }
+    } else if (sampleType === 'techBassline') {
+      duration = 2.0;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        const f = (t % 0.5 < 0.25) ? 65.41 : 73.42; // C2 then D2
+        data[i] = (Math.sin(2 * Math.PI * f * t) + 0.3 * Math.sin(2 * Math.PI * f * 2 * t)) * 0.7;
+      }
+    } else if (sampleType === 'stabLoop') {
+      duration = 1.0;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        const chord = Math.sin(2 * Math.PI * 261.63 * t) + Math.sin(2 * Math.PI * 311.13 * t) + Math.sin(2 * Math.PI * 392.00 * t);
+        data[i] = chord * 0.3 * Math.exp(-t * 6);
+      }
+    } else { // impactFx
+      duration = 2.5;
+      buffer = engine.ctx.createBuffer(1, sr * duration, sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / sr;
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 2);
+      }
+    }
+
+    track.audioBuffer = buffer;
+    renderTracks();
+    announce(`Loaded sample ${sampleType} into ${track.name}`);
+  };
+
+  // Keyboard live playing listeners (A, W, S, E, D, F, T, G, Y, H, U, J)
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+    const keyIndex = keyboardKeys.indexOf(e.key.toLowerCase());
+    if (keyIndex !== -1) {
+      const baseNote = (synthState.octave + 1) * 12;
+      noteOn(baseNote + keyIndex);
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+    const keyIndex = keyboardKeys.indexOf(e.key.toLowerCase());
+    if (keyIndex !== -1) {
+      const baseNote = (synthState.octave + 1) * 12;
+      noteOff(baseNote + keyIndex);
+    }
+  });
   window.addEventListener('load', () => {
     createAudioTrack('Track 1');
     engine.armedIndex = 0;
     renderTracks();
     getAudioDevices();
     updateDisplays();
+
+    // Init Synthesizer & Web MIDI Controls
+    renderPianoKeyboard();
+    const presetSel = document.getElementById('synthPresetSelect');
+    if (presetSel) presetSel.onchange = (e) => { synthState.preset = e.target.value; announce(`Synth preset: ${synthState.preset}`); };
+
+    const octaveSel = document.getElementById('synthOctaveSelect');
+    if (octaveSel) octaveSel.onchange = (e) => {
+      synthState.octave = parseInt(e.target.value) || 3;
+      renderPianoKeyboard();
+      announce(`Keyboard octave set to ${synthState.octave}`);
+    };
+
+    const connectMidiBtn = document.getElementById('btnConnectMidi');
+    if (connectMidiBtn) connectMidiBtn.onclick = initWebMIDI;
+
+    initWebMIDI();
   });
 })();
