@@ -33,6 +33,72 @@
       </div>
     </section>
 
+    <section class="daw-section" aria-label="Web MIDI & Interactive Virtual Keyboard Synthesizer">
+      <div class="section-header">
+        <h2>🎹 Live MIDI Keyboard & Virtual Synth Engine</h2>
+        <span class="badge" id="midiStatusBadge">MIDI: Disconnected / Ready</span>
+      </div>
+      <div class="toolbar synth-toolbar">
+        <div class="btn-group">
+          <label for="synthPresetSelect"><strong>Preset:</strong></label>
+          <select id="synthPresetSelect" aria-label="Select Synth Instrument Preset">
+            <option value="subBass">Tech House Sub Bass</option>
+            <option value="acidSynth">Acid Bass Synth</option>
+            <option value="techPluck">Punchy Tech Pluck</option>
+            <option value="grooveLead">Groove Synth Lead</option>
+            <option value="stabs">Classic House Chord Stab</option>
+          </select>
+          <label for="synthOctaveSelect"><strong>Octave:</strong></label>
+          <select id="synthOctaveSelect" aria-label="Select Keyboard Octave">
+            <option value="2">Octave 2 (Sub/Bass)</option>
+            <option value="3" selected>Octave 3 (Bass/Mid)</option>
+            <option value="4">Octave 4 (Lead/Keys)</option>
+            <option value="5">Octave 5 (High Lead)</option>
+          </select>
+          <button id="btnConnectMidi" type="button" aria-label="Connect Web MIDI Keyboard">Connect Web MIDI Device</button>
+        </div>
+        <div class="btn-group">
+          <button id="btnRecordMidiTrack" type="button" aria-pressed="false" style="background: #dc2626; color: #fff;">Record Performance To Track</button>
+        </div>
+      </div>
+      <div id="pianoKeyboard" class="piano-keyboard" role="region" aria-label="Interactive Virtual Synth Keyboard">
+        <!-- Interactive keys rendered via JS -->
+      </div>
+      <p class="synth-help-text">💡 <strong>Computer Keyboard Play:</strong> Keys A, W, S, E, D, F, T, G, Y, H, U, J play notes live! Connect any USB MIDI Keyboard for automatic detection.</p>
+    </section>
+
+    <section class="daw-section" aria-label="Online Sample & Sound Bank Browser">
+      <div class="section-header">
+        <h2>🌐 Online Samples & Royalty-Free Instrument Browser</h2>
+        <span class="badge">Cloud Sound Library</span>
+      </div>
+      <div class="sample-browser-grid">
+        <div class="sample-category">
+          <h4>🥁 Drums & Percussion</h4>
+          <div class="sample-buttons">
+            <button type="button" onclick="loadOnlineSample('techKick')">Tech House Kick</button>
+            <button type="button" onclick="loadOnlineSample('snare')">Crisp Clap & Snare</button>
+            <button type="button" onclick="loadOnlineSample('hihat')">Shaker & Closed Hat</button>
+            <button type="button" onclick="loadOnlineSample('openHat')">Offbeat Open Hat</button>
+          </div>
+        </div>
+        <div class="sample-category">
+          <h4>🎸 Basslines & Grooves</h4>
+          <div class="sample-buttons">
+            <button type="button" onclick="loadOnlineSample('subBassLoop')">Rolling Sub Loop</button>
+            <button type="button" onclick="loadOnlineSample('techBassline')">Tech Groovin' Bass</button>
+          </div>
+        </div>
+        <div class="sample-category">
+          <h4>🔊 Synthesizers & FX</h4>
+          <div class="sample-buttons">
+            <button type="button" onclick="loadOnlineSample('stabLoop')">Tech House Synth Stab</button>
+            <button type="button" onclick="loadOnlineSample('impactFx')">Riser & Risey Drop FX</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="hardware-bar" aria-label="Project Settings">
       <div class="btn-group">
         <label for="bpmInput"><strong>BPM:</strong></label>
