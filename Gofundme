@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoFundMe</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      background-color: #f8f9fa;
+      color: #212529;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e9ecef;
+      border-radius: 16px;
+      max-width: 420px;
+      width: 100%;
+      padding: 28px 24px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+      text-align: center;
+    }
+    .brand {
+      font-size: 24px;
+      font-weight: 800;
+      color: #0d6efd;
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
+    }
+    .description {
+      font-size: 17px;
+      font-weight: 500;
+      color: #343a40;
+      line-height: 1.5;
+      margin-bottom: 24px;
+      background-color: #f1f3f5;
+      padding: 16px;
+      border-radius: 12px;
+    }
+    .details-box {
+      border: 1px dashed #ced4da;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .bank-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #6c757d;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .account-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #212529;
+      margin-bottom: 2px;
+    }
+    .bank-name {
+      font-size: 14px;
+      color: #495057;
+      margin-bottom: 12px;
+    }
+    .account-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 8px 12px;
+    }
+    .account-number {
+      font-family: monospace;
+      font-size: 20px;
+      font-weight: 800;
+      color: #111827;
+      letter-spacing: 1px;
+    }
+    .copy-btn {
+      background-color: #0d6efd;
+      color: #ffffff;
+      border: none;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .copy-btn.copied {
+      background-color: #198754;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 13px;
+      color: #6c757d;
+    }
+    .footer a {
+      color: #0d6efd;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="brand">GoFundMe</div>
+    
+    <p class="description">
+      I dey use iPhone 11 for 2026💔 help a girl out
+    </p>
+
+    <div class="details-box">
+      <div class="bank-title">Account Details</div>
+      <div class="account-name">Chundung Daniella Buba</div>
+      <div class="bank-name">Moniepoint</div>
+      
+      <div class="account-row">
+        <span class="account-number" id="accNum">9041482162</span>
+        <button class="copy-btn" id="copyBtn" onclick="copyNumber()">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Powered by <a href="https://wa.me/2349057813535?text=Hi%20Tech%20House,%20I%20want%20to%20build%20a%20website." target="_blank">Tech House Web Services</a>
+  </div>
+
+  <script>
+    function copyNumber() {
+      const num = document.getElementById("accNum").innerText.trim();
+      navigator.clipboard.writeText(num).then(() => {
+        const btn = document.getElementById("copyBtn");
+        btn.innerText = "Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => {
+          btn.innerText = "Copy";
+          btn.classList.remove("copied");
+        }, 2000);
+      });
+    }
+  </script>
+
+</body>
+</html                        >  
