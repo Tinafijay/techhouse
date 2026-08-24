@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Tech House — Video Editor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tech-house-editor-style.css">
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
 </head>
 <body>
 
 <a href="#main-content" class="skip-link">Skip to main content</a>
-<div id="live-region-polite"  aria-live="polite"    aria-atomic="true" class="sr-only"></div>
-<div id="live-region-urgent"  aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+<div id="live-region-polite" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+<div id="live-region-urgent" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
 
 <!-- ═══════════════════════════════════════════════════ APP SHELL -->
 <div class="app" role="application" aria-label="Tech House Video Editor">
@@ -28,34 +28,40 @@
 
     <input type="text" id="project-name" class="project-name-input"
            value="my-project" maxlength="60" spellcheck="false"
-           aria-label="Project name — used as the exported video filename"
+           aria-label="Project name — used as exported filename"
            placeholder="project-name">
 
     <div class="header-right">
       <button class="btn btn-sm" id="silence-btn" disabled
               aria-label="Auto-detect silence and cut gaps — keyboard Ctrl+D"
-              onclick="detectSilence()">🔇 Auto-Cut Silence</button>
+              onclick="detectSilence()">🔇 Auto-Cut Silence <kbd class="hdr-kbd">Ctrl+D</kbd></button>
       <button class="btn btn-sm btn-ghost" id="undo-btn" disabled
-              aria-label="Undo — keyboard Control Z" onclick="doUndo()">↩ Undo</button>
+              aria-label="Undo last edit — keyboard Ctrl+Z" onclick="doUndo()">↩ Undo <kbd class="hdr-kbd">Ctrl+Z</kbd></button>
+      <button class="btn btn-sm btn-ghost" id="redo-btn" disabled
+              aria-label="Redo last reverted edit — keyboard Ctrl+Y" onclick="doRedo()">↪ Redo <kbd class="hdr-kbd">Ctrl+Y</kbd></button>
 
-      <!-- Quick accessibility toggles (apply site-wide) -->
+      <!-- Quick accessibility & shortcut toggles -->
+      <button class="quick-toggle" id="quick-shortcuts"
+              aria-label="Open keyboard shortcuts cheat sheet" title="Keyboard Shortcuts (?)">
+        <span class="qt-icon" aria-hidden="true">⌨️</span>
+      </button>
       <button class="quick-toggle" id="quick-reduce-motion" role="switch" aria-checked="false"
-              aria-label="Toggle reduce motion" title="Reduce motion">
+              aria-label="Toggle reduce motion" title="Reduce motion (Alt+M)">
         <span class="qt-icon" aria-hidden="true">🌊</span>
       </button>
       <button class="quick-toggle" id="quick-high-contrast" role="switch" aria-checked="false"
-              aria-label="Toggle high contrast" title="High contrast">
+              aria-label="Toggle high contrast" title="High contrast (Alt+C)">
         <span class="qt-icon" aria-hidden="true">◐</span>
       </button>
       <button class="quick-toggle" id="quick-theme" role="switch" aria-checked="false"
-              aria-label="Toggle dark / light theme" title="Theme">
+              aria-label="Toggle dark / light theme" title="Theme (Alt+T)">
         <span class="qt-icon" aria-hidden="true">🌓</span>
       </button>
 
       <button class="btn btn-sm btn-ghost" id="open-settings-btn"
-              aria-label="Open settings" aria-haspopup="dialog">⚙ Settings</button>
+              aria-label="Open settings modal — keyboard Ctrl+," aria-haspopup="dialog">⚙ Settings</button>
 
-      <!-- Account menu (Google Gemini style) -->
+      <!-- Account menu -->
       <div class="auth-widget" id="auth-widget">
         <button class="auth-signin-btn" id="auth-signin-btn"
                 aria-label="Sign in to Tech House with Google">
@@ -80,12 +86,15 @@
           <button class="account-menu-item" id="account-settings-btn" role="menuitem">
             <span aria-hidden="true">⚙️</span> Settings
           </button>
+          <button class="account-menu-item" id="account-shortcuts-btn" role="menuitem">
+            <span aria-hidden="true">⌨️</span> Keyboard Shortcuts
+          </button>
           <button class="account-menu-item auth-logout-btn" id="auth-logout-btn" role="menuitem">
             <span aria-hidden="true">⏻</span> Log out
           </button>
         </div>
 
-        <!-- Google sign-in popup (hidden, shown when Sign In clicked) -->
+        <!-- Google sign-in popup -->
         <div class="auth-google-popup hidden" id="auth-google-popup">
           <button class="auth-google-inner" id="auth-google-btn"
                   aria-label="Continue with Google">
@@ -118,12 +127,7 @@
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('vid-uploader').click()}">
       <span class="upload-icon" aria-hidden="true">📽️</span>
       <h2>Drop or Click to Load Media</h2>
-      <p class="upload-hint">Video (MP4, MOV, WebM) or Audio (MP3, WAV, M4A, AAC) — any length</p>
-      <!--
-        Hybrid input: no restrictive accept="video/*" so iOS/Chrome shows the
-        Files app and audio library instead of only the camera. We validate the
-        chosen file type in JS instead of relying on the accept filter.
-      -->
+      <p class="upload-hint">Video (MP4, MOV, WebM, MKV) or Audio (MP3, WAV, M4A, AAC, OGG, FLAC)</p>
       <input type="file" id="vid-uploader"
              accept="video/*,audio/*,.mp4,.mov,.m4v,.webm,.mkv,.mp3,.wav,.m4a,.aac,.ogg,.flac"
              aria-label="Upload a video or audio file"
@@ -132,15 +136,17 @@
 
     <!-- Preview Stage -->
     <div class="preview-stage hidden" id="preview-stage" aria-label="Media preview with live overlays">
-      <video id="player" controls playsinline preload="metadata" aria-label="Video preview player" tabindex="0"></video>
+      <div id="video-container" class="video-container filter-normal">
+        <video id="player" controls playsinline preload="metadata" aria-label="Video preview player" tabindex="0"></video>
+      </div>
 
-      <!-- Audio-only preview (shown when an audio file is loaded) -->
+      <!-- Audio-only preview -->
       <div class="audio-only-stage hidden" id="audio-only-stage">
         <span class="audio-only-icon" aria-hidden="true">🎧</span>
         <div class="audio-only-name" id="audio-only-name">Audio project</div>
         <audio id="audio-player" controls preload="metadata"
                aria-label="Audio preview player" class="audio-only-player"></audio>
-        <p class="audio-only-hint">Audio mode — trim, layer sound, and let AI transcribe &amp; suggest edits.</p>
+        <p class="audio-only-hint">Audio mode — trim, layer sound effects, add background music &amp; AI transcription.</p>
       </div>
 
       <!-- Live logo overlay -->
@@ -151,12 +157,58 @@
       <!-- Illustration overlays (rendered by JS) -->
       <div id="illu-overlay-container" aria-hidden="true"></div>
 
+      <!-- Text overlays container -->
+      <div id="text-overlay-container" class="text-overlay-container" aria-hidden="true"></div>
+
       <!-- B-Roll overlay -->
       <div class="overlay-broll hidden" id="overlay-broll" aria-hidden="true">
         <video id="broll-player" muted playsinline></video>
       </div>
 
       <div class="preview-badge" id="preview-badge" aria-hidden="true">LIVE PREVIEW</div>
+      
+      <!-- Stage Control Bar (Speed, Filter, Fullscreen, Master Volume) -->
+      <div class="stage-controls-bar">
+        <div class="stage-control-group">
+          <label class="stage-ctrl-label" for="filter-select">Filter:</label>
+          <select id="filter-select" class="stage-ctrl-select" aria-label="Video filter / effect" onchange="setVideoFilter(this.value)">
+            <option value="normal">Normal (None)</option>
+            <option value="cyberpunk">Cyberpunk Neon</option>
+            <option value="vintage">Vintage Warm</option>
+            <option value="noir">Film Noir (B&amp;W)</option>
+            <option value="scifi">Cool Sci-Fi</option>
+            <option value="vivid">Vivid Pop</option>
+            <option value="golden">Golden Hour</option>
+            <option value="sepia">Sepia Retro</option>
+            <option value="vignette">Dramatic Vignette</option>
+          </select>
+        </div>
+
+        <div class="stage-control-group">
+          <label class="stage-ctrl-label" for="speed-select">Speed:</label>
+          <select id="speed-select" class="stage-ctrl-select" aria-label="Playback speed" onchange="setPlaybackSpeed(parseFloat(this.value))">
+            <option value="0.25">0.25x (Slow)</option>
+            <option value="0.5">0.5x</option>
+            <option value="0.75">0.75x</option>
+            <option value="1.0" selected>1.0x (Normal)</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2.0">2.0x (Fast)</option>
+          </select>
+        </div>
+
+        <div class="stage-control-group">
+          <label class="stage-ctrl-label" for="master-volume">Vol:</label>
+          <input type="range" id="master-volume" min="0" max="2" step="0.05" value="1"
+                 class="stage-vol-slider" aria-label="Master volume" oninput="setMasterVolume(parseFloat(this.value))">
+          <span id="master-vol-val" class="stage-ctrl-val">100%</span>
+        </div>
+
+        <button class="btn btn-sm btn-ghost" id="fullscreen-btn" onclick="toggleFullscreen()"
+                aria-label="Toggle fullscreen preview stage — keyboard F" title="Fullscreen (F)">
+          ⛶ Fullscreen <kbd aria-hidden="true">F</kbd>
+        </button>
+      </div>
     </div>
 
     <!-- Timecodes -->
@@ -166,7 +218,7 @@
         <div class="tc-value muted" id="tc-start" aria-label="In point time">00:00.0</div>
       </div>
       <div class="tc-block active">
-        <div class="tc-label">Current</div>
+        <div class="tc-label">Current Playhead</div>
         <div class="tc-value" id="tc-current" aria-live="off" aria-label="Current time">00:00.0</div>
       </div>
       <div class="tc-block">
@@ -178,37 +230,41 @@
     <!-- Trim + Cut Bar -->
     <div class="trim-bar-wrap">
       <div class="trim-label">
-        <span>Trim / Cut Range</span>
-        <span id="trim-duration-label">— no video —</span>
+        <span>Timeline Range &amp; Trimming</span>
+        <span id="trim-duration-label">— no media loaded —</span>
       </div>
       <div class="zoom-bar" id="zoom-bar" aria-hidden="true">
         <div class="zoom-window" id="zoom-window"></div>
       </div>
       <div class="segment-track" id="segment-track" aria-hidden="true"></div>
       <div class="trim-track" id="trim-track" tabindex="0" role="group" aria-label="Trim range handles">
-        <div class="trim-range"    id="trim-range"></div>
-        <div class="trim-head"     id="trim-head-s" tabindex="0" role="slider"
+        <div class="trim-range" id="trim-range"></div>
+        <div class="trim-head" id="trim-head-s" tabindex="0" role="slider"
              aria-label="In point handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
-        <div class="trim-head"     id="trim-head-e" tabindex="0" role="slider"
+        <div class="trim-head" id="trim-head-e" tabindex="0" role="slider"
              aria-label="Out point handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"
              style="border-color:var(--cyan)"></div>
         <div class="trim-playhead" id="trim-playhead"></div>
-        <!-- SFX markers are inserted here by JS -->
+        <!-- SFX / Text markers inserted by JS -->
         <div id="sfx-markers-layer" style="position:absolute;inset:0;pointer-events:none;"></div>
       </div>
       <div class="trim-actions">
-        <button class="btn btn-sm" id="btn-set-start" aria-label="Set In point — keyboard S">
-          <span aria-hidden="true">◄</span> Set In <kbd aria-hidden="true">S</kbd>
+        <button class="btn btn-sm" id="btn-set-start" aria-label="Set In point — keyboard S or I">
+          <span aria-hidden="true">◄</span> Set In <kbd aria-hidden="true">S / I</kbd>
         </button>
-        <button class="btn btn-sm" id="btn-set-end" aria-label="Set Out point — keyboard E">
-          Set Out <kbd aria-hidden="true">E</kbd> <span aria-hidden="true">►</span>
+        <button class="btn btn-sm" id="btn-set-end" aria-label="Set Out point — keyboard E or O">
+          Set Out <kbd aria-hidden="true">E / O</kbd> <span aria-hidden="true">►</span>
         </button>
-        <button class="btn btn-sm btn-danger" id="btn-cut" aria-label="Cut range — keyboard Backspace" onclick="cutSegment()">
-          ✂ Cut <kbd aria-hidden="true">⌫</kbd>
+        <button class="btn btn-sm btn-amber" id="btn-split" aria-label="Split clip at playhead — keyboard C or B" onclick="splitClipAtPlayhead()">
+          ✂ Split Clip <kbd aria-hidden="true">C</kbd>
+        </button>
+        <button class="btn btn-sm btn-danger" id="btn-cut" aria-label="Cut In-Out range — keyboard Backspace or Delete" onclick="cutSegment()">
+          🗑 Cut Range <kbd aria-hidden="true">⌫</kbd>
         </button>
         <button class="btn btn-sm" id="btn-zoom" onclick="cycleZoom()"
                 aria-label="Zoom timeline — keyboard Z">🔍 Zoom <kbd aria-hidden="true">Z</kbd></button>
-        <button class="btn btn-sm btn-ghost" id="btn-reset-trim" aria-label="Reset all trims and cuts">Reset All</button>
+        <button class="btn btn-sm btn-ghost" id="btn-reset-trim"
+                aria-label="Reset all trims and cuts — keyboard Ctrl+Shift+R" onclick="resetAllTrims()">Reset All</button>
       </div>
       <div id="cut-summary" class="cut-summary hidden" aria-live="polite"></div>
     </div>
@@ -220,7 +276,7 @@
       <section class="panel panel-layers" aria-labelledby="layers-heading">
         <div class="panel-title">
           <div class="dot" aria-hidden="true"></div>
-          <span id="layers-heading">Layer Stack</span>
+          <span id="layers-heading">Layer Stack &amp; Assets</span>
         </div>
 
         <!-- ─ Logo ─ -->
@@ -228,12 +284,12 @@
           <div class="stack-section-header">
             <div class="layer-item-row" id="layer-logo" tabindex="0" role="button"
                  onclick="triggerLayer('logo')"
-                 onkeydown="if(event.key==='Enter')triggerLayer('logo')"
-                 aria-label="Logo — watermark. Ctrl+L">
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();triggerLayer('logo')}"
+                 aria-label="Logo watermark — keyboard Ctrl+L">
               <span class="layer-icon">🖼️</span>
               <div class="layer-info">
-                <div class="layer-name">Logo <kbd aria-hidden="true">Ctrl L</kbd></div>
-                <div class="layer-desc" id="desc-logo">Permanent watermark</div>
+                <div class="layer-name">Watermark Logo <kbd aria-hidden="true">Ctrl L</kbd></div>
+                <div class="layer-desc" id="desc-logo">Permanent image watermark</div>
               </div>
             </div>
           </div>
@@ -249,10 +305,22 @@
           </div>
         </div>
 
+        <!-- ─ Text Overlays & Subtitles (NEW MULTI-STACK) ─ -->
+        <div class="stack-section">
+          <div class="stack-section-header">
+            <span class="stack-title">💬 Text Overlays &amp; Captions</span>
+            <button class="btn btn-sm" onclick="triggerAddTextOverlay()"
+                    aria-label="Add text overlay or caption — keyboard Ctrl+T">
+              + Add Text <kbd aria-hidden="true">Ctrl T</kbd>
+            </button>
+          </div>
+          <div id="text-stack" class="asset-stack" aria-label="Text overlays list"></div>
+        </div>
+
         <!-- ─ Illustrations (multi-stack) ─ -->
         <div class="stack-section" data-video-only>
           <div class="stack-section-header">
-            <span class="stack-title">🎨 Illustrations</span>
+            <span class="stack-title">🎨 Illustrations / Image Overlays</span>
             <button class="btn btn-sm" onclick="triggerAddIllu()"
                     aria-label="Add illustration overlay — keyboard Ctrl+I">
               + Add <kbd aria-hidden="true">Ctrl I</kbd>
@@ -264,20 +332,20 @@
         <!-- ─ BGM Playlist (multi-stack) ─ -->
         <div class="stack-section">
           <div class="stack-section-header">
-            <span class="stack-title">🎵 BGM Playlist</span>
+            <span class="stack-title">🎵 Background Music (BGM)</span>
             <button class="btn btn-sm" onclick="triggerAddBGM()"
                     aria-label="Add background music track — keyboard Ctrl+B">
               + Add <kbd aria-hidden="true">Ctrl B</kbd>
             </button>
           </div>
           <div id="bgm-stack" class="asset-stack" aria-label="Background music tracks"></div>
-          <p class="stack-hint">M = play/pause focused track · [ = −1s start · ] = +1s · Shift+[ ] = ±5s</p>
+          <p class="stack-hint">Shift+M = play/pause focused track · [ = −1s start · ] = +1s · Shift+[ ] = ±5s</p>
         </div>
 
         <!-- ─ SFX Stack (multi-stack) ─ -->
         <div class="stack-section">
           <div class="stack-section-header">
-            <span class="stack-title">🔊 Sound Effects</span>
+            <span class="stack-title">🔊 Sound Effects (SFX)</span>
             <button class="btn btn-sm" onclick="triggerAddSFX()"
                     aria-label="Add sound effect — keyboard Ctrl+F">
               + Add <kbd aria-hidden="true">Ctrl F</kbd>
@@ -290,14 +358,14 @@
         <!-- ─ B-Roll (multi-stack) ─ -->
         <div class="stack-section" data-video-only>
           <div class="stack-section-header">
-            <span class="stack-title">🎥 B-Roll Overlays</span>
+            <span class="stack-title">🎥 B-Roll Video Overlays</span>
             <button class="btn btn-sm" onclick="triggerAddBRoll()"
                     aria-label="Add B-Roll video — keyboard Ctrl+R">
               + Add <kbd aria-hidden="true">Ctrl R</kbd>
             </button>
           </div>
           <div id="broll-stack" class="asset-stack" aria-label="B-Roll video clips"></div>
-          <p class="stack-hint">B-Roll overlays the main video at the time you choose. Mute its audio to keep main audio.</p>
+          <p class="stack-hint">B-Roll overlays the main video at chosen time. Check "Mute audio" to keep main audio.</p>
         </div>
 
         <!-- ─ Audio Swap ─ -->
@@ -305,12 +373,12 @@
           <div class="stack-section-header">
             <div class="layer-item-row" id="layer-audioSwap" tabindex="0" role="button"
                  onclick="triggerLayer('audioSwap')"
-                 onkeydown="if(event.key==='Enter')triggerLayer('audioSwap')"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();triggerLayer('audioSwap')}"
                  aria-label="Audio Swap — replaces original audio. Ctrl+U">
               <span class="layer-icon">🔄</span>
               <div class="layer-info">
                 <div class="layer-name">Audio Swap <kbd aria-hidden="true">Ctrl U</kbd></div>
-                <div class="layer-desc" id="desc-audioSwap">Replaces original audio</div>
+                <div class="layer-desc" id="desc-audioSwap">Replaces original audio track</div>
               </div>
             </div>
           </div>
@@ -318,84 +386,93 @@
             <label class="sub-label" for="noise-filter-select">Audio Processing</label>
             <select id="noise-filter-select" aria-label="Audio processing mode" onchange="setAudioProcessing(this.value)">
               <option value="none">Keep Original Audio</option>
-              <option value="swap">Use Swap File</option>
-              <option value="noise">Noise Removal</option>
-              <option value="mute">Mute Original</option>
+              <option value="swap">Use Swap Audio File</option>
+              <option value="noise">Noise Removal (Denoise)</option>
+              <option value="mute">Mute Main Audio</option>
             </select>
-            <!-- Noise strength slider — only visible when noise mode active -->
             <div id="noise-strength-row" style="display:none;margin-top:6px;">
               <label class="sub-label" for="noise-strength">
                 Noise Removal Strength: <span id="noise-strength-val">3</span>
               </label>
               <input type="range" id="noise-strength" min="1" max="10" value="3" step="1"
                      class="stack-vol-slider"
-                     aria-label="Noise removal strength — 1 is very gentle, 10 is aggressive"
+                     aria-label="Noise removal strength — 1 is gentle, 10 is aggressive"
                      oninput="document.getElementById('noise-strength-val').textContent=this.value">
               <span class="sub-label" style="font-style:italic;color:var(--text-mute);font-size:0.58rem;">
-                1 = very gentle · 5 = balanced · 10 = aggressive (may sound robotic)
+                1 = subtle denoise · 5 = balanced · 10 = aggressive
               </span>
             </div>
             <span id="audio-processing-note" class="sub-label" style="font-style:italic;color:var(--text-mute);font-size:0.58rem;margin-top:2px;">
-              Keep original audio unless you need to swap or remove noise
+              Keep original audio unless swapping or removing background noise
             </span>
           </div>
         </div>
 
-        <!-- Hidden file inputs (visually hidden but focusable-safe on iOS) -->
-        <input type="file" id="layer-uploader"   class="visually-hidden-input" aria-label="Layer file input">
-        <input type="file" id="illu-uploader"    class="visually-hidden-input" accept="image/*,.png,.jpg,.jpeg,.gif,.webp" aria-label="Illustration file">
-        <input type="file" id="bgm-uploader"     class="visually-hidden-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" aria-label="BGM file">
-        <input type="file" id="sfx-uploader"     class="visually-hidden-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" aria-label="SFX file">
-        <input type="file" id="broll-uploader"   class="visually-hidden-input" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" aria-label="B-Roll file">
+        <!-- Hidden file inputs -->
+        <input type="file" id="layer-uploader" class="visually-hidden-input" aria-label="Layer file input">
+        <input type="file" id="illu-uploader" class="visually-hidden-input" accept="image/*,.png,.jpg,.jpeg,.gif,.webp" aria-label="Illustration file">
+        <input type="file" id="bgm-uploader" class="visually-hidden-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" aria-label="BGM file">
+        <input type="file" id="sfx-uploader" class="visually-hidden-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" aria-label="SFX file">
+        <input type="file" id="broll-uploader" class="visually-hidden-input" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" aria-label="B-Roll file">
       </section>
 
       <!-- RIGHT: Output Settings -->
       <section class="panel" aria-labelledby="settings-heading">
         <div class="panel-title">
           <div class="dot" aria-hidden="true"></div>
-          <span id="settings-heading">Output & AI Settings</span>
+          <span id="settings-heading">Export &amp; AI Settings</span>
         </div>
 
         <div class="setting-row">
-          <div class="setting-label" id="lbl-aspect">Aspect Ratio & Mode</div>
-          <div class="seg-control" role="group" aria-labelledby="lbl-aspect" style="flex-wrap:wrap;">
+          <div class="setting-label" id="lbl-format">Export Format &amp; Quality</div>
+          <div class="seg-control" role="group" aria-labelledby="lbl-format">
+            <button class="seg-btn active" id="seg-fmt-mp4" data-fmt="mp4" aria-pressed="true" onclick="setExportFormat('mp4')">MP4 Video</button>
+            <button class="seg-btn" id="seg-fmt-webm" data-fmt="webm" aria-pressed="false" onclick="setExportFormat('webm')">WebM Video</button>
+            <button class="seg-btn" id="seg-fmt-gif" data-fmt="gif" aria-pressed="false" onclick="setExportFormat('gif')">Animated GIF</button>
+            <button class="seg-btn" id="seg-fmt-mp3" data-fmt="mp3" aria-pressed="false" onclick="setExportFormat('mp3')">MP3 Audio</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label" id="lbl-res">Resolution &amp; Aspect Ratio</div>
+          <div class="seg-control" role="group" aria-labelledby="lbl-res" style="flex-wrap:wrap;">
             <button class="seg-btn active" id="seg-landscape" data-val="landscape"
-                    aria-pressed="true" onclick="setAspect('landscape')">16:9</button>
+                    aria-pressed="true" onclick="setAspect('landscape')">16:9 Landscape</button>
             <button class="seg-btn" id="seg-portrait" data-val="portrait"
-                    aria-pressed="false" onclick="setAspect('portrait')">9:16</button>
+                    aria-pressed="false" onclick="setAspect('portrait')">9:16 Portrait</button>
             <button class="seg-btn" id="seg-blur-bg" data-val="blur-bg"
                     aria-pressed="false" onclick="setAspect('blur-bg')"
-                    title="Portrait video on blurred landscape background">🌅 Blur BG</button>
+                    title="Portrait video on blurred background">🌅 Blur BG</button>
           </div>
           <div class="aspect-note" id="aspect-note"></div>
         </div>
 
         <div class="setting-row">
-          <div class="setting-label" id="lbl-speed">Encode Speed</div>
+          <div class="setting-label" id="lbl-speed">Encoder Speed</div>
           <div class="seg-control" role="group" aria-labelledby="lbl-speed">
             <button class="seg-btn active" id="seg-fast" data-preset="ultrafast"
                     aria-pressed="true" onclick="setPreset('ultrafast')">Fast</button>
             <button class="seg-btn" id="seg-balanced" data-preset="veryfast"
                     aria-pressed="false" onclick="setPreset('veryfast')">Balanced</button>
             <button class="seg-btn" id="seg-hq" data-preset="medium"
-                    aria-pressed="false" onclick="setPreset('medium')">HQ</button>
+                    aria-pressed="false" onclick="setPreset('medium')">High Quality</button>
           </div>
         </div>
 
         <div class="setting-row">
-          <div class="setting-label">Quality of Life</div>
+          <div class="setting-label">Timeline Quality</div>
           <label class="toggle-row" aria-label="Toggle audio scrubbing">
             <input type="checkbox" id="scrub-toggle" checked aria-label="Enable audio scrubbing">
-            <span class="toggle-label">Audio Scrubbing on seek</span>
+            <span class="toggle-label">Audio Scrubbing on playhead seek</span>
           </label>
           <label class="toggle-row" aria-label="Toggle crossfade at cuts">
             <input type="checkbox" id="crossfade-toggle" checked aria-label="Enable crossfade at cut points">
-            <span class="toggle-label">Crossfade at cut points (0.1s)</span>
+            <span class="toggle-label">Crossfade audio transitions (0.1s)</span>
           </label>
         </div>
 
         <div class="setting-row">
-          <div class="setting-label">Silence Detection</div>
+          <div class="setting-label">Silence Detection Settings</div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             <label class="sub-label" for="silence-threshold">Threshold dB</label>
             <input type="number" id="silence-threshold" value="-40" min="-60" max="-10" step="5"
@@ -407,39 +484,39 @@
         </div>
 
         <div class="setting-row summary-row" aria-labelledby="project-tools-heading">
-          <div class="setting-label" id="project-tools-heading">Project</div>
+          <div class="setting-label" id="project-tools-heading">Project Persistence</div>
           <p class="settings-help" style="margin-top:0;">
-            API key, AI model, and accessibility options now live in
+            Save project state locally in browser or adjust API key in
             <button type="button" class="link-btn" id="open-settings-inline">⚙ Settings</button>.
           </p>
           <div class="setting-actions">
-            <button class="btn btn-sm" id="save-project-btn">Save Project</button>
-            <button class="btn btn-sm btn-ghost" id="load-project-btn">Restore Saved</button>
+            <button class="btn btn-sm" id="save-project-btn" aria-label="Save project — keyboard Ctrl+S">💾 Save <kbd aria-hidden="true">Ctrl+S</kbd></button>
+            <button class="btn btn-sm btn-ghost" id="load-project-btn" aria-label="Restore saved project — keyboard Ctrl+Shift+O">📂 Restore</button>
           </div>
           <div id="project-save-status" class="inline-status" aria-live="polite">
-            Project settings are stored locally in this browser.
+            Project settings automatically saved locally.
           </div>
         </div>
 
         <div class="setting-row" aria-labelledby="ai-assist-heading">
-          <div class="setting-label" id="ai-assist-heading">AI Assistant</div>
+          <div class="setting-label" id="ai-assist-heading">AI Editing Assistant</div>
 
-          <label class="sub-label" for="ai-transcript">Transcript (auto-filled by AI)</label>
+          <label class="sub-label" for="ai-transcript">Transcript (AI auto-generated)</label>
           <textarea id="ai-transcript" class="setting-textarea setting-textarea-sm"
-                    placeholder="Press Analyze and the AI transcribes your audio here. You can also paste your own notes."
+                    placeholder="Click Analyze &amp; Transcribe and Gemini will transcribe your media here."
                     aria-label="Transcript — auto-filled by AI, editable"></textarea>
 
           <!-- Chat window -->
           <div class="ai-chat" role="group" aria-labelledby="ai-assist-heading">
             <div id="ai-chat-log" class="ai-chat-log" role="log" aria-live="polite" aria-label="AI assistant conversation">
               <div class="ai-msg ai-msg-bot">
-                <p>Load a video or audio file, then press <strong>Analyze</strong>. I'll transcribe it, summarize it, and suggest edits — then you can just tell me what to change.</p>
+                <p>Load media, then press <strong>Analyze</strong>. I'll transcribe, summarize, and edit your timeline on command.</p>
               </div>
             </div>
             <div class="ai-chat-input-row">
               <label class="sr-only" for="ai-chat-input">Message the AI assistant</label>
               <textarea id="ai-chat-input" class="ai-chat-input" rows="1"
-                        placeholder="e.g. Place illustration 1 at 0:12, or make the intro tighter"
+                        placeholder="e.g. Trim intro to 3s, add illustration at 10s, or filter cyberpunk"
                         aria-label="Message the AI assistant" disabled></textarea>
               <button class="btn btn-sm" id="ai-send-btn" aria-label="Send message to AI" disabled>Send</button>
             </div>
@@ -448,17 +525,15 @@
               <button class="btn btn-sm btn-ghost" id="ai-clear-chat-btn">Clear Chat</button>
             </div>
           </div>
-
-          <div class="settings-help">
-            Works for video and audio. Analyze transcribes and reviews your project; after that, chat to make changes — the AI applies them for you. Files over 10 minutes ask before sending audio.
-          </div>
         </div>
 
         <div class="setting-row summary-row">
-          <div class="setting-label">Summary</div>
+          <div class="setting-label">Project Summary</div>
           <div class="summary-body">
             <div id="summary-mode">Mode: —</div>
-            <div id="summary-aspect">Format: 16:9 Landscape</div>
+            <div id="summary-aspect">Format: 16:9 Landscape (MP4)</div>
+            <div id="summary-filter">Filter: Normal</div>
+            <div id="summary-speed">Speed: 1.0x</div>
             <div id="summary-layers">Layers: none</div>
             <div id="summary-trim">Trim: full video</div>
             <div id="summary-cuts">Cuts: none</div>
@@ -484,39 +559,30 @@
     <div id="download-result" class="download-result hidden">
       <span class="dl-label" aria-hidden="true">✓ Export complete</span>
       <a id="download-link" href="#" download="tech-house-export.mp4"
-         class="dl-btn" aria-label="Download exported video file">⬇ Download Video</a>
+         class="dl-btn" aria-label="Download exported file">⬇ Download File</a>
     </div>
 
     <!-- Export button -->
     <button class="export-btn" id="export-btn" disabled
-            aria-label="Export video — keyboard shortcut Control X"
+            aria-label="Export video or audio file — keyboard shortcut Ctrl+X"
             onclick="runExport()">
-      🚀 &nbsp; EXPORT VIDEO
+      🚀 &nbsp; EXPORT MEDIA <kbd class="hdr-kbd">Ctrl+X</kbd>
     </button>
 
-    <!-- Shortcuts reference -->
-    <div class="shortcuts" role="complementary" aria-label="Keyboard shortcuts">
-      <span class="sc-item"><kbd>S</kbd> Set In</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>E</kbd> Set Out</span><span class="sc-sep">·</span>
+    <!-- Quick Shortcuts Bar Footer -->
+    <div class="shortcuts" role="complementary" aria-label="Quick Keyboard shortcuts">
       <span class="sc-item"><kbd>Space</kbd> Play/Pause</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>←</kbd><kbd>→</kbd> ±10s</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Shift</kbd><kbd>←</kbd><kbd>→</kbd> ±1s</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>⌫</kbd> Cut</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Z</kbd> Zoom</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>S</kbd>/<kbd>I</kbd> In Point</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>E</kbd>/<kbd>O</kbd> Out Point</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>C</kbd> Split</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>⌫</kbd>/<kbd>Del</kbd> Cut</span><span class="sc-sep">·</span>
       <span class="sc-item"><kbd>Ctrl</kbd><kbd>Z</kbd> Undo</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>D</kbd> Auto-Cut Silence</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>L</kbd> Logo</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>I</kbd> +Illus</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>B</kbd> +BGM</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>F</kbd> +SFX</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>R</kbd> +B-Roll</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>U</kbd> Swap</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>M</kbd> Play BGM</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>[</kbd><kbd>]</kbd> BGM ±1s</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Shift</kbd><kbd>[</kbd><kbd>]</kbd> BGM ±5s</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Shift</kbd><kbd>Ctrl</kbd><kbd>←/→</kbd> Nudge SFX 0.1s</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>V</kbd> Status</span><span class="sc-sep">·</span>
-      <span class="sc-item"><kbd>Ctrl</kbd><kbd>X</kbd> Export</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>Y</kbd> Redo</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>S</kbd> Save</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>D</kbd> Silence</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>T</kbd> Text</span><span class="sc-sep">·</span>
+      <span class="sc-item"><kbd>Ctrl</kbd><kbd>X</kbd> Export</span><span class="sc-sep">·</span>
+      <button class="link-btn" id="open-shortcuts-footer" style="font-size:0.72rem;margin-left:4px;">⌨️ View All Shortcuts (?)</button>
     </div>
 
   </main>
@@ -528,51 +594,71 @@
 <div class="modal-overlay hidden" id="settings-overlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" id="settings-modal">
     <div class="modal-header">
-      <h2 id="settings-modal-title">Settings</h2>
+      <h2 id="settings-modal-title">Editor Settings</h2>
       <button class="modal-close" id="settings-close-btn" aria-label="Close settings">✕</button>
     </div>
     <div class="modal-body">
       <section class="modal-section" aria-labelledby="settings-ai-heading">
-        <h3 id="settings-ai-heading">AI</h3>
+        <h3 id="settings-ai-heading">Google Gemini AI</h3>
         <label class="sub-label" for="gemini-api-key">Gemini API Key</label>
         <input type="password" id="gemini-api-key" class="text-input"
                autocomplete="off" spellcheck="false"
                placeholder="Paste your Gemini API key"
                aria-label="Gemini API key">
-        <div class="setting-actions">
+        <div class="setting-actions" style="margin-top:6px;">
           <button class="btn btn-sm" id="save-gemini-key">Save Key</button>
           <button class="btn btn-sm" id="test-gemini-key">Test Key</button>
           <button class="btn btn-sm btn-ghost" id="clear-gemini-key">Clear</button>
         </div>
-        <div id="gemini-auth-status" class="inline-status" aria-live="polite">
+        <div id="gemini-auth-status" class="inline-status" style="margin-top:8px;" aria-live="polite">
           Gemini key not configured yet.
         </div>
-        <label class="sub-label" for="gemini-model">Gemini Model</label>
+        <label class="sub-label" for="gemini-model" style="margin-top:10px;display:block;">Gemini Model</label>
         <select id="gemini-model" class="text-input" aria-label="Gemini model">
           <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
         </select>
       </section>
 
       <section class="modal-section" aria-labelledby="settings-a11y-heading">
-        <h3 id="settings-a11y-heading">Accessibility &amp; Behaviour</h3>
+        <h3 id="settings-a11y-heading">Accessibility &amp; Preferences</h3>
         <div class="setting-checkbox-grid" role="group" aria-label="Editor preferences">
           <label class="toggle-row">
             <input type="checkbox" id="autosave-project" checked aria-label="Automatically save project settings">
-            <span class="toggle-label">Autosave project settings</span>
+            <span class="toggle-label">Autosave project state</span>
           </label>
           <label class="toggle-row">
             <input type="checkbox" id="reduce-motion-toggle" aria-label="Reduce motion and animation">
-            <span class="toggle-label">Reduce motion</span>
+            <span class="toggle-label">Reduce motion (Alt+M)</span>
           </label>
           <label class="toggle-row">
             <input type="checkbox" id="high-contrast-toggle" aria-label="Increase contrast in the editor">
-            <span class="toggle-label">High contrast mode</span>
+            <span class="toggle-label">High contrast mode (Alt+C)</span>
           </label>
         </div>
       </section>
     </div>
     <div class="modal-footer">
       <button class="btn btn-sm" id="settings-done-btn">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ KEYBOARD SHORTCUTS CHEAT SHEET MODAL -->
+<div class="modal-overlay hidden" id="shortcuts-overlay">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title" id="shortcuts-modal">
+    <div class="modal-header">
+      <h2 id="shortcuts-modal-title">⌨️ Keyboard Shortcuts Cheat Sheet</h2>
+      <button class="modal-close" id="shortcuts-close-btn" aria-label="Close shortcuts dialog">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="search" id="shortcuts-search" class="text-input" placeholder="Search shortcuts (e.g. cut, zoom, export, BGM)..." aria-label="Search keyboard shortcuts">
+      
+      <div id="shortcuts-grid" class="shortcuts-grid">
+        <!-- Filled dynamically by JS -->
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-sm" id="shortcuts-done-btn">Close (Esc)</button>
     </div>
   </div>
 </div>
