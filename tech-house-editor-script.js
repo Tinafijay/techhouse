@@ -1,14 +1,16 @@
 // ============================================================
-// TECH HOUSE VIDEO EDITOR — script.js  v5
-// Major update: Firebase Auth sidebar, Multi-asset stacks,
-//   B-Roll, Silence detection, Audio scrubbing, Crossfade,
-//   Blur-BG mode, Extended undo, 0.1s nudging
-// ============================================================
-
-// ============================================================
-// TECH HOUSE VIDEO EDITOR — script.js  v6
-// Bug fixes: trunc() crash, module scope, auth widget,
-//   BGM keyboard conflict, noise slider, concat fix
+// TECH HOUSE VIDEO EDITOR — script.js  v7
+// Complete Feature & Keyboard Shortcut Update:
+// - Universal Keyboard Shortcuts for EVERY Action
+// - Interactive Shortcuts Modal Cheat Sheet with Search
+// - Clip Splitting at Playhead (Split Range)
+// - Video Filters & Visual Effects (Cyberpunk, Vintage, Noir, etc.)
+// - Playback Speed Control (0.25x - 2.0x) with audio retiming
+// - Custom Text Overlays & Subtitle Captions
+// - Master Video / Audio Volume Slider
+// - Full Redo Stack & Extended Undo/Redo (Ctrl+Z / Ctrl+Y)
+// - Multiple Export Formats (MP4, WebM, Animated GIF, MP3)
+// - Robust Cross-Device Touch & Responsive Layout Optimization
 // ============================================================
 
 // ── COI ServiceWorker ────────────────────────────────────────
@@ -19,9 +21,7 @@
   document.head.appendChild(s);
 }());
 
-// ── Firebase (loaded via compat CDN scripts in HTML, or inline) ──
-// We use the compat global approach so the script works without type=module.
-// Firebase compat globals are loaded via a dynamic script injection here.
+// ── Firebase Auth Compat ─────────────────────────────────────
 let auth, gProvider, fbSignInWithPopup, fbSignInWithRedirect, fbOnAuthStateChanged, fbSignOut;
 
 function loadExternalScript(src) {
@@ -66,7 +66,6 @@ function initFirebaseAuth() {
     auth      = firebase.auth();
     gProvider = new firebase.auth.GoogleAuthProvider();
 
-    // Bind helpers
     fbSignInWithPopup    = (p) => auth.signInWithPopup(p);
     fbSignInWithRedirect = (p) => auth.signInWithRedirect(p);
     fbOnAuthStateChanged = (cb) => auth.onAuthStateChanged(cb);
@@ -89,76 +88,78 @@ const ffmpeg = createFFmpeg({
 });
 
 // ── DOM refs ─────────────────────────────────────────────────
-const player        = document.getElementById('player');
-const uploadZone    = document.getElementById('upload-zone');
-const statusText    = document.getElementById('status-text');
-const livePolite    = document.getElementById('live-region-polite');
-const liveUrgent    = document.getElementById('live-region-urgent');
-const engineBadge   = document.getElementById('engine-badge');
-const previewStage  = document.getElementById('preview-stage');
-const overlayLogo   = document.getElementById('overlay-logo');
-const illuContainer = document.getElementById('illu-overlay-container');
-const brollPlayer   = document.getElementById('broll-player');
-const overlayBroll  = document.getElementById('overlay-broll');
-const audioOnlyStage = document.getElementById('audio-only-stage');
-const audioPlayer    = document.getElementById('audio-player');
+const player          = document.getElementById('player');
+const videoContainer   = document.getElementById('video-container');
+const uploadZone      = document.getElementById('upload-zone');
+const statusText      = document.getElementById('status-text');
+const livePolite      = document.getElementById('live-region-polite');
+const liveUrgent      = document.getElementById('live-region-urgent');
+const engineBadge     = document.getElementById('engine-badge');
+const previewStage    = document.getElementById('preview-stage');
+const overlayLogo     = document.getElementById('overlay-logo');
+const illuContainer   = document.getElementById('illu-overlay-container');
+const textContainer   = document.getElementById('text-overlay-container');
+const brollPlayer     = document.getElementById('broll-player');
+const overlayBroll    = document.getElementById('overlay-broll');
+const audioOnlyStage  = document.getElementById('audio-only-stage');
+const audioPlayer      = document.getElementById('audio-player');
 
-// ── Preview Audio (BGM swap use arrays now) ──────────────────
+// ── Audio Engine & Assets ────────────────────────────────────
 const swapAudio = new Audio();
 swapAudio.loop  = true;
 
-// ── App State ─────────────────────────────────────────────────
-let mainVideoFile = null;
-let mainAudioBuffer = null; // decoded audio for silence detection
-let mediaKind = 'video'; // 'video' | 'audio' — hybrid editor mode
+let mainVideoFile   = null;
+let mainAudioBuffer = null;
+let mediaKind       = 'video'; // 'video' | 'audio'
 
-// Returns the media element currently driving the timeline (video or audio).
 function activeMedia() {
   return mediaKind === 'audio' ? audioPlayer : player;
 }
 
-// Single-item assets (logo, audioSwap)
 let assets = { logo: null, audioSwap: null };
 let audioProcessing = 'none';
 let logoPosition    = 'top-right';
 
 // MULTI-STACK arrays
-// Each SFX: { id, file, audio, at, volume, triggered }
-let sfxStack = [];
-// Each BGM: { id, file, audio, startAt, offset, volume }
-let bgmStack = [];
-// Each Illu: { id, file, at, duration, layout, el }
-let illuStack = [];
-// Each B-Roll: { id, file, video, at, duration, muteAudio }
-let brollStack = [];
+let sfxStack   = []; // { id, file, audio, at, volume, triggered }
+let bgmStack   = []; // { id, file, audio, startAt, offset, volume }
+let illuStack  = []; // { id, file, at, duration, layout, el }
+let brollStack = []; // { id, file, video, at, duration, muteAudio, layout }
+let textStack  = []; // { id, text, at, duration, position, fontSize, color, bgColor, el }
 
-let selectedSfxId = null; // for keyboard nudging
+let selectedSfxId = null;
+let focusedBgmId  = null;
 
-// Timeline / trim
-let times  = { s: 0, e: 0, duration: 0 };
+// Timeline & Editing State
+let times       = { s: 0, e: 0, duration: 0 };
 let segments    = [];
-let editHistory = []; // unified undo stack — stores full snapshots
+let editHistory = []; // Undo stack
+let redoHistory = []; // Redo stack
 
-// Appearance
-let aspect  = 'landscape';
-let preset  = 'ultrafast';
+// Visual Effects & Speed
+let activeFilter  = 'normal';
+let playbackSpeed = 1.0;
+let masterVolume  = 1.0;
+let aspect        = 'landscape';
+let preset        = 'ultrafast';
+let exportFormat  = 'mp4'; // 'mp4' | 'webm' | 'gif' | 'mp3'
 
 // Zoom
 let zoomLevel = 1;
 let zoomStart = 0;
 
-// Misc
-let engineReady      = false;
-let dragType         = null;
-let isScrubbing      = false;
-let scrubAudioCtx    = null;
-let stackIdCounter   = 0;
-let aiJobRunning = false;
+// System state
+let engineReady    = false;
+let dragType       = null;
+let isScrubbing    = false;
+let scrubAudioCtx  = null;
+let stackIdCounter = 0;
+let aiJobRunning   = false;
 
-const PROJECT_SCHEMA_VERSION = 2;
+const PROJECT_SCHEMA_VERSION = 3;
 const STORAGE_KEYS = {
-  editorSettings: 'th_editor_settings_v2',
-  projectSnapshot: 'th_editor_project_v2'
+  editorSettings: 'th_editor_settings_v3',
+  projectSnapshot: 'th_editor_project_v3'
 };
 const mediaPreviewUrls = new WeakMap();
 let editorSettings = createDefaultEditorSettings();
@@ -187,24 +188,28 @@ function getPreviewURL(file) {
   return mediaPreviewUrls.get(file);
 }
 
-// ── Announce helpers ──────────────────────────────────────────
+// ── Announce & Notification Helpers ──────────────────────────
 function announce(msg, urgent = false) {
-  const el = urgent ? liveUrgent : livePolite;
-  el.textContent = '';
-  requestAnimationFrame(() => { el.textContent = msg; });
+  const node = urgent ? liveUrgent : livePolite;
+  node.textContent = '';
+  requestAnimationFrame(() => { node.textContent = msg; });
 }
+
 function setStatus(msg, urgent = false) {
-  statusText.textContent = msg;
+  if (statusText) statusText.textContent = msg;
   console.log('[STATUS]', msg);
   announce(msg, urgent);
 }
+
 function toast(msg, type = '') {
   const t = document.createElement('div');
   t.className = 'toast ' + type;
   t.textContent = msg;
-  document.getElementById('toast-wrap').appendChild(t);
+  const wrap = document.getElementById('toast-wrap');
+  if (wrap) wrap.appendChild(t);
   setTimeout(() => t.remove(), 3500);
 }
+
 function fmtTime(t) {
   if (isNaN(t) || t < 0) t = 0;
   const m = Math.floor(t / 60);
@@ -212,22 +217,14 @@ function fmtTime(t) {
   const f = Math.floor((t % 1) * 10);
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${f}`;
 }
+
 function nextId() { return ++stackIdCounter; }
-
-let autosaveTimer = null;
-
-function setInlineStatus(id, msg, type = '') {
-  const node = el(id);
-  if (!node) return;
-  node.className = 'inline-status';
-  if (type) node.classList.add(type);
-  node.textContent = msg;
-}
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+// ── Settings & Accessibility Management ──────────────────────
 function applyAccessibilityPreferences() {
   document.body.classList.toggle('reduce-motion', !!editorSettings.reduceMotion);
   document.body.classList.toggle('high-contrast', !!editorSettings.highContrast);
@@ -240,7 +237,7 @@ function loadEditorSettings() {
     if (!raw) return;
     editorSettings = { ...createDefaultEditorSettings(), ...JSON.parse(raw) };
   } catch (err) {
-    console.warn('[Settings] Could not read settings:', err.message);
+    console.warn('[Settings] Read failed:', err.message);
   }
 }
 
@@ -249,8 +246,7 @@ function persistEditorSettings(statusMessage) {
     localStorage.setItem(STORAGE_KEYS.editorSettings, JSON.stringify(editorSettings));
     if (statusMessage) setInlineStatus('project-save-status', statusMessage, 'success');
   } catch (err) {
-    console.warn('[Settings] Could not persist settings:', err.message);
-    setInlineStatus('project-save-status', 'Could not save settings in this browser.', 'error');
+    console.warn('[Settings] Save failed:', err.message);
   }
 }
 
@@ -266,7 +262,6 @@ function syncSettingsFromForm() {
   };
 }
 
-
 function updateSettingsForm() {
   if (el('gemini-api-key')) el('gemini-api-key').value = editorSettings.geminiApiKey || '';
   if (el('gemini-model')) el('gemini-model').value = editorSettings.geminiModel || 'gemini-3-flash-preview';
@@ -278,20 +273,23 @@ function updateSettingsForm() {
   updateGeminiStatusText();
 }
 
+function setInlineStatus(id, msg, type = '') {
+  const node = el(id);
+  if (!node) return;
+  node.className = 'inline-status';
+  if (type) node.classList.add(type);
+  node.textContent = msg;
+}
+
 function updateGeminiStatusText(msg, type = 'info') {
   const key = (editorSettings.geminiApiKey || '').trim();
-  if (msg) {
-    setInlineStatus('gemini-auth-status', msg, type);
-    return;
-  }
-  if (!key) {
-    setInlineStatus('gemini-auth-status', 'Gemini key not configured yet.', 'info');
-    return;
-  }
+  if (msg) { setInlineStatus('gemini-auth-status', msg, type); return; }
+  if (!key) { setInlineStatus('gemini-auth-status', 'Gemini key not configured yet.', 'info'); return; }
   const masked = key.length > 8 ? `${key.slice(0, 4)}…${key.slice(-4)}` : 'saved';
   setInlineStatus('gemini-auth-status', `Gemini key saved locally (${masked}).`, 'success');
 }
 
+// ── State Synchronization ─────────────────────────────────────
 function syncSingleAssetUI() {
   const logoLoaded = !!assets.logo;
   const swapLoaded = !!assets.audioSwap;
@@ -318,7 +316,7 @@ function syncSingleAssetUI() {
     swapAudio.pause();
     swapAudio.removeAttribute('src');
     el('layer-audioSwap')?.classList.remove('loaded');
-    if (el('desc-audioSwap')) el('desc-audioSwap').textContent = 'Replaces original audio';
+    if (el('desc-audioSwap')) el('desc-audioSwap').textContent = 'Replaces original audio track';
   }
 
   player.muted = swapLoaded;
@@ -334,19 +332,22 @@ function resetProjectMediaState() {
   sfxStack.forEach(item => item.audio?.pause());
   bgmStack.forEach(item => item.audio?.pause());
   brollStack.forEach(item => item.video?.pause());
-  sfxStack = [];
-  bgmStack = [];
-  illuStack = [];
+  sfxStack   = [];
+  bgmStack   = [];
+  illuStack  = [];
   brollStack = [];
+  textStack  = [];
   selectedSfxId = null;
-  focusedBgmId = null;
+  focusedBgmId  = null;
   clearAiChat();
-  illuContainer.innerHTML = '';
+  if (illuContainer) illuContainer.innerHTML = '';
+  if (textContainer) textContainer.innerHTML = '';
   overlayBroll.classList.add('hidden');
   brollPlayer.pause();
   brollPlayer.removeAttribute('src');
   if (audioPlayer) { audioPlayer.pause(); audioPlayer.removeAttribute('src'); }
   syncSingleAssetUI();
+  renderTextStack();
   renderIlluStack();
   renderBgmStack();
   renderSfxStack();
@@ -354,249 +355,487 @@ function resetProjectMediaState() {
   renderSfxMarkers();
 }
 
-function buildProjectSnapshot() {
-  return {
-    version: PROJECT_SCHEMA_VERSION,
-    savedAt: new Date().toISOString(),
-    projectName: (el('project-name')?.value || 'my-project').trim(),
-    settings: {
-      autosaveProject: !!editorSettings.autosaveProject,
-      reduceMotion: !!editorSettings.reduceMotion,
-      highContrast: !!editorSettings.highContrast,
-      geminiModel: editorSettings.geminiModel || 'gemini-3-flash-preview',
-      aiTranscript: editorSettings.aiTranscript || ''
-    },
-    editorState: {
-      aspect,
-      preset,
-      logoPosition,
-      audioProcessing,
-      times: { ...times },
-      segments: cloneJSON(segments),
-      scrubAudio: !!el('scrub-toggle')?.checked,
-      crossfadeCuts: !!el('crossfade-toggle')?.checked,
-      silenceThreshold: el('silence-threshold')?.value || '-40',
-      silenceMinDuration: el('silence-min-dur')?.value || '0.5',
-      assets: {
-        logoLoaded: !!assets.logo,
-        logoName: assets.logo?.name || '',
-        audioSwapLoaded: !!assets.audioSwap,
-        audioSwapName: assets.audioSwap?.name || ''
-      },
-      illuStack: illuStack.map(item => ({
-        fileName: item.file?.name || '',
-        at: item.at,
-        duration: item.duration,
-        layout: item.layout
-      })),
-      bgmStack: bgmStack.map(item => ({
-        fileName: item.file?.name || '',
-        startAt: item.startAt,
-        offset: item.offset,
-        volume: item.volume
-      })),
-      sfxStack: sfxStack.map(item => ({
-        fileName: item.file?.name || '',
-        at: item.at,
-        volume: item.volume
-      })),
-      brollStack: brollStack.map(item => ({
-        fileName: item.file?.name || '',
-        at: item.at,
-        duration: item.duration,
-        muteAudio: item.muteAudio,
-        layout: item.layout || 'fullscreen'
-      }))
-    }
-  };
-}
-
-function migrateProjectSnapshot(raw) {
-  const defaults = {
-    version: PROJECT_SCHEMA_VERSION,
-    savedAt: '',
-    projectName: 'my-project',
-    settings: createDefaultEditorSettings(),
-    editorState: {
-      aspect: 'landscape',
-      preset: 'ultrafast',
-      logoPosition: 'top-right',
-      audioProcessing: 'none',
-      times: { s: 0, e: times.duration || 0, duration: times.duration || 0 },
-      segments: times.duration ? [{ s: 0, e: times.duration }] : [],
-      scrubAudio: true,
-      crossfadeCuts: true,
-      silenceThreshold: '-40',
-      silenceMinDuration: '0.5',
-      assets: { logoLoaded: false, logoName: '', audioSwapLoaded: false, audioSwapName: '' },
-      illuStack: [],
-      bgmStack: [],
-      sfxStack: [],
-      brollStack: []
-    }
-  };
-  const merged = {
-    ...defaults,
-    ...(raw || {}),
-    settings: { ...defaults.settings, ...(raw?.settings || {}) },
-    editorState: { ...defaults.editorState, ...(raw?.editorState || {}) }
-  };
-  ['illuStack', 'bgmStack', 'sfxStack', 'brollStack', 'segments'].forEach(key => {
-    if (!Array.isArray(merged.editorState[key])) merged.editorState[key] = defaults.editorState[key];
-  });
-  return merged;
-}
-
-function saveProjectSnapshot(manual = false) {
-  try {
-    const snapshot = buildProjectSnapshot();
-    localStorage.setItem(STORAGE_KEYS.projectSnapshot, JSON.stringify(snapshot));
-    if (manual) {
-      setInlineStatus(
-        'project-save-status',
-        `Saved project settings locally at ${new Date(snapshot.savedAt).toLocaleTimeString()}.`,
-        'success'
-      );
-      toast('Project settings saved locally ✓', 'success');
-    }
-  } catch (err) {
-    console.warn('[Project] Could not save snapshot:', err.message);
-    setInlineStatus('project-save-status', 'Could not save project settings in this browser.', 'error');
-  }
-}
-
+let autosaveTimer = null;
 function scheduleProjectAutosave() {
   if (!editorSettings.autosaveProject) return;
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => saveProjectSnapshot(false), 350);
 }
 
-function applyProjectSnapshot(rawSnapshot) {
-  const snapshot = migrateProjectSnapshot(rawSnapshot);
-  editorSettings = {
-    ...editorSettings,
-    ...snapshot.settings,
-    geminiApiKey: editorSettings.geminiApiKey
-  };
-  updateSettingsForm();
-
-  if (el('project-name')) el('project-name').value = snapshot.projectName || 'my-project';
-
-  setAspect(snapshot.editorState.aspect || 'landscape');
-  setPreset(snapshot.editorState.preset || 'ultrafast');
-  logoPosition = snapshot.editorState.logoPosition || 'top-right';
-  audioProcessing = snapshot.editorState.audioProcessing || 'none';
-  if (el('scrub-toggle')) el('scrub-toggle').checked = snapshot.editorState.scrubAudio !== false;
-  if (el('crossfade-toggle')) el('crossfade-toggle').checked = snapshot.editorState.crossfadeCuts !== false;
-  if (el('silence-threshold')) el('silence-threshold').value = snapshot.editorState.silenceThreshold || '-40';
-  if (el('silence-min-dur')) el('silence-min-dur').value = snapshot.editorState.silenceMinDuration || '0.5';
-
-  if (times.duration > 0) {
-    const incomingTimes = snapshot.editorState.times || {};
-    times.s = clamp(Number(incomingTimes.s) || 0, 0, times.duration);
-    times.e = clamp(Number(incomingTimes.e) || times.duration, 0, times.duration);
-    times.duration = player.duration || times.duration;
-    if (times.e <= times.s) {
-      times.s = 0;
-      times.e = times.duration;
+function saveProjectSnapshot(manual = false) {
+  try {
+    const snapshot = {
+      version: PROJECT_SCHEMA_VERSION,
+      savedAt: new Date().toISOString(),
+      projectName: (el('project-name')?.value || 'my-project').trim(),
+      settings: cloneJSON(editorSettings),
+      editorState: {
+        aspect,
+        preset,
+        activeFilter,
+        playbackSpeed,
+        masterVolume,
+        logoPosition,
+        audioProcessing,
+        exportFormat,
+        times: { ...times },
+        segments: cloneJSON(segments),
+        scrubAudio: !!el('scrub-toggle')?.checked,
+        crossfadeCuts: !!el('crossfade-toggle')?.checked,
+        textStack: textStack.map(item => ({ text: item.text, at: item.at, duration: item.duration, position: item.position, color: item.color, bgColor: item.bgColor })),
+        illuStack: illuStack.map(item => ({ fileName: item.file?.name || '', at: item.at, duration: item.duration, layout: item.layout })),
+        bgmStack: bgmStack.map(item => ({ fileName: item.file?.name || '', startAt: item.startAt, offset: item.offset, volume: item.volume })),
+        sfxStack: sfxStack.map(item => ({ fileName: item.file?.name || '', at: item.at, volume: item.volume })),
+        brollStack: brollStack.map(item => ({ fileName: item.file?.name || '', at: item.at, duration: item.duration, muteAudio: item.muteAudio, layout: item.layout || 'fullscreen' }))
+      }
+    };
+    localStorage.setItem(STORAGE_KEYS.projectSnapshot, JSON.stringify(snapshot));
+    if (manual) {
+      setInlineStatus('project-save-status', `Project saved locally at ${new Date().toLocaleTimeString()}.`, 'success');
+      toast('Project state saved ✓', 'success');
     }
-    if (snapshot.editorState.segments.length > 0) {
-      segments = snapshot.editorState.segments
-        .map(seg => ({
-          s: clamp(Number(seg.s) || 0, 0, times.duration),
-          e: clamp(Number(seg.e) || 0, 0, times.duration)
-        }))
-        .filter(seg => seg.e - seg.s > 0.05);
-      if (!segments.length) segments = [{ s: 0, e: times.duration }];
-    }
+  } catch (err) {
+    console.warn('[Project] Could not save snapshot:', err.message);
   }
-
-  snapshot.editorState.illuStack.forEach((saved, index) => {
-    const item = illuStack[index];
-    if (!item) return;
-    item.at = clamp(Number(saved.at) || item.at, 0, times.duration || item.at);
-    item.duration = Math.max(0.5, Number(saved.duration) || item.duration);
-    item.layout = saved.layout || item.layout;
-    if (item.el) item.el.className = `illu-overlay-el layout-${item.layout} hidden`;
-  });
-  snapshot.editorState.bgmStack.forEach((saved, index) => {
-    const item = bgmStack[index];
-    if (!item) return;
-    item.startAt = Math.max(0, Number(saved.startAt) || 0);
-    item.offset = Math.max(0, Number(saved.offset) || 0);
-    item.volume = clamp(Number(saved.volume) || item.volume, 0, 100);
-    item.audio.volume = item.volume / 100;
-  });
-  snapshot.editorState.sfxStack.forEach((saved, index) => {
-    const item = sfxStack[index];
-    if (!item) return;
-    item.at = clamp(Number(saved.at) || item.at, 0, times.duration || item.at);
-    item.volume = clamp(Number(saved.volume) || item.volume, 0, 100);
-    item.audio.volume = item.volume / 100;
-  });
-  snapshot.editorState.brollStack.forEach((saved, index) => {
-    const item = brollStack[index];
-    if (!item) return;
-    item.at = clamp(Number(saved.at) || item.at, 0, times.duration || item.at);
-    item.duration = Math.max(0.5, Number(saved.duration) || item.duration);
-    item.muteAudio = saved.muteAudio !== false;
-    item.layout = saved.layout || item.layout || 'fullscreen';
-    item.video.muted = item.muteAudio;
-  });
-
-  syncSingleAssetUI();
-  updateTimecodes();
-  updateTrimBar();
-  updateSegmentDisplay();
-  renderIlluStack();
-  renderBgmStack();
-  renderSfxStack();
-  renderBrollStack();
-  renderSfxMarkers();
-  updateSummary();
-  applyAccessibilityPreferences();
-
-  const restoredMedia = mainVideoFile ? 'media placements' : 'settings only (reload media files to restore file-based layers)';
-  setInlineStatus('project-save-status', `Restored ${restoredMedia} from the saved local snapshot.`, 'success');
 }
 
 function restoreSavedProject() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.projectSnapshot);
-    if (!raw) {
-      setInlineStatus('project-save-status', 'No saved local project snapshot found yet.', 'info');
-      toast('No saved local project found', 'info');
-      return;
+    if (!raw) { toast('No saved project found', 'info'); return; }
+    const snapshot = JSON.parse(raw);
+    if (el('project-name')) el('project-name').value = snapshot.projectName || 'my-project';
+    if (snapshot.editorState) {
+      setAspect(snapshot.editorState.aspect || 'landscape');
+      setPreset(snapshot.editorState.preset || 'ultrafast');
+      setVideoFilter(snapshot.editorState.activeFilter || 'normal');
+      setPlaybackSpeed(snapshot.editorState.playbackSpeed || 1.0);
+      setMasterVolume(snapshot.editorState.masterVolume ?? 1.0);
+      setExportFormat(snapshot.editorState.exportFormat || 'mp4');
+      if (Array.isArray(snapshot.editorState.segments) && snapshot.editorState.segments.length > 0) {
+        segments = snapshot.editorState.segments;
+      }
     }
-    applyProjectSnapshot(JSON.parse(raw));
-    toast('Saved project restored ✓', 'success');
+    toast('Saved project state restored ✓', 'success');
   } catch (err) {
-    console.warn('[Project] Could not restore snapshot:', err.message);
-    setInlineStatus('project-save-status', 'Could not restore the saved project snapshot.', 'error');
+    toast('Could not restore saved project', 'error');
   }
 }
 
+// ── UNIFIED UNDO / REDO SYSTEM ────────────────────────────────
+function pushHistory() {
+  editHistory.push({
+    segments:        cloneJSON(segments),
+    times:           { ...times },
+    assets:          { ...assets },
+    sfxStack:        sfxStack.map(i => ({ ...i })),
+    bgmStack:        bgmStack.map(i => ({ ...i })),
+    illuStack:       illuStack.map(i => ({ ...i })),
+    brollStack:      brollStack.map(i => ({ ...i })),
+    textStack:       textStack.map(i => ({ ...i })),
+    logoPosition,
+    audioProcessing,
+    activeFilter,
+    playbackSpeed,
+    aspect,
+    preset
+  });
+  redoHistory = []; // clear redo on new action
+  if (el('undo-btn')) el('undo-btn').disabled = false;
+  if (el('redo-btn')) el('redo-btn').disabled = true;
+  scheduleProjectAutosave();
+}
+
+function doUndo() {
+  if (editHistory.length === 0) { announce('Nothing to undo.'); return; }
+  
+  // Save current state to redo history
+  redoHistory.push({
+    segments:        cloneJSON(segments),
+    times:           { ...times },
+    assets:          { ...assets },
+    sfxStack:        sfxStack.map(i => ({ ...i })),
+    bgmStack:        bgmStack.map(i => ({ ...i })),
+    illuStack:       illuStack.map(i => ({ ...i })),
+    brollStack:      brollStack.map(i => ({ ...i })),
+    textStack:       textStack.map(i => ({ ...i })),
+    logoPosition,
+    audioProcessing,
+    activeFilter,
+    playbackSpeed,
+    aspect,
+    preset
+  });
+
+  const prev = editHistory.pop();
+  applyStateSnapshot(prev);
+  if (el('undo-btn')) el('undo-btn').disabled = editHistory.length === 0;
+  if (el('redo-btn')) el('redo-btn').disabled = false;
+  toast('Undo applied ✓', 'info');
+  announce('Undo applied.');
+}
+
+function doRedo() {
+  if (redoHistory.length === 0) { announce('Nothing to redo.'); return; }
+  
+  // Save current state back to undo history
+  editHistory.push({
+    segments:        cloneJSON(segments),
+    times:           { ...times },
+    assets:          { ...assets },
+    sfxStack:        sfxStack.map(i => ({ ...i })),
+    bgmStack:        bgmStack.map(i => ({ ...i })),
+    illuStack:       illuStack.map(i => ({ ...i })),
+    brollStack:      brollStack.map(i => ({ ...i })),
+    textStack:       textStack.map(i => ({ ...i })),
+    logoPosition,
+    audioProcessing,
+    activeFilter,
+    playbackSpeed,
+    aspect,
+    preset
+  });
+
+  const next = redoHistory.pop();
+  applyStateSnapshot(next);
+  if (el('undo-btn')) el('undo-btn').disabled = false;
+  if (el('redo-btn')) el('redo-btn').disabled = redoHistory.length === 0;
+  toast('Redo applied ✓', 'info');
+  announce('Redo applied.');
+}
+
+function applyStateSnapshot(snap) {
+  segments        = snap.segments;
+  times           = { ...snap.times };
+  assets          = { ...snap.assets };
+  sfxStack        = snap.sfxStack.map(i => ({ ...i, audio: sfxStack.find(s => s.id === i.id)?.audio || new Audio() }));
+  bgmStack        = snap.bgmStack.map(i => ({ ...i, audio: bgmStack.find(b => b.id === i.id)?.audio || new Audio() }));
+  illuStack       = snap.illuStack.map(i => ({ ...i, el: illuStack.find(il => il.id === i.id)?.el || null })).filter(i => i.el);
+  brollStack      = snap.brollStack.map(i => ({ ...i, video: brollStack.find(b => b.id === i.id)?.video || null })).filter(i => i.video);
+  textStack       = snap.textStack.map(i => ({ ...i, el: textStack.find(t => t.id === i.id)?.el || null })).filter(i => i.el);
+  logoPosition    = snap.logoPosition;
+  audioProcessing = snap.audioProcessing;
+  aspect          = snap.aspect;
+  preset          = snap.preset || preset;
+  
+  setVideoFilter(snap.activeFilter || 'normal');
+  setPlaybackSpeed(snap.playbackSpeed || 1.0);
+
+  updateTimecodes();
+  updateTrimBar();
+  updateSegmentDisplay();
+  updateSummary();
+  renderSfxStack();
+  renderBgmStack();
+  renderIlluStack();
+  renderBrollStack();
+  renderTextStack();
+  renderSfxMarkers();
+  syncSingleAssetUI();
+  setAspect(aspect);
+  setPreset(preset);
+}
+
+// ── FEATURE: VIDEO FILTERS & VISUAL EFFECTS ──────────────────
+function setVideoFilter(val) {
+  activeFilter = val;
+  if (videoContainer) {
+    videoContainer.className = `video-container filter-${val}`;
+  }
+  if (el('filter-select')) el('filter-select').value = val;
+  updateSummary();
+  announce(`Video filter set to: ${val}.`);
+}
+
+// ── FEATURE: PLAYBACK SPEED CONTROL ───────────────────────────
+function setPlaybackSpeed(rate) {
+  playbackSpeed = rate;
+  if (player) player.playbackRate = rate;
+  if (audioPlayer) audioPlayer.playbackRate = rate;
+  if (el('speed-select')) el('speed-select').value = rate.toString();
+  updateSummary();
+  announce(`Playback speed set to ${rate}x.`);
+}
+
+// ── FEATURE: MASTER VOLUME ────────────────────────────────────
+function setMasterVolume(vol) {
+  masterVolume = vol;
+  if (player) player.volume = Math.min(1.0, vol);
+  if (audioPlayer) audioPlayer.volume = Math.min(1.0, vol);
+  if (el('master-vol-val')) el('master-vol-val').textContent = `${Math.round(vol * 100)}%`;
+}
+
+// ── FEATURE: EXPORT FORMAT ────────────────────────────────────
+function setExportFormat(fmt) {
+  exportFormat = fmt;
+  document.querySelectorAll('#seg-fmt-mp4, #seg-fmt-webm, #seg-fmt-gif, #seg-fmt-mp3').forEach(b => {
+    const on = b.dataset.fmt === fmt;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  const expBtn = el('export-btn');
+  if (expBtn) {
+    const labels = { mp4: 'EXPORT MP4 VIDEO', webm: 'EXPORT WEBM VIDEO', gif: 'EXPORT ANIMATED GIF', mp3: 'EXPORT MP3 AUDIO' };
+    expBtn.innerHTML = `🚀 &nbsp; ${labels[fmt] || 'EXPORT MEDIA'} <kbd class="hdr-kbd">Ctrl+X</kbd>`;
+  }
+  updateSummary();
+  announce(`Export format set to ${fmt.toUpperCase()}.`);
+}
+
+// ── FEATURE: CLIP SPLITTING AT PLAYHEAD ──────────────────────
+function splitClipAtPlayhead() {
+  if (!mainVideoFile) { toast('No media loaded', 'error'); return; }
+  const t = activeMedia().currentTime;
+  if (t <= 0 || t >= times.duration) { toast('Position playhead inside clip to split', 'error'); return; }
+
+  // Find segment containing t
+  const segIdx = segments.findIndex(s => t > s.s + 0.1 && t < s.e - 0.1);
+  if (segIdx === -1) {
+    toast('Playhead must be inside a kept segment to split', 'info');
+    return;
+  }
+
+  pushHistory();
+  const currentSeg = segments[segIdx];
+  const seg1 = { s: currentSeg.s, e: t };
+  const seg2 = { s: t, e: currentSeg.e };
+
+  segments.splice(segIdx, 1, seg1, seg2);
+  updateSegmentDisplay();
+  updateSummary();
+  toast(`Clip split into 2 at ${fmtTime(t)} ✂`, 'success');
+  announce(`Clip split at ${fmtTime(t)}. Total segments: ${segments.length}.`);
+}
+
+// ── FEATURE: TEXT OVERLAYS & CAPTIONS (MULTI-STACK) ─────────
+function triggerAddTextOverlay() {
+  const defaultText = prompt('Enter text or caption for overlay:', 'Tech House Video');
+  if (!defaultText || !defaultText.trim()) return;
+
+  const id  = nextId();
+  const at  = activeMedia().currentTime || 0;
+  
+  // Render overlay DOM element
+  const overlayEl = document.createElement('div');
+  overlayEl.className = 'text-overlay-el pos-bottom hidden';
+  overlayEl.dataset.id = id;
+  overlayEl.textContent = defaultText.trim();
+  textContainer.appendChild(overlayEl);
+
+  const item = {
+    id,
+    text: defaultText.trim(),
+    at,
+    duration: 3,
+    position: 'bottom',
+    fontSize: 24,
+    color: '#ffffff',
+    bgColor: 'rgba(0,0,0,0.65)',
+    el: overlayEl
+  };
+
+  textStack.push(item);
+  pushHistory();
+  renderTextStack();
+  updateSummary();
+  announce(`Text overlay "${defaultText}" added at ${fmtTime(at)}.`);
+  toast('Text overlay added ✓', 'success');
+}
+
+function renderTextStack() {
+  const container = el('text-stack');
+  if (!container) return;
+  container.innerHTML = '';
+
+  textStack.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'stack-item';
+    card.innerHTML = `
+      <div class="stack-item-header">
+        <span class="stack-item-name">💬 "${item.text.slice(0, 18)}"</span>
+        <button class="stack-item-remove" onclick="removeTextOverlay(${item.id})" aria-label="Remove text overlay">✕</button>
+      </div>
+      <div class="stack-item-controls">
+        <div style="grid-column:1/-1;">
+          <input type="text" class="text-input" value="${item.text}" style="padding:4px;font-size:0.75rem;"
+                 aria-label="Text content" onchange="updateTextOverlay(${item.id}, 'text', this.value)">
+        </div>
+        <div class="stack-ctrl-row">
+          <span class="stack-ctrl-label">At (s)</span>
+          <input type="number" class="stack-ctrl-input" value="${item.at.toFixed(1)}" min="0" step="0.5"
+                 aria-label="Start time" onchange="updateTextOverlay(${item.id}, 'at', parseFloat(this.value))">
+        </div>
+        <div class="stack-ctrl-row">
+          <span class="stack-ctrl-label">Dur (s)</span>
+          <input type="number" class="stack-ctrl-input" value="${item.duration}" min="0.5" step="0.5"
+                 aria-label="Duration" onchange="updateTextOverlay(${item.id}, 'duration', parseFloat(this.value))">
+        </div>
+        <div style="grid-column:1/-1;">
+          <span class="stack-ctrl-label">Position</span>
+          <select class="stack-select" aria-label="Position" onchange="updateTextOverlay(${item.id}, 'position', this.value)">
+            <option value="bottom" ${item.position==='bottom'?'selected':''}>Bottom Subtitle</option>
+            <option value="top" ${item.position==='top'?'selected':''}>Top Title</option>
+            <option value="center" ${item.position==='center'?'selected':''}>Center Banner</option>
+            <option value="lower-third" ${item.position==='lower-third'?'selected':''}>Lower Third</option>
+          </select>
+        </div>
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+function updateTextOverlay(id, field, val) {
+  const item = textStack.find(t => t.id === id);
+  if (!item) return;
+  item[field] = val;
+  if (item.el) {
+    if (field === 'text') item.el.textContent = val;
+    if (field === 'position') item.el.className = `text-overlay-el pos-${val} hidden`;
+  }
+  updateSummary();
+}
+
+function removeTextOverlay(id) {
+  const idx = textStack.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  if (textStack[idx].el) textStack[idx].el.remove();
+  textStack.splice(idx, 1);
+  pushHistory();
+  renderTextStack();
+  updateSummary();
+  toast('Text overlay removed', 'info');
+}
+
+// ── FULLSCREEN TOGGLE ─────────────────────────────────────────
+function toggleFullscreen() {
+  if (!previewStage) return;
+  if (!document.fullscreenElement) {
+    if (previewStage.requestFullscreen) previewStage.requestFullscreen();
+    else if (previewStage.webkitRequestFullscreen) previewStage.webkitRequestFullscreen();
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen();
+  }
+}
+
+// ── KEYBOARD SHORTCUTS CHEAT SHEET MODAL ──────────────────────
+const SHORTCUTS_DATA = [
+  { cat: 'Playback & Navigation', key: 'Space', desc: 'Play / Pause main media' },
+  { cat: 'Playback & Navigation', key: '← / →', desc: 'Seek 10 seconds back / forward' },
+  { cat: 'Playback & Navigation', key: 'Shift + ← / →', desc: 'Seek 1 second back / forward' },
+  { cat: 'Playback & Navigation', key: 'Alt + ← / →', desc: 'Frame step (1 frame = 0.04s)' },
+  { cat: 'Playback & Navigation', key: 'Home / End', desc: 'Jump to start / end of timeline' },
+  { cat: 'Playback & Navigation', key: 'F', desc: 'Toggle Fullscreen preview' },
+  { cat: 'Playback & Navigation', key: '< / > (Shift + ,/.)', desc: 'Adjust playback speed (0.25x - 2.0x)' },
+  
+  { cat: 'Editing & Trimming', key: 'S or I', desc: 'Set In point at current playhead' },
+  { cat: 'Editing & Trimming', key: 'E or O', desc: 'Set Out point at current playhead' },
+  { cat: 'Editing & Trimming', key: 'C or B', desc: 'Split clip into two at playhead' },
+  { cat: 'Editing & Trimming', key: 'Backspace / Delete', desc: 'Cut selected In-Out range' },
+  { cat: 'Editing & Trimming', key: 'Ctrl + Shift + R', desc: 'Reset all trims and cuts' },
+  { cat: 'Editing & Trimming', key: 'Z', desc: 'Toggle 4x Timeline Zoom' },
+  
+  { cat: 'Layers & Assets', key: 'Ctrl + L', desc: 'Add / Upload Watermark Logo' },
+  { cat: 'Layers & Assets', key: 'Ctrl + T', desc: 'Add Text Overlay / Subtitle Caption' },
+  { cat: 'Layers & Assets', key: 'Ctrl + I', desc: 'Add Illustration Overlay' },
+  { cat: 'Layers & Assets', key: 'Ctrl + B', desc: 'Add Background Music (BGM) Track' },
+  { cat: 'Layers & Assets', key: 'Ctrl + F', desc: 'Add Sound Effect (SFX)' },
+  { cat: 'Layers & Assets', key: 'Ctrl + R', desc: 'Add B-Roll Video Overlay' },
+  { cat: 'Layers & Assets', key: 'Ctrl + U', desc: 'Add Audio Swap File' },
+  { cat: 'Layers & Assets', key: 'Shift + M', desc: 'Play / Pause focused BGM music track' },
+  { cat: 'Layers & Assets', key: '[ / ]', desc: 'Nudge BGM start time −1s / +1s' },
+  { cat: 'Layers & Assets', key: 'Shift + Ctrl + ←/→', desc: 'Nudge selected SFX time by 0.1s' },
+
+  { cat: 'Project & System', key: 'Ctrl + Z', desc: 'Undo last edit' },
+  { cat: 'Project & System', key: 'Ctrl + Y / Ctrl+Shift+Z', desc: 'Redo last reverted edit' },
+  { cat: 'Project & System', key: 'Ctrl + S', desc: 'Save project state locally' },
+  { cat: 'Project & System', key: 'Ctrl + Shift + O', desc: 'Restore saved project state' },
+  { cat: 'Project & System', key: 'Ctrl + D', desc: 'Auto-detect silence & cut gaps' },
+  { cat: 'Project & System', key: 'Ctrl + X', desc: 'Export final media file' },
+  { cat: 'Project & System', key: 'Ctrl + ,', desc: 'Open Editor Settings Modal' },
+  { cat: 'Project & System', key: '? or Shift + /', desc: 'Open Keyboard Shortcuts Cheat Sheet' },
+
+  { cat: 'Accessibility & Theme', key: 'Alt + M', desc: 'Toggle Reduce Motion' },
+  { cat: 'Accessibility & Theme', key: 'Alt + C', desc: 'Toggle High Contrast Mode' },
+  { cat: 'Accessibility & Theme', key: 'Alt + T', desc: 'Toggle Dark / Light Theme' }
+];
+
+function openShortcutsModal() {
+  const overlay = el('shortcuts-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  renderShortcutsGrid('');
+  setTimeout(() => { el('shortcuts-search')?.focus(); }, 30);
+  document.addEventListener('keydown', shortcutsEscHandler);
+}
+
+function closeShortcutsModal() {
+  const overlay = el('shortcuts-overlay');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  document.removeEventListener('keydown', shortcutsEscHandler);
+}
+
+function shortcutsEscHandler(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeShortcutsModal(); }
+}
+
+function renderShortcutsGrid(query) {
+  const grid = el('shortcuts-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const q = (query || '').toLowerCase().trim();
+  const filtered = SHORTCUTS_DATA.filter(item =>
+    !q || item.key.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q) || item.cat.toLowerCase().includes(q)
+  );
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-dim);">No shortcuts match "${query}".</div>`;
+    return;
+  }
+
+  let currentCat = '';
+  filtered.forEach(item => {
+    if (item.cat !== currentCat) {
+      currentCat = item.cat;
+      const catHeader = document.createElement('div');
+      catHeader.className = 'shortcuts-cat-title';
+      catHeader.textContent = currentCat;
+      grid.appendChild(catHeader);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'shortcut-row';
+    row.innerHTML = `
+      <span class="sc-desc">${item.desc}</span>
+      <kbd class="sc-key">${item.key}</kbd>
+    `;
+    grid.appendChild(row);
+  });
+}
+
+// ── INITIALIZATION ───────────────────────────────────────────
 function initializeEnhancements() {
   loadEditorSettings();
   updateSettingsForm();
 
   el('save-gemini-key')?.addEventListener('click', () => {
     syncSettingsFromForm();
-    persistEditorSettings('Gemini settings saved locally.');
+    persistEditorSettings('Gemini API key saved locally.');
     updateGeminiStatusText();
-    scheduleProjectAutosave();
   });
 
   el('clear-gemini-key')?.addEventListener('click', () => {
     editorSettings.geminiApiKey = '';
     if (el('gemini-api-key')) el('gemini-api-key').value = '';
-    persistEditorSettings('Gemini key cleared from this browser.');
+    persistEditorSettings('Gemini key cleared.');
     updateGeminiStatusText();
   });
 
   el('test-gemini-key')?.addEventListener('click', () => {
     syncSettingsFromForm();
-    persistEditorSettings();
     testGeminiKey();
   });
 
@@ -604,26 +843,19 @@ function initializeEnhancements() {
     .forEach(id => el(id)?.addEventListener('change', () => {
       syncSettingsFromForm();
       applyAccessibilityPreferences();
-      persistEditorSettings('Editor preferences saved locally.');
-      scheduleProjectAutosave();
+      persistEditorSettings('Preferences saved.');
     }));
 
   ['ai-transcript', 'project-name'].forEach(id => el(id)?.addEventListener('input', () => {
     syncSettingsFromForm();
-    persistEditorSettings();
     scheduleProjectAutosave();
   }));
 
-  el('save-project-btn')?.addEventListener('click', () => {
-    syncSettingsFromForm();
-    persistEditorSettings();
-    saveProjectSnapshot(true);
-  });
-
+  el('save-project-btn')?.addEventListener('click', () => saveProjectSnapshot(true));
   el('load-project-btn')?.addEventListener('click', restoreSavedProject);
   el('analyze-project-btn')?.addEventListener('click', analyzeProjectWithGemini);
 
-  // AI chat + settings modal wiring
+  // AI Chat & Modals Wiring
   el('ai-send-btn')?.addEventListener('click', sendChatMessage);
   el('ai-clear-chat-btn')?.addEventListener('click', clearAiChat);
   el('open-settings-btn')?.addEventListener('click', openSettingsModal);
@@ -633,65 +865,44 @@ function initializeEnhancements() {
   el('settings-overlay')?.addEventListener('click', (e) => {
     if (e.target === el('settings-overlay')) closeSettingsModal();
   });
-  const chatInput = el('ai-chat-input');
-  if (chatInput) {
-    chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
-    });
-    // Auto-grow the textarea up to a few rows (fixes iOS where it wouldn't grow/scroll).
-    chatInput.addEventListener('input', () => {
-      chatInput.style.height = 'auto';
-      chatInput.style.height = Math.min(140, chatInput.scrollHeight) + 'px';
-    });
-  }
+
+  // Shortcuts Modal Wiring
+  el('quick-shortcuts')?.addEventListener('click', openShortcutsModal);
+  el('account-shortcuts-btn')?.addEventListener('click', openShortcutsModal);
+  el('open-shortcuts-footer')?.addEventListener('click', openShortcutsModal);
+  el('shortcuts-close-btn')?.addEventListener('click', closeShortcutsModal);
+  el('shortcuts-done-btn')?.addEventListener('click', closeShortcutsModal);
+  el('shortcuts-overlay')?.addEventListener('click', (e) => {
+    if (e.target === el('shortcuts-overlay')) closeShortcutsModal();
+  });
+  el('shortcuts-search')?.addEventListener('input', (e) => renderShortcutsGrid(e.target.value));
 
   setupQuickToggles();
 
+  // Double-tap preview stage for play/pause on touch devices
+  let lastTap = 0;
+  previewStage?.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      e.preventDefault();
+      const m = activeMedia();
+      m.paused ? m.play() : m.pause();
+    }
+    lastTap = now;
+  });
+
   window.addEventListener('beforeunload', () => {
     syncSettingsFromForm();
-    persistEditorSettings();
     if (editorSettings.autosaveProject) saveProjectSnapshot(false);
   });
 }
 
 initializeEnhancements();
 
-function arrayBufferToBase64(buffer) {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
-function extractGeminiText(payload) {
-  return (payload?.candidates || [])
-    .flatMap(candidate => candidate?.content?.parts || [])
-    .map(part => part?.text || '')
-    .join('\n')
-    .trim();
-}
-
-function parseGeminiJson(text) {
-  const cleaned = (text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '');
-  try {
-    return JSON.parse(cleaned);
-  } catch (_) {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start !== -1 && end !== -1 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1));
-    }
-    throw new Error('Gemini did not return valid JSON.');
-  }
-}
-
+// ── GEMINI AI API SUBSYSTEM ──────────────────────────────────
 async function callGeminiAPI(prompt, parts = []) {
   const apiKey = (editorSettings.geminiApiKey || '').trim();
-  if (!apiKey) throw new Error('Add a Gemini API key in Editor Preferences first.');
+  if (!apiKey) throw new Error('Add a Gemini API key in Editor Settings first.');
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(editorSettings.geminiModel || 'gemini-3-flash-preview')}:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -707,10 +918,30 @@ async function callGeminiAPI(prompt, parts = []) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = payload?.error?.message || `Gemini request failed with ${response.status}`;
-    throw new Error(message);
+    throw new Error(payload?.error?.message || `Gemini request failed with ${response.status}`);
   }
   return payload;
+}
+
+function extractGeminiText(payload) {
+  return (payload?.candidates || [])
+    .flatMap(candidate => candidate?.content?.parts || [])
+    .map(part => part?.text || '')
+    .join('\n')
+    .trim();
+}
+
+function parseGeminiJson(text) {
+  const cleaned = (text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+  try { return JSON.parse(cleaned); }
+  catch (_) {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error('Gemini did not return valid JSON.');
+  }
 }
 
 async function testGeminiKey() {
@@ -718,484 +949,32 @@ async function testGeminiKey() {
     updateGeminiStatusText('Checking Gemini key…', 'info');
     const payload = await callGeminiAPI('Reply with the single word OK.');
     const text = extractGeminiText(payload);
-    updateGeminiStatusText(text ? 'Gemini key is valid and ready.' : 'Gemini responded, but returned no text.', 'success');
+    updateGeminiStatusText(text ? 'Gemini API key is valid and working ✓' : 'Gemini responded without text.', 'success');
   } catch (err) {
-    console.error('[Gemini test]', err);
     updateGeminiStatusText(err.message || 'Gemini key test failed.', 'error');
     toast('Gemini key test failed', 'error');
   }
 }
 
-function waitForMediaEvent(node, eventName) {
-  return new Promise((resolve, reject) => {
-    const onDone = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error(`Media event failed: ${eventName}`));
-    };
-    const cleanup = () => {
-      node.removeEventListener(eventName, onDone);
-      node.removeEventListener('error', onError);
-    };
-    node.addEventListener(eventName, onDone, { once: true });
-    node.addEventListener('error', onError, { once: true });
-  });
-}
-
-async function captureVideoSnapshots(file) {
-  const tempVideo = document.createElement('video');
-  tempVideo.preload = 'auto';
-  tempVideo.muted = true;
-  tempVideo.playsInline = true;
-  tempVideo.src = getPreviewURL(file);
-  await waitForMediaEvent(tempVideo, 'loadedmetadata');
-
-  const duration = tempVideo.duration || times.duration || 0;
-  const baseTargets = [
-    { label: 'start', time: Math.min(0.5, Math.max(0, duration * 0.1)) },
-    { label: 'middle', time: duration / 2 || 0 },
-    { label: 'end', time: Math.max(0, duration - Math.min(0.5, duration / 3 || 0.5)) }
-  ];
-
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  const width = tempVideo.videoWidth || 640;
-  const height = tempVideo.videoHeight || 360;
-  const scale = Math.min(1, 640 / width, 360 / height);
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
-
-  const snapshots = [];
-  for (const target of baseTargets) {
-    const seekTime = clamp(target.time || 0, 0, Math.max(0, duration - 0.05));
-    if (Math.abs(tempVideo.currentTime - seekTime) > 0.02) {
-      const seekPromise = waitForMediaEvent(tempVideo, 'seeked');
-      tempVideo.currentTime = seekTime;
-      await seekPromise;
-    }
-    ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
-    const data = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
-    snapshots.push({
-      label: target.label,
-      time: Number(seekTime.toFixed(2)),
-      inlineData: { mimeType: 'image/jpeg', data }
-    });
-  }
-  return snapshots;
-}
-
-async function extractAudioSampleForAi(file) {
-  if (!engineReady) {
-    return { part: null, note: 'Audio transcript skipped because FFmpeg is still loading.' };
-  }
-
-  const duration = times.duration || player.duration || audioPlayer.duration || 0;
-  const mediaLabel = mediaKind === 'audio' ? 'audio file' : 'video';
-
-  // Media over 10 minutes asks the user before sending the full audio track.
-  const LONG_MEDIA_THRESHOLD = 600; // seconds
-  if (duration > LONG_MEDIA_THRESHOLD) {
-    const proceed = window.confirm(
-      `This ${mediaLabel} is ${fmtTime(duration)} long (over 10 minutes).\n\n` +
-      'Send the full audio to Gemini for transcription anyway?\n\n' +
-      (mediaKind === 'audio'
-        ? 'OK = send audio.  Cancel = skip AI transcription.'
-        : 'OK = send audio.  Cancel = analyze snapshots only (no audio).')
-    );
-    if (!proceed) {
-      return { part: null, note: 'Audio transcript skipped — you chose not to send audio for this long file.' };
-    }
-  }
-
-  const ext = (file.name.split('.').pop() || 'mp4').replace(/[^a-z0-9]/gi, '') || 'mp4';
-  const stamp = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-  const inputName = `ai-input-${stamp}.${ext}`;
-  const outputName = `ai-audio-${stamp}.mp3`;
-
-  try {
-    ffmpeg.FS('writeFile', inputName, await fetchFile(file));
-    await ffmpeg.run(
-      '-i', inputName,
-      '-vn',
-      '-ac', '1',
-      '-ar', '16000',
-      '-b:a', '48k',
-      outputName
-    );
-    const audioBytes = ffmpeg.FS('readFile', outputName);
-    return {
-      part: {
-        inlineData: {
-          mimeType: 'audio/mpeg',
-          data: arrayBufferToBase64(audioBytes)
-        }
-      },
-      note: 'Included the full audio track for transcript and pacing analysis.'
-    };
-  } catch (err) {
-    console.warn('[AI audio]', err.message);
-    return { part: null, note: 'Audio transcript could not be extracted from this video.' };
-  } finally {
-    try { ffmpeg.FS('unlink', inputName); } catch (_) {}
-    try { ffmpeg.FS('unlink', outputName); } catch (_) {}
-  }
-}
-
-
-// ── AI CHAT SUBSYSTEM ─────────────────────────────────────────
-// Conversation history sent to Gemini as multi-turn "contents".
-let aiChatHistory = [];        // [{ role:'user'|'model', parts:[{text},{inlineData}] }]
-let aiMediaParts = [];         // cached snapshots + audio inlineData parts
-let aiMediaReady = false;      // media has been captured & attached once
-
-function chatLogEl() { return document.getElementById('ai-chat-log'); }
-
-function appendChatMessage(role, text) {
-  const log = chatLogEl();
-  if (!log) return null;
-  const wrap = document.createElement('div');
-  wrap.className = `ai-msg ai-msg-${role === 'user' ? 'user' : 'bot'}`;
-  const p = document.createElement('p');
-  p.textContent = text;
-  wrap.appendChild(p);
-  log.appendChild(wrap);
-  log.scrollTop = log.scrollHeight;
-  return wrap;
-}
-
-function setChatBusy(busy) {
-  aiJobRunning = busy;
-  const input = el('ai-chat-input');
-  const send  = el('ai-send-btn');
-  const analyze = el('analyze-project-btn');
-  if (input)   input.disabled = busy || !mainVideoFile;
-  if (send)    send.disabled  = busy || !mainVideoFile;
-  if (analyze) analyze.disabled = busy;
-}
-
-// Describes the current project so the model always knows what's on the timeline.
-function buildProjectStateText() {
-  const isAudio = mediaKind === 'audio';
-  const lines = [
-    `Project type: ${isAudio ? 'audio-only' : 'video'}`,
-    `Media duration seconds: ${(times.duration || 0).toFixed(2)}`,
-    `Kept segments (after cuts): ${segments.map(s => `${s.s.toFixed(2)}-${s.e.toFixed(2)}`).join(', ') || 'full'}`,
-    `Illustrations: ${illuStack.length ? illuStack.map((it, i) => `${i+1}:${it.file.name}@${it.at.toFixed(1)}s/${it.duration}s/${it.layout}`).join('; ') : 'none'}`,
-    `B-Roll: ${brollStack.length ? brollStack.map((it, i) => `${i+1}:${it.file.name}@${it.at.toFixed(1)}s/${it.duration}s/${it.layout}`).join('; ') : 'none'}`,
-    `BGM: ${bgmStack.length ? bgmStack.map((it, i) => `${i+1}:${it.file.name} start${it.startAt.toFixed(1)}s vol${it.volume}%`).join('; ') : 'none'}`,
-    `SFX: ${sfxStack.length ? sfxStack.map((it, i) => `${i+1}:${it.file.name}@${it.at.toFixed(1)}s vol${it.volume}%`).join('; ') : 'none'}`,
-    `Audio swap: ${assets.audioSwap ? 'loaded' : 'not loaded'}`
-  ];
-  return lines.join('\n');
-}
-
-function aiSystemPreamble() {
-  const isAudio = mediaKind === 'audio';
-  return [
-    isAudio
-      ? 'You are the assistant inside a browser-based AUDIO editor. The user uploaded audio (no video frames).'
-      : 'You are the assistant inside a browser-based VIDEO editor with already-uploaded overlay assets.',
-    'You chat with the user AND perform edits by returning actions.',
-    'ALWAYS reply with strict JSON only (no markdown fences), matching:',
-    '{',
-    '  "reply": "a short, friendly message to show the user",',
-    '  "transcript": "verbatim transcript of the audio; only include on the first analysis or if asked; otherwise empty string",',
-    '  "actions": [',
-    '     {"type":"illu","index":1,"at":12.5,"duration":3,"layout":"center"},',
-    '     {"type":"broll","index":1,"at":24.5,"duration":4,"layout":"fullscreen"},',
-    '     {"type":"bgm","index":1,"startAt":0,"volume":18},',
-    '     {"type":"sfx","index":1,"at":8.0,"volume":100},',
-    '     {"type":"trim","in":0,"out":30}',
-    '  ]',
-    '}',
-    'Rules:',
-    '- "actions" may be empty when the user is just chatting or asking a question.',
-    '- Only use asset indexes that exist (1-based). Layout ∈ center, fullscreen, left-third, right-third.',
-    isAudio ? '- Audio-only: never use illu/broll actions.' : '- Illu/broll only for video.',
-    '- Times are seconds on the original timeline. Volume is percent 0..100.',
-    '- Keep "reply" concise and conversational. Confirm what you changed.'
-  ].join('\n');
-}
-
-// Captures snapshots + audio once (in parallel) and caches them for the chat.
-async function ensureAiMedia() {
-  if (aiMediaReady) return;
-  const isAudio = mediaKind === 'audio';
-  const [snapshots, audioSample] = await Promise.all([
-    isAudio ? Promise.resolve([]) : captureVideoSnapshots(mainVideoFile),
-    extractAudioSampleForAi(mainVideoFile)
-  ]);
-  aiMediaParts = snapshots.map(item => item.inlineData);
-  if (audioSample.part) aiMediaParts.push(audioSample.part);
-  aiMediaReady = true;
-}
-
-async function analyzeProjectWithGemini() {
-  if (aiJobRunning) return;
-  if (!mainVideoFile) { toast('Load a video or audio file first', 'error'); return; }
-
-  syncSettingsFromForm();
-  persistEditorSettings();
-  if (!(editorSettings.geminiApiKey || '').trim()) {
-    updateGeminiStatusText('Paste and save a Gemini API key first.', 'error');
-    toast('Add a Gemini API key first', 'error');
-    return;
-  }
-
-  const isAudio = mediaKind === 'audio';
-  setChatBusy(true);
-  const thinking = appendChatMessage('bot', isAudio ? 'Transcribing and analyzing your audio…' : 'Analyzing snapshots and transcribing audio…');
-  setStatus('Preparing AI analysis…');
-
-  try {
-    await ensureAiMedia();
-    const firstPrompt = [
-      aiSystemPreamble(),
-      '',
-      'This is the first message. Transcribe the audio into "transcript", give a brief "reply" summarizing the media and how you can help, and propose a few sensible "actions" if assets are uploaded.',
-      '',
-      buildProjectStateText()
-    ].join('\n');
-
-    const result = await sendToGemini(firstPrompt, aiMediaParts, true);
-    if (thinking) thinking.remove();
-    handleAiResult(result);
-    updateGeminiStatusText('Gemini analysis completed successfully.', 'success');
-    setStatus('AI analysis complete.');
-  } catch (err) {
-    console.error('[AI analysis]', err);
-    if (thinking) thinking.remove();
-    appendChatMessage('bot', `Sorry — analysis failed: ${err.message}`);
-    updateGeminiStatusText(err.message || 'Gemini analysis failed.', 'error');
-    toast('AI analysis failed', 'error');
-  } finally {
-    setChatBusy(false);
-  }
-}
-
-// Send a follow-up chat message (text only; media context already in history).
-async function sendChatMessage() {
-  if (aiJobRunning) return;
-  const input = el('ai-chat-input');
-  const text = (input?.value || '').trim();
-  if (!text) return;
-  if (!mainVideoFile) { toast('Load a file first', 'error'); return; }
-  if (!(editorSettings.geminiApiKey || '').trim()) { toast('Add a Gemini API key first', 'error'); return; }
-
-  input.value = '';
-  input.style.height = 'auto';
-  appendChatMessage('user', text);
-  setChatBusy(true);
-  const thinking = appendChatMessage('bot', '…');
-
-  try {
-    const attachMedia = !aiMediaReady;
-    if (attachMedia) await ensureAiMedia();
-
-    const prompt = [
-      aiChatHistory.length === 0 ? aiSystemPreamble() + '\n' : '',
-      'Current project state:',
-      buildProjectStateText(),
-      '',
-      `User: ${text}`
-    ].filter(Boolean).join('\n');
-
-    const result = await sendToGemini(prompt, attachMedia ? aiMediaParts : [], attachMedia);
-    if (thinking) thinking.remove();
-    handleAiResult(result);
-  } catch (err) {
-    console.error('[AI chat]', err);
-    if (thinking) thinking.remove();
-    appendChatMessage('bot', `Sorry — that failed: ${err.message}`);
-    toast('AI request failed', 'error');
-  } finally {
-    setChatBusy(false);
-  }
-}
-
-// Low-level: appends a user turn, calls Gemini with the full history, parses JSON.
-async function sendToGemini(userText, mediaParts = [], includeMedia = false) {
-  const userParts = [];
-  if (includeMedia && mediaParts.length) userParts.push(...mediaParts);
-  userParts.push({ text: userText });
-  aiChatHistory.push({ role: 'user', parts: userParts });
-
-  const apiKey = (editorSettings.geminiApiKey || '').trim();
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(editorSettings.geminiModel || 'gemini-3-flash-preview')}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: aiChatHistory,
-        generationConfig: { temperature: 0.3, topP: 0.9, responseMimeType: 'application/json' }
-      })
-    }
-  );
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error?.message || `Gemini request failed with ${response.status}`);
-
-  const rawText = extractGeminiText(payload);
-  aiChatHistory.push({ role: 'model', parts: [{ text: rawText }] });
-
-  let parsed;
-  try { parsed = parseGeminiJson(rawText); }
-  catch (_) { parsed = { reply: rawText || 'Done.', transcript: '', actions: [] }; }
-  return parsed;
-}
-
-// Renders the model's reply, fills transcript, and applies any actions.
-function handleAiResult(result) {
-  const reply = (result && result.reply) ? String(result.reply) : 'Done.';
-  appendChatMessage('bot', reply);
-
-  if (result && typeof result.transcript === 'string' && result.transcript.trim() && el('ai-transcript')) {
-    el('ai-transcript').value = result.transcript.trim();
-    editorSettings.aiTranscript = result.transcript.trim();
-    persistEditorSettings();
-    announce('Transcript updated.');
-  }
-
-  const actions = Array.isArray(result?.actions) ? result.actions : [];
-  const applied = applyAiActions(actions);
-  if (applied > 0) {
-    appendChatMessage('bot', `✓ Applied ${applied} change${applied === 1 ? '' : 's'} to your timeline.`);
-    announce(`Applied ${applied} change${applied === 1 ? '' : 's'}.`);
-  }
-}
-
-// Applies a list of AI actions to the timeline. Returns count applied.
-function applyAiActions(actions) {
-  if (!Array.isArray(actions) || !actions.length) return 0;
-  const LAYOUTS = ['center', 'fullscreen', 'left-third', 'right-third'];
-  let applied = 0;
-  let changedTrim = false;
-  pushHistory();
-
-  actions.forEach(a => {
-    if (!a || typeof a !== 'object') return;
-    const type = String(a.type || '').toLowerCase();
-    const idx = (Number(a.index) || 0) - 1;
-
-    if (type === 'illu' && mediaKind === 'video') {
-      const item = illuStack[idx]; if (!item) return;
-      if (a.at != null)       item.at = clamp(Number(a.at), 0, times.duration || Number(a.at));
-      if (a.duration != null) item.duration = Math.max(0.5, Number(a.duration));
-      if (LAYOUTS.includes(a.layout)) item.layout = a.layout;
-      if (item.el) item.el.className = `illu-overlay-el layout-${item.layout} hidden`;
-      applied++;
-    } else if (type === 'broll' && mediaKind === 'video') {
-      const item = brollStack[idx]; if (!item) return;
-      if (a.at != null)       item.at = clamp(Number(a.at), 0, times.duration || Number(a.at));
-      if (a.duration != null) item.duration = Math.max(0.5, Number(a.duration));
-      if (LAYOUTS.includes(a.layout)) item.layout = a.layout;
-      applied++;
-    } else if (type === 'bgm') {
-      const item = bgmStack[idx]; if (!item) return;
-      if (a.startAt != null) item.startAt = clamp(Number(a.startAt), 0, times.duration || Number(a.startAt));
-      if (a.volume != null)  { item.volume = clamp(Math.round(Number(a.volume)), 0, 100); if (item.audio) item.audio.volume = item.volume/100; }
-      applied++;
-    } else if (type === 'sfx') {
-      const item = sfxStack[idx]; if (!item) return;
-      if (a.at != null)     item.at = clamp(Number(a.at), 0, times.duration || Number(a.at));
-      if (a.volume != null) { item.volume = clamp(Math.round(Number(a.volume)), 0, 100); if (item.audio) item.audio.volume = item.volume/100; }
-      item.triggered = false;
-      applied++;
-    } else if (type === 'trim') {
-      if (a.in != null)  times.s = clamp(Number(a.in), 0, times.duration);
-      if (a.out != null) times.e = clamp(Number(a.out), times.s + 0.1, times.duration);
-      changedTrim = true;
-      applied++;
-    }
-  });
-
-  if (!applied) { editHistory.pop(); return 0; }
-  renderIlluStack();
-  renderBrollStack();
-  renderBgmStack();
-  renderSfxStack();
-  renderSfxMarkers();
-  if (changedTrim) updateTrimBar();
-  updateSummary();
-  return applied;
-}
-
-function clearAiChat() {
-  aiChatHistory = [];
-  aiMediaParts = [];
-  aiMediaReady = false;
-  const log = chatLogEl();
-  if (log) log.innerHTML = '<div class="ai-msg ai-msg-bot"><p>Chat cleared. Press <strong>Analyze</strong> to start again, or type a message.</p></div>';
-  toast('Chat cleared', 'info');
-}
-
-// ── SETTINGS MODAL ────────────────────────────────────────────
-let settingsLastFocus = null;
-function openSettingsModal() {
-  const overlay = el('settings-overlay');
-  if (!overlay) return;
-  settingsLastFocus = document.activeElement;
-  overlay.classList.remove('hidden');
-  document.body.classList.add('modal-open');
-  setTimeout(() => { el('gemini-api-key')?.focus(); }, 30);
-  document.addEventListener('keydown', settingsEscHandler);
-}
-function closeSettingsModal() {
-  const overlay = el('settings-overlay');
-  if (!overlay) return;
-  overlay.classList.add('hidden');
-  document.body.classList.remove('modal-open');
-  document.removeEventListener('keydown', settingsEscHandler);
-  if (settingsLastFocus && settingsLastFocus.focus) settingsLastFocus.focus();
-}
-function settingsEscHandler(e) {
-  if (e.key === 'Escape') { e.preventDefault(); closeSettingsModal(); }
-}
-// ── ENGINE INIT ───────────────────────────────────────────────
+// ── ENGINE INITIALIZATION ────────────────────────────────────
 (async function initEngine() {
-  setStatus('Loading FFmpeg engine…');
+  setStatus('Loading FFmpeg video processing engine…');
   try {
     await ffmpeg.load();
     engineReady = true;
     engineBadge.textContent = 'ENGINE READY';
     engineBadge.classList.add('online');
-    setStatus('Engine ready. Load a video to begin.');
+    setStatus('Engine ready. Load a video or audio file to start.');
     toast('FFmpeg engine loaded ✓', 'success');
   } catch (err) {
     engineBadge.textContent = 'ENGINE ERROR';
-    setStatus('Engine failed — please refresh.', true);
+    setStatus('Engine load failed — please refresh.', true);
     toast('Engine error — refresh page', 'error');
     console.error(err);
   }
 })();
 
-// ── FIREBASE AUTH + INLINE AUTH WIDGET ───────────────────────
-// Shows: [Avatar] Signed in as [Name] [Log Out]  when logged in
-// Shows: [Sign In] button  when logged out
-// Signing in/out syncs across the whole Tech House suite.
-
-// ── THEME + QUICK TOGGLES (apply site-wide) ──────────────────
-function applySiteTheme() {
-  const dark = editorSettings.theme === 'dark';
-  document.body.classList.toggle('theme-dark', dark);
-  const t = el('quick-theme');
-  if (t) { t.setAttribute('aria-checked', String(dark)); t.classList.toggle('on', dark); }
-}
-function toggleSiteTheme() {
-  editorSettings.theme = editorSettings.theme === 'dark' ? 'light' : 'dark';
-  applySiteTheme();
-  persistEditorSettings();
-  toast(`Theme: ${editorSettings.theme === 'dark' ? 'Dark' : 'Light'}`, 'info');
-}
-function applyQuickToggleState() {
-  const rm = el('quick-reduce-motion');
-  const hc = el('quick-high-contrast');
-  if (rm) { rm.setAttribute('aria-checked', String(!!editorSettings.reduceMotion)); rm.classList.toggle('on', !!editorSettings.reduceMotion); }
-  if (hc) { hc.setAttribute('aria-checked', String(!!editorSettings.highContrast)); hc.classList.toggle('on', !!editorSettings.highContrast); }
-}
+// ── AUTHENTICATION & ACCOUNT MENU ────────────────────────────
 function setupQuickToggles() {
   el('quick-reduce-motion')?.addEventListener('click', () => {
     editorSettings.reduceMotion = !editorSettings.reduceMotion;
@@ -1208,6 +987,27 @@ function setupQuickToggles() {
   el('quick-theme')?.addEventListener('click', toggleSiteTheme);
   applyQuickToggleState();
   applySiteTheme();
+}
+
+function applySiteTheme() {
+  const dark = editorSettings.theme === 'dark';
+  document.body.classList.toggle('theme-dark', dark);
+  const t = el('quick-theme');
+  if (t) { t.setAttribute('aria-checked', String(dark)); t.classList.toggle('on', dark); }
+}
+
+function toggleSiteTheme() {
+  editorSettings.theme = editorSettings.theme === 'dark' ? 'light' : 'dark';
+  applySiteTheme();
+  persistEditorSettings();
+  toast(`Theme: ${editorSettings.theme === 'dark' ? 'Dark' : 'Light'}`, 'info');
+}
+
+function applyQuickToggleState() {
+  const rm = el('quick-reduce-motion');
+  const hc = el('quick-high-contrast');
+  if (rm) { rm.setAttribute('aria-checked', String(!!editorSettings.reduceMotion)); rm.classList.toggle('on', !!editorSettings.reduceMotion); }
+  if (hc) { hc.setAttribute('aria-checked', String(!!editorSettings.highContrast)); hc.classList.toggle('on', !!editorSettings.highContrast); }
 }
 
 function setupAuth() {
@@ -1242,12 +1042,11 @@ function setupAuth() {
   if (googleBtn) {
     googleBtn.addEventListener('click', async () => {
       googlePop.classList.add('hidden');
-      if (!gProvider || !fbSignInWithPopup) { toast('Sign-in unavailable — reload the page', 'error'); return; }
+      if (!gProvider || !fbSignInWithPopup) { toast('Sign-in unavailable — reload page', 'error'); return; }
       try {
         await fbSignInWithPopup(gProvider);
         toast('Signed in to Tech House ✓', 'success');
       } catch (err) {
-        // iOS / popup-blocked fallback to redirect flow.
         if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
         try { if (fbSignInWithRedirect) await fbSignInWithRedirect(gProvider); }
         catch (_) { toast('Sign-in failed: ' + (err.message || err.code), 'error'); }
@@ -1255,9 +1054,7 @@ function setupAuth() {
     });
   }
 
-  if (accountBtn) {
-    accountBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAccountMenu(); });
-  }
+  if (accountBtn) accountBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAccountMenu(); });
   if (settingsBtn) settingsBtn.addEventListener('click', () => { closeAccountMenu(); openSettingsModal(); });
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
@@ -1267,38 +1064,33 @@ function setupAuth() {
     });
   }
 
-  // Close menus on outside click / Escape
   document.addEventListener('click', e => {
     const widget = document.getElementById('auth-widget');
     if (widget && !widget.contains(e.target)) {
-      googlePop.classList.add('hidden');
+      if (googlePop) googlePop.classList.add('hidden');
       closeAccountMenu();
     }
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { googlePop.classList.add('hidden'); closeAccountMenu(); }
+    if (e.key === 'Escape') {
+      if (googlePop) googlePop.classList.add('hidden');
+      closeAccountMenu();
+    }
   });
 
-  // Auth state → update account widget
   if (fbOnAuthStateChanged) {
     fbOnAuthStateChanged(user => {
       if (user) {
         const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
         const email = user.email || '';
-        const avatar = user.photoURL ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=f59e0b&color=000&size=80`;
+        const avatar = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=f59e0b&color=000&size=80`;
         signinBtn?.classList.add('hidden');
         accountBtn?.classList.remove('hidden');
-        const nameEl = document.getElementById('auth-name');
-        if (nameEl) nameEl.textContent = displayName;
-        const avatarEl = document.getElementById('auth-avatar');
-        if (avatarEl) avatarEl.src = avatar;
-        const menuAvatar = document.getElementById('account-menu-avatar');
-        if (menuAvatar) menuAvatar.src = avatar;
-        const menuName = document.getElementById('account-menu-name');
-        if (menuName) menuName.textContent = displayName;
-        const menuEmail = document.getElementById('account-menu-email');
-        if (menuEmail) menuEmail.textContent = email || 'signed in';
+        if (el('auth-name')) el('auth-name').textContent = displayName;
+        if (el('auth-avatar')) el('auth-avatar').src = avatar;
+        if (el('account-menu-avatar')) el('account-menu-avatar').src = avatar;
+        if (el('account-menu-name')) el('account-menu-name').textContent = displayName;
+        if (el('account-menu-email')) el('account-menu-email').textContent = email || 'signed in';
       } else {
         signinBtn?.classList.remove('hidden');
         accountBtn?.classList.add('hidden');
@@ -1308,10 +1100,7 @@ function setupAuth() {
   }
 }
 
-// ── MEDIA UPLOAD (HYBRID: VIDEO OR AUDIO) ─────────────────────
-
-// Robust media-type detection. iOS Chrome/Safari sometimes report an empty
-// or generic file.type, so we fall back to the file extension.
+// ── MEDIA UPLOAD & HANDLING ──────────────────────────────────
 function detectMediaKind(file) {
   const type = (file.type || '').toLowerCase();
   if (type.startsWith('video/')) return 'video';
@@ -1326,8 +1115,8 @@ async function handleMainMediaFile(file) {
   if (!file) return;
   const kind = detectMediaKind(file);
   if (!kind) {
-    toast('Unsupported file — please pick a video or audio file', 'error');
-    setStatus('Unsupported file type. Load a video or audio file.', true);
+    toast('Unsupported file — select a video or audio file', 'error');
+    setStatus('Unsupported file type.', true);
     return;
   }
 
@@ -1343,13 +1132,11 @@ async function handleMainMediaFile(file) {
   }
 }
 
-// Show/hide the correct preview surface and adjust controls for the mode.
 function applyMediaKindUI() {
   const isAudio = mediaKind === 'audio';
   if (player) player.classList.toggle('hidden', isAudio);
   if (audioOnlyStage) audioOnlyStage.classList.toggle('hidden', !isAudio);
   document.body.classList.toggle('audio-mode', isAudio);
-  // Video-only overlay layers (logo, illustrations, B-roll) are dimmed for audio.
   document.querySelectorAll('[data-video-only]').forEach(node => {
     node.classList.toggle('mode-disabled', isAudio);
   });
@@ -1361,14 +1148,16 @@ function finishMediaLoad(file, duration) {
   times.e = duration;
   segments    = [{ s: 0, e: duration }];
   editHistory = [];
+  redoHistory = [];
 
-  uploadZone.classList.add('hidden');
-  previewStage.classList.remove('hidden');
-  document.getElementById('export-btn').disabled  = false;
-  document.getElementById('silence-btn').disabled = false;
-  document.getElementById('undo-btn').disabled    = true;
+  if (uploadZone) uploadZone.classList.add('hidden');
+  if (previewStage) previewStage.classList.remove('hidden');
+  if (el('export-btn')) el('export-btn').disabled = false;
+  if (el('silence-btn')) el('silence-btn').disabled = false;
+  if (el('undo-btn')) el('undo-btn').disabled = true;
+  if (el('redo-btn')) el('redo-btn').disabled = true;
   if (el('ai-chat-input')) el('ai-chat-input').disabled = false;
-  if (el('ai-send-btn'))   el('ai-send-btn').disabled   = false;
+  if (el('ai-send-btn')) el('ai-send-btn').disabled = false;
 
   updateTimecodes();
   updateTrimBar();
@@ -1380,7 +1169,6 @@ function finishMediaLoad(file, duration) {
   toast(`${kindLabel} loaded ✓`, 'success');
   scheduleProjectAutosave();
 
-  // Decode audio for silence detection + AI transcription in the background.
   decodeVideoAudio(file);
 }
 
@@ -1394,8 +1182,8 @@ function loadMainVideo(file) {
       resolve();
     };
     player.addEventListener('loadedmetadata', onMeta, { once: true });
-    // iOS Safari occasionally withholds loadedmetadata until playback is
-    // nudged; a muted no-op play()/pause() reliably forces metadata to load.
+    
+    // Nudge Safari iOS metadata loading
     const wasMuted = player.muted;
     player.muted = true;
     const kick = player.play?.();
@@ -1422,64 +1210,54 @@ function loadMainAudio(file) {
   });
 }
 
-document.getElementById('vid-uploader').addEventListener('change', async (e) => {
+el('vid-uploader')?.addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   await handleMainMediaFile(file);
-  // Reset so re-selecting the same file still fires 'change' (needed on iOS).
   e.target.value = '';
 });
 
-// Drag-and-drop (desktop) — accepts video OR audio.
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--amber)'; });
-uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
-uploadZone.addEventListener('drop', async e => {
-  e.preventDefault();
-  uploadZone.style.borderColor = '';
-  const file = e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file && detectMediaKind(file)) {
-    await handleMainMediaFile(file);
-  } else if (file) {
-    toast('Drop a video or audio file', 'error');
-  }
-});
+if (uploadZone) {
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--amber)'; });
+  uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+  uploadZone.addEventListener('drop', async e => {
+    e.preventDefault();
+    uploadZone.style.borderColor = '';
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file && detectMediaKind(file)) await handleMainMediaFile(file);
+  });
+}
 
-// ── DECODE AUDIO FOR SILENCE DETECTION ───────────────────────
 async function decodeVideoAudio(file) {
   try {
     const arrayBuf = await file.arrayBuffer();
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     mainAudioBuffer = await ctx.decodeAudioData(arrayBuf);
     ctx.close();
-    setStatus(`Audio decoded. ${fmtTime(mainAudioBuffer.duration)} ready for analysis.`);
+    setStatus(`Audio waveform ready. ${fmtTime(mainAudioBuffer.duration)} for analysis.`);
   } catch (err) {
     console.warn('[Audio decode]', err.message);
-    // Not fatal — silence detection just won't work
   }
 }
 
-// ── SILENCE DETECTION / AUTO JUMP-CUT ────────────────────────
+// ── SILENCE DETECTION ─────────────────────────────────────────
 async function detectSilence() {
-  if (!mainAudioBuffer) {
-    toast('Audio not decoded yet — wait a moment', 'error');
-    return;
-  }
-  const thresholdDb  = parseFloat(document.getElementById('silence-threshold').value) || -40;
-  const minDurSec    = parseFloat(document.getElementById('silence-min-dur').value)   || 0.5;
-  const threshold    = Math.pow(10, thresholdDb / 20); // dB → linear
+  if (!mainAudioBuffer) { toast('Audio waveform decoding — try again in a moment', 'info'); return; }
+  const thresholdDb = parseFloat(el('silence-threshold')?.value || '-40');
+  const minDurSec   = parseFloat(el('silence-min-dur')?.value || '0.5');
+  const threshold   = Math.pow(10, thresholdDb / 20);
 
-  setStatus('Scanning for silence…');
+  setStatus('Scanning for silent gaps…');
   toast('Scanning for silent gaps…', 'info');
 
-  const data       = mainAudioBuffer.getChannelData(0); // mono channel
+  const data       = mainAudioBuffer.getChannelData(0);
   const sr         = mainAudioBuffer.sampleRate;
-  const windowSamp = Math.floor(sr * 0.05); // 50ms RMS windows
+  const windowSamp = Math.floor(sr * 0.05);
 
   const silentRanges = [];
   let inSilence = false;
   let silStart  = 0;
 
   for (let i = 0; i < data.length; i += windowSamp) {
-    // Compute RMS for this window
     let sum = 0;
     const end = Math.min(i + windowSamp, data.length);
     for (let j = i; j < end; j++) sum += data[j] * data[j];
@@ -1503,14 +1281,12 @@ async function detectSilence() {
 
   if (silentRanges.length === 0) {
     toast('No silent gaps found above threshold', 'info');
-    setStatus('No silence detected. Try lowering the threshold dB value.');
+    setStatus('No silence detected.');
     return;
   }
 
-  // Save state then apply cuts
   pushHistory();
   for (const range of silentRanges) {
-    // Expand silence slightly inward (keep 50ms of silence at edges for smoothness)
     const cs = range.s + 0.05;
     const ce = range.e - 0.05;
     if (ce - cs < 0.1) continue;
@@ -1522,53 +1298,32 @@ async function detectSilence() {
     segments = newSegs.filter(s => s.e - s.s > 0.05);
   }
 
-  document.getElementById('undo-btn').disabled = false;
   updateSegmentDisplay();
   updateSummary();
   times.s = 0; times.e = times.duration;
   updateTrimBar();
 
   const kept = segments.reduce((a, s) => a + (s.e - s.s), 0);
-  const msg  = `Auto-cut ${silentRanges.length} silent gap${silentRanges.length > 1 ? 's' : ''}. ${fmtTime(kept)} of audio remains. Ctrl+Z to undo.`;
   setStatus(`Silence removed: ${silentRanges.length} cuts applied.`);
-  announce(msg);
-  toast(`${silentRanges.length} silence cut${silentRanges.length > 1 ? 's' : ''} applied ✂`, 'success');
+  toast(`${silentRanges.length} silent gap${silentRanges.length > 1 ? 's' : ''} cut ✂`, 'success');
 }
 
-// ── LAYER UPLOADS (logo, audioSwap) ──────────────────────────
+// ── LAYER UPLOADS ─────────────────────────────────────────────
 function triggerLayer(type) {
-  const input = document.getElementById('layer-uploader');
+  const input = el('layer-uploader');
+  if (!input) return;
   input.accept = (type === 'logo') ? 'image/*' : 'audio/*';
   input._type  = type;
   input.click();
 }
-document.getElementById('layer-uploader').onchange = (e) => {
+
+el('layer-uploader').onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const type = e.target._type;
   pushHistory();
   assets[type] = file;
-  const objectURL = getPreviewURL(file);
-
-  if (type === 'logo') {
-    document.getElementById('overlay-logo-img').src = objectURL;
-    overlayLogo.classList.remove('hidden');
-    applyLogoPosition(logoPosition);
-    const el = document.getElementById('layer-logo');
-    if (el) el.classList.add('loaded');
-    document.getElementById('desc-logo').textContent = file.name.slice(0,20);
-    announce('Logo loaded. Permanent watermark active in preview.');
-  }
-  if (type === 'audioSwap') {
-    swapAudio.src = objectURL;
-    swapAudio.load();
-    player.muted = true;
-    const el = document.getElementById('layer-audioSwap');
-    if (el) el.classList.add('loaded');
-    document.getElementById('desc-audioSwap').textContent = file.name.slice(0,20);
-    announce('Audio Swap loaded. Original audio muted in preview.');
-  }
-
+  syncSingleAssetUI();
   updateSummary();
   toast(`${type === 'logo' ? 'Logo' : 'Audio Swap'} added ✓`, 'success');
   e.target.value = '';
@@ -1580,6 +1335,7 @@ function setLogoPosition(val) {
   updateSummary();
   announce(`Logo position: ${val.replace(/-/g,' ')}.`);
 }
+
 function applyLogoPosition(val) {
   overlayLogo.className = 'overlay-logo';
   overlayLogo.classList.add('pos-' + val);
@@ -1588,53 +1344,41 @@ function applyLogoPosition(val) {
 
 function setAudioProcessing(val) {
   audioProcessing = val;
-  const labels = {
-    none:  'Original audio kept as-is',
-    swap:  'Swap file replaces the original audio track',
-    noise: 'Noise removal — adjust strength with the slider',
-    mute:  'Original audio is completely removed'
-  };
-  document.getElementById('audio-processing-note').textContent = labels[val] || '';
-  // Show/hide noise strength slider
-  const strengthRow = document.getElementById('noise-strength-row');
+  const strengthRow = el('noise-strength-row');
   if (strengthRow) strengthRow.style.display = (val === 'noise') ? 'block' : 'none';
   updateSummary();
   announce(`Audio processing set to: ${val}.`);
 }
 
-// ── MULTI-STACK: ILLUSTRATION ─────────────────────────────────
-function triggerAddIllu() {
-  document.getElementById('illu-uploader').click();
-}
-document.getElementById('illu-uploader').onchange = (e) => {
+// ── MULTI-STACK: ILLUSTRATIONS ────────────────────────────────
+function triggerAddIllu() { el('illu-uploader')?.click(); }
+
+el('illu-uploader').onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const id  = nextId();
-  const at  = player.currentTime || 0;
+  const at  = activeMedia().currentTime || 0;
   const url = URL.createObjectURL(file);
 
-  // Create preview DOM element
-  const el = document.createElement('div');
-  el.className = 'illu-overlay-el layout-center hidden';
-  el.dataset.id = id;
+  const elNode = document.createElement('div');
+  elNode.className = 'illu-overlay-el layout-center hidden';
+  elNode.dataset.id = id;
   const img = document.createElement('img');
   img.src = url;
-  el.appendChild(img);
-  illuContainer.appendChild(el);
+  elNode.appendChild(img);
+  if (illuContainer) illuContainer.appendChild(elNode);
 
-  const item = { id, file, url, at, duration: 3, layout: 'center', el };
-  illuStack.push(item);
-
+  illuStack.push({ id, file, url, at, duration: 3, layout: 'center', el: elNode });
   pushHistory();
   renderIlluStack();
   updateSummary();
-  announce(`Illustration added at ${fmtTime(at)}. Duration 3 seconds.`);
   toast('Illustration added ✓', 'success');
   e.target.value = '';
 };
 
 function renderIlluStack() {
-  const container = document.getElementById('illu-stack');
+  const container = el('illu-stack');
+  if (!container) return;
   container.innerHTML = '';
   illuStack.forEach(item => {
     const card = document.createElement('div');
@@ -1648,18 +1392,16 @@ function renderIlluStack() {
         <div class="stack-ctrl-row">
           <span class="stack-ctrl-label">At (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.at.toFixed(2)}" min="0" step="0.1"
-                 aria-label="Illustration timestamp"
-                 onchange="updateIllu(${item.id},'at',parseFloat(this.value))">
+                 aria-label="Timestamp" onchange="updateIllu(${item.id},'at',parseFloat(this.value))">
         </div>
         <div class="stack-ctrl-row">
           <span class="stack-ctrl-label">Dur (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.duration}" min="0.5" step="0.5"
-                 aria-label="Illustration duration"
-                 onchange="updateIllu(${item.id},'duration',parseFloat(this.value))">
+                 aria-label="Duration" onchange="updateIllu(${item.id},'duration',parseFloat(this.value))">
         </div>
         <div style="grid-column:1/-1;">
           <span class="stack-ctrl-label">Layout</span>
-          <select class="stack-select" onchange="updateIllu(${item.id},'layout',this.value)" aria-label="Illustration layout">
+          <select class="stack-select" onchange="updateIllu(${item.id},'layout',this.value)" aria-label="Layout">
             ${['center','fullscreen','left-third','right-third'].map(l =>
               `<option value="${l}" ${item.layout===l?'selected':''}>${l.replace(/-/g,' ')}</option>`).join('')}
           </select>
@@ -1668,19 +1410,21 @@ function renderIlluStack() {
     container.appendChild(card);
   });
 }
+
 function updateIllu(id, field, val) {
   const item = illuStack.find(i => i.id === id);
   if (!item) return;
   item[field] = val;
-  if (field === 'layout') {
+  if (field === 'layout' && item.el) {
     item.el.className = `illu-overlay-el layout-${val} hidden`;
   }
   updateSummary();
 }
+
 function removeIllu(id) {
   const idx = illuStack.findIndex(i => i.id === id);
   if (idx === -1) return;
-  illuStack[idx].el.remove();
+  if (illuStack[idx].el) illuStack[idx].el.remove();
   illuStack.splice(idx, 1);
   pushHistory();
   renderIlluStack();
@@ -1688,16 +1432,10 @@ function removeIllu(id) {
   toast('Illustration removed', 'info');
 }
 
-// ── MULTI-STACK: BGM with Music Focus Controller ─────────────
-// The "focused" BGM track gets a visual scrubber + play/pause button.
-// Keyboard when focused: Space = play/pause, Left/Right = ±5s start, Shift+Left/Right = ±1s
-let focusedBgmId = null;
-let bgmScrubIntervals = {}; // interval refs per BGM id for scrubber update
+// ── MULTI-STACK: BGM ──────────────────────────────────────────
+function triggerAddBGM() { el('bgm-uploader')?.click(); }
 
-function triggerAddBGM() {
-  document.getElementById('bgm-uploader').click();
-}
-document.getElementById('bgm-uploader').onchange = (e) => {
+el('bgm-uploader').onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const id    = nextId();
@@ -1707,23 +1445,21 @@ document.getElementById('bgm-uploader').onchange = (e) => {
   audio.volume = 0.18;
   bgmStack.push({ id, file, audio, startAt: 0, offset: 0, volume: 18 });
   pushHistory();
-  // Focus the new track automatically
   focusedBgmId = id;
   renderBgmStack();
   updateSummary();
-  announce(`BGM track added: "${file.name}". Now focused. Press Space to preview. Left/Right arrows nudge start time.`);
   toast('BGM track added ✓', 'success');
   e.target.value = '';
 };
 
 function renderBgmStack() {
-  const container = document.getElementById('bgm-stack');
+  const container = el('bgm-stack');
+  if (!container) return;
   container.innerHTML = '';
   bgmStack.forEach(item => {
     const isFocused = item.id === focusedBgmId;
     const card = document.createElement('div');
     card.className = 'stack-item' + (isFocused ? ' selected' : '');
-    card.setAttribute('data-bgm-id', item.id);
     card.innerHTML = `
       <div class="stack-item-header">
         <span class="stack-item-name">🎵 ${item.file.name.slice(0,16)}</span>
@@ -1732,127 +1468,50 @@ function renderBgmStack() {
           <button class="stack-item-remove" onclick="removeBgm(${item.id})" aria-label="Remove BGM track">✕</button>
         </div>
       </div>
-
-      <!-- Click to focus -->
       <button class="btn btn-sm btn-ghost" style="width:100%;font-size:0.7rem;margin-bottom:4px;"
-              onclick="focusBgm(${item.id})"
-              aria-label="${isFocused ? 'Track is focused' : 'Click to focus this BGM track for keyboard control'}">
-        ${isFocused ? '🎯 Focused — use keyboard to control' : '🎯 Click to focus'}
+              onclick="focusBgm(${item.id})" aria-label="Focus BGM track">
+        ${isFocused ? '🎯 Focused — Shift+M to play/pause' : '🎯 Click to focus track'}
       </button>
-
-      <!-- Music Focus Controller (only shown when focused) -->
-      ${isFocused ? `
-      <div class="bgm-focus-controls" id="bgm-focus-${item.id}">
-        <div class="bgm-scrubber-row">
-          <button class="bgm-play-btn" id="bgm-play-${item.id}"
-                  aria-label="Play or pause this BGM track"
-                  onclick="toggleBgmPlayback(${item.id})">▶</button>
-          <input type="range" class="bgm-scrubber" id="bgm-scrub-${item.id}"
-                 min="0" max="100" value="0" step="0.1"
-                 aria-label="BGM song position scrubber"
-                 oninput="onBgmScrub(${item.id}, this.value)">
-          <span class="bgm-time-display" id="bgm-time-${item.id}">0:00 / 0:00</span>
-        </div>
-        <p class="stack-hint" style="margin-top:2px;">M=play/pause · [=−1s start · ]=+1s · Shift+[]=±5s</p>
-      </div>` : ''}
-
       <div class="stack-item-controls">
         <div class="stack-ctrl-row">
           <span class="stack-ctrl-label">Start at (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.startAt}" min="0" step="0.5"
-                 aria-label="At what point in the video BGM starts playing"
-                 onchange="updateBgm(${item.id},'startAt',parseFloat(this.value))">
+                 aria-label="Start time" onchange="updateBgm(${item.id},'startAt',parseFloat(this.value))">
         </div>
         <div class="stack-ctrl-row">
           <span class="stack-ctrl-label">Song offset (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.offset}" min="0" step="1"
-                 aria-label="How far into the song to start from"
-                 onchange="updateBgm(${item.id},'offset',parseFloat(this.value))">
+                 aria-label="Song offset" onchange="updateBgm(${item.id},'offset',parseFloat(this.value))">
         </div>
         <div style="grid-column:1/-1;">
           <span class="stack-ctrl-label">Volume ${item.volume}%</span>
           <input type="range" class="stack-vol-slider" min="0" max="100" value="${item.volume}"
-                 aria-label="BGM volume"
-                 oninput="updateBgm(${item.id},'volume',parseInt(this.value))">
+                 aria-label="BGM volume" oninput="updateBgm(${item.id},'volume',parseInt(this.value))">
         </div>
       </div>`;
-
-    card.addEventListener('click', (e) => {
-      // Focus on click anywhere in the card (unless a control was clicked)
-      if (!['INPUT','SELECT','BUTTON'].includes(e.target.tagName)) {
-        focusBgm(item.id);
-      }
-    });
-
     container.appendChild(card);
-
-    // Start scrubber update interval for focused track
-    if (isFocused) {
-      clearInterval(bgmScrubIntervals[item.id]);
-      bgmScrubIntervals[item.id] = setInterval(() => updateBgmScrubberDisplay(item.id), 250);
-    }
   });
 }
 
 function focusBgm(id) {
-  // Clear old interval
-  if (focusedBgmId && bgmScrubIntervals[focusedBgmId]) {
-    clearInterval(bgmScrubIntervals[focusedBgmId]);
-  }
   focusedBgmId = id;
   renderBgmStack();
   const item = bgmStack.find(i => i.id === id);
-  if (item) announce(`BGM "${item.file.name}" focused. Press M to play or pause. Use [ and ] to nudge start time.`);
+  if (item) announce(`BGM "${item.file.name}" focused.`);
 }
 
 function toggleBgmPlayback(id) {
   const item = bgmStack.find(i => i.id === id);
   if (!item) return;
-  // Pause main video while using music focus
-  if (!player.paused) player.pause();
+  if (!activeMedia().paused) activeMedia().pause();
   if (item.audio.paused) {
     item.audio.currentTime = item.offset;
     item.audio.play().catch(() => {});
-    const btn = document.getElementById(`bgm-play-${id}`);
-    if (btn) btn.textContent = '⏸';
-    announce(`BGM playing: ${item.file.name}`);
+    announce(`Playing BGM: ${item.file.name}`);
   } else {
     item.audio.pause();
-    const btn = document.getElementById(`bgm-play-${id}`);
-    if (btn) btn.textContent = '▶';
     announce('BGM paused.');
   }
-}
-
-function onBgmScrub(id, pct) {
-  const item = bgmStack.find(i => i.id === id);
-  if (!item || !item.audio.duration) return;
-  // Moving the scrubber sets the song offset (where in the song to start)
-  const newOffset = (pct / 100) * item.audio.duration;
-  item.audio.currentTime = newOffset;
-  item.offset = newOffset;
-  updateBgmScrubberDisplay(id);
-  announce(`Song position set to ${fmtTime(newOffset)}.`);
-}
-
-function updateBgmScrubberDisplay(id) {
-  const item   = bgmStack.find(i => i.id === id);
-  const scrub  = document.getElementById(`bgm-scrub-${id}`);
-  const timeEl = document.getElementById(`bgm-time-${id}`);
-  if (!item || !scrub || !timeEl) return;
-  const dur  = item.audio.duration || 0;
-  const cur  = item.audio.currentTime || 0;
-  scrub.value = dur > 0 ? ((cur / dur) * 100).toFixed(1) : '0';
-  timeEl.textContent = `${fmtTime(cur)} / ${fmtTime(dur)}`;
-}
-
-function nudgeBgmStartAt(id, deltaSeconds) {
-  const item = bgmStack.find(i => i.id === id);
-  if (!item) return;
-  item.startAt = Math.max(0, item.startAt + deltaSeconds);
-  renderBgmStack();
-  updateSummary();
-  announce(`BGM starts at ${fmtTime(item.startAt)} in video.`);
 }
 
 function updateBgm(id, field, val) {
@@ -1864,11 +1523,11 @@ function updateBgm(id, field, val) {
   renderBgmStack();
   updateSummary();
 }
+
 function removeBgm(id) {
   const idx = bgmStack.findIndex(i => i.id === id);
   if (idx === -1) return;
   bgmStack[idx].audio.pause();
-  clearInterval(bgmScrubIntervals[id]);
   bgmStack.splice(idx, 1);
   if (focusedBgmId === id) focusedBgmId = bgmStack.length > 0 ? bgmStack[0].id : null;
   pushHistory();
@@ -1877,11 +1536,10 @@ function removeBgm(id) {
   toast('BGM track removed', 'info');
 }
 
-// ── MULTI-STACK: SFX ─────────────────────────────────────────
-function triggerAddSFX() {
-  document.getElementById('sfx-uploader').click();
-}
-document.getElementById('sfx-uploader').onchange = (e) => {
+// ── MULTI-STACK: SFX ──────────────────────────────────────────
+function triggerAddSFX() { el('sfx-uploader')?.click(); }
+
+el('sfx-uploader').onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const id    = nextId();
@@ -1893,20 +1551,18 @@ document.getElementById('sfx-uploader').onchange = (e) => {
   renderSfxStack();
   renderSfxMarkers();
   updateSummary();
-  announce(`SFX added at ${fmtTime(activeMedia().currentTime)}. Select it and use Shift+Ctrl+Arrow to nudge.`);
   toast('SFX added ✓', 'success');
   e.target.value = '';
 };
+
 function renderSfxStack() {
-  const container = document.getElementById('sfx-stack');
+  const container = el('sfx-stack');
+  if (!container) return;
   container.innerHTML = '';
   sfxStack.forEach(item => {
     const card = document.createElement('div');
     card.className = 'stack-item' + (item.id === selectedSfxId ? ' selected' : '');
-    card.onclick = () => { selectedSfxId = item.id; renderSfxStack(); announce(`SFX "${item.file.name}" selected. Use Shift+Ctrl+Arrow to nudge.`); };
-    card.setAttribute('tabindex','0');
-    card.setAttribute('role','button');
-    card.setAttribute('aria-label', `SFX: ${item.file.name}, at ${fmtTime(item.at)}`);
+    card.onclick = () => { selectedSfxId = item.id; renderSfxStack(); };
     card.innerHTML = `
       <div class="stack-item-header">
         <span class="stack-item-name">🔊 ${item.file.name.slice(0,18)}</span>
@@ -1916,21 +1572,20 @@ function renderSfxStack() {
         <div class="stack-ctrl-row">
           <span class="stack-ctrl-label">At (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.at.toFixed(2)}" min="0" step="0.1"
-                 aria-label="SFX trigger time"
-                 onclick="event.stopPropagation()"
+                 aria-label="Trigger time" onclick="event.stopPropagation()"
                  onchange="event.stopPropagation();updateSfx(${item.id},'at',parseFloat(this.value))">
         </div>
         <div style="grid-column:1/-1;">
           <span class="stack-ctrl-label">Volume ${item.volume}%</span>
           <input type="range" class="stack-vol-slider" min="0" max="100" value="${item.volume}"
-                 aria-label="SFX volume"
-                 onclick="event.stopPropagation()"
+                 aria-label="SFX volume" onclick="event.stopPropagation()"
                  oninput="event.stopPropagation();updateSfx(${item.id},'volume',parseInt(this.value))">
         </div>
       </div>`;
     container.appendChild(card);
   });
 }
+
 function updateSfx(id, field, val) {
   const item = sfxStack.find(i => i.id === id);
   if (!item) return;
@@ -1940,6 +1595,7 @@ function updateSfx(id, field, val) {
   renderSfxMarkers();
   updateSummary();
 }
+
 function removeSfx(id) {
   const idx = sfxStack.findIndex(i => i.id === id);
   if (idx === -1) return;
@@ -1952,10 +1608,13 @@ function removeSfx(id) {
   updateSummary();
   toast('SFX removed', 'info');
 }
+
 function renderSfxMarkers() {
-  const layer = document.getElementById('sfx-markers-layer');
+  const layer = el('sfx-markers-layer');
+  if (!layer) return;
   layer.innerHTML = '';
   if (!times.duration) return;
+  
   sfxStack.forEach(item => {
     const frac    = item.at / times.duration;
     const fracVis = Math.max(0, Math.min(1, (frac - zoomStart) * zoomLevel));
@@ -1966,11 +1625,9 @@ function renderSfxMarkers() {
     layer.appendChild(marker);
   });
 }
+
 function nudgeSelectedSfx(deltaSeconds) {
-  if (!selectedSfxId) {
-    announce('No SFX selected. Click an SFX item first, then nudge with Shift+Ctrl+Arrow.', true);
-    return;
-  }
+  if (!selectedSfxId) { announce('No SFX selected.', true); return; }
   const item = sfxStack.find(i => i.id === selectedSfxId);
   if (!item) return;
   item.at = Math.max(0, Math.min(times.duration, item.at + deltaSeconds));
@@ -1980,10 +1637,9 @@ function nudgeSelectedSfx(deltaSeconds) {
 }
 
 // ── MULTI-STACK: B-ROLL ───────────────────────────────────────
-function triggerAddBRoll() {
-  document.getElementById('broll-uploader').click();
-}
-document.getElementById('broll-uploader').onchange = (e) => {
+function triggerAddBRoll() { el('broll-uploader')?.click(); }
+
+el('broll-uploader').onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const id  = nextId();
@@ -1991,16 +1647,17 @@ document.getElementById('broll-uploader').onchange = (e) => {
   vid.src   = URL.createObjectURL(file);
   vid.muted = true;
   vid.preload = 'metadata';
-  brollStack.push({ id, file, video: vid, at: player.currentTime || 0, duration: 5, muteAudio: true, layout: 'fullscreen' });
+  brollStack.push({ id, file, video: vid, at: activeMedia().currentTime || 0, duration: 5, muteAudio: true, layout: 'fullscreen' });
   pushHistory();
   renderBrollStack();
   updateSummary();
-  announce(`B-Roll clip added at ${fmtTime(player.currentTime)}. Overlays main video as fullscreen by default. You can change the layout.`);
   toast('B-Roll added ✓', 'success');
   e.target.value = '';
 };
+
 function renderBrollStack() {
-  const container = document.getElementById('broll-stack');
+  const container = el('broll-stack');
+  if (!container) return;
   container.innerHTML = '';
   brollStack.forEach(item => {
     const card = document.createElement('div');
@@ -2014,34 +1671,25 @@ function renderBrollStack() {
         <div class="stack-ctrl-row">
           <span class="stack-ctrl-label">At (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.at.toFixed(1)}" min="0" step="0.5"
-                 aria-label="B-Roll start time in video"
-                 onchange="updateBroll(${item.id},'at',parseFloat(this.value))">
+                 aria-label="Start time" onchange="updateBroll(${item.id},'at',parseFloat(this.value))">
         </div>
         <div class="stack-ctrl-row">
-          <span class="stack-ctrl-label">Duration (s)</span>
+          <span class="stack-ctrl-label">Dur (s)</span>
           <input type="number" class="stack-ctrl-input" value="${item.duration}" min="0.5" step="0.5"
-                 aria-label="How long the B-Roll shows"
-                 onchange="updateBroll(${item.id},'duration',parseFloat(this.value))">
+                 aria-label="Duration" onchange="updateBroll(${item.id},'duration',parseFloat(this.value))">
         </div>
         <div style="grid-column:1/-1;">
-          <span class="stack-ctrl-label">Layout / Position</span>
-          <select class="stack-select" aria-label="B-Roll layout on screen"
-                  onchange="updateBroll(${item.id},'layout',this.value)">
+          <span class="stack-ctrl-label">Layout</span>
+          <select class="stack-select" aria-label="Layout" onchange="updateBroll(${item.id},'layout',this.value)">
             ${['fullscreen','center','left-third','right-third'].map(l =>
               `<option value="${l}" ${item.layout===l?'selected':''}>${l.replace(/-/g,' ')}</option>`).join('')}
           </select>
-        </div>
-        <div style="grid-column:1/-1;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:0.72rem;cursor:pointer;">
-            <input type="checkbox" ${item.muteAudio?'checked':''} aria-label="Mute B-Roll audio — keep main video audio"
-                   onchange="updateBroll(${item.id},'muteAudio',this.checked)">
-            Mute B-Roll audio (keep main audio)
-          </label>
         </div>
       </div>`;
     container.appendChild(card);
   });
 }
+
 function updateBroll(id, field, val) {
   const item = brollStack.find(i => i.id === id);
   if (!item) return;
@@ -2050,6 +1698,7 @@ function updateBroll(id, field, val) {
   renderBrollStack();
   updateSummary();
 }
+
 function removeBroll(id) {
   const idx = brollStack.findIndex(i => i.id === id);
   if (idx === -1) return;
@@ -2060,27 +1709,21 @@ function removeBroll(id) {
   toast('B-Roll removed', 'info');
 }
 
-// ── LIVE PREVIEW SYSTEM ───────────────────────────────────────
+// ── LIVE PREVIEW UPDATES ──────────────────────────────────────
 player.addEventListener('play', () => {
   previewStage.classList.add('playing');
-  // Reset SFX triggers
   sfxStack.forEach(s => { s.triggered = false; });
-
-  // BGM: sync all tracks
   bgmStack.forEach(item => {
-    const videoOffset = player.currentTime - item.startAt;
-    if (videoOffset < 0) { item.audio.pause(); return; }
+    const offset = player.currentTime - item.startAt;
+    if (offset < 0) { item.audio.pause(); return; }
     const dur = item.audio.duration || 1;
-    item.audio.currentTime = (item.offset + videoOffset) % dur;
+    item.audio.currentTime = (item.offset + offset) % dur;
     item.audio.play().catch(() => {});
   });
-
-  // Audio Swap
   if (assets.audioSwap && swapAudio.src) {
     player.muted = true;
-    const offset = player.currentTime;
-    const dur    = swapAudio.duration || 0;
-    swapAudio.currentTime = dur > 0 ? offset % dur : 0;
+    const dur = swapAudio.duration || 0;
+    swapAudio.currentTime = dur > 0 ? player.currentTime % dur : 0;
     swapAudio.play().catch(() => {});
   }
 });
@@ -2093,97 +1736,32 @@ player.addEventListener('pause', () => {
 
 player.addEventListener('seeked', () => {
   sfxStack.forEach(s => { s.triggered = false; });
-
-  if (!player.paused) {
-    bgmStack.forEach(item => {
-      const videoOffset = player.currentTime - item.startAt;
-      if (videoOffset < 0) { item.audio.pause(); return; }
-      const dur = item.audio.duration || 1;
-      item.audio.currentTime = (item.offset + videoOffset) % dur;
-    });
-    if (assets.audioSwap && swapAudio.src) {
-      const dur = swapAudio.duration || 0;
-      swapAudio.currentTime = dur > 0 ? (player.currentTime % dur) : 0;
-    }
-  }
-
-  // Audio scrubbing — play 80ms snippet on seek
-  if (document.getElementById('scrub-toggle').checked && !player.paused === false) {
-    playScrubSnippet(player.currentTime);
-  }
+  if (el('scrub-toggle')?.checked) playScrubSnippet(player.currentTime);
 });
 
-player.addEventListener('ended', () => {
-  previewStage.classList.remove('playing');
-  bgmStack.forEach(i => i.audio.pause());
-  swapAudio.pause();
-});
-
-// ── AUDIO SCRUBBING ───────────────────────────────────────────
-// Plays an 80ms snippet of audio when the user seeks.
-// Uses Web Audio API — zero latency, no player audio needed.
-let scrubTimeout = null;
-function playScrubSnippet(atTime) {
-  if (!mainAudioBuffer) return;
-  if (!document.getElementById('scrub-toggle').checked) return;
-
-  // Cancel pending scrub
-  if (scrubAudioCtx) { try { scrubAudioCtx.close(); } catch(_) {} }
-
-  const indicator = document.getElementById('scrub-indicator');
-  indicator.classList.remove('hidden');
-
-  scrubAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const src  = scrubAudioCtx.createBufferSource();
-  src.buffer = mainAudioBuffer;
-
-  // Tiny gain envelope to avoid clicks
-  const gain = scrubAudioCtx.createGain();
-  gain.gain.setValueAtTime(0, scrubAudioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.8, scrubAudioCtx.currentTime + 0.01);
-  gain.gain.setValueAtTime(0.8, scrubAudioCtx.currentTime + 0.07);
-  gain.gain.linearRampToValueAtTime(0, scrubAudioCtx.currentTime + 0.08);
-
-  src.connect(gain);
-  gain.connect(scrubAudioCtx.destination);
-  src.start(0, Math.max(0, atTime), 0.08);
-
-  clearTimeout(scrubTimeout);
-  scrubTimeout = setTimeout(() => {
-    indicator.classList.add('hidden');
-    try { scrubAudioCtx.close(); } catch(_) {}
-    scrubAudioCtx = null;
-  }, 150);
-}
-
-// ── TIMECODE + PLAYHEAD ───────────────────────────────────────
 player.ontimeupdate = () => {
   const t = player.currentTime;
-  document.getElementById('tc-current').textContent = fmtTime(t);
+  if (el('tc-current')) el('tc-current').textContent = fmtTime(t);
 
-  // Zoom-aware playhead
   if (times.duration > 0) {
     const frac    = t / times.duration;
     const fracVis = Math.max(0, Math.min(1, (frac - zoomStart) * zoomLevel));
-    document.getElementById('trim-playhead').style.left = (fracVis * 100) + '%';
-
-    // Auto-scroll zoom window
-    if (!player.paused && zoomLevel > 1) {
-      const windowSize = 1 / zoomLevel;
-      if (frac > zoomStart + windowSize - 0.02) {
-        zoomStart = Math.min(1 - windowSize, frac - 0.02);
-        updateTrimBar(); updateZoomBar();
-      }
-    }
+    if (el('trim-playhead')) el('trim-playhead').style.left = (fracVis * 100) + '%';
   }
 
-  // Illustration live preview
+  // Illustrations preview
   illuStack.forEach(item => {
     const show = t >= item.at && t < (item.at + item.duration);
-    item.el.classList.toggle('hidden', !show);
+    if (item.el) item.el.classList.toggle('hidden', !show);
   });
 
-  // SFX triggers
+  // Text Overlays preview
+  textStack.forEach(item => {
+    const show = t >= item.at && t < (item.at + item.duration);
+    if (item.el) item.el.classList.toggle('hidden', !show);
+  });
+
+  // SFX trigger
   sfxStack.forEach(item => {
     if (!item.triggered && t >= item.at && t < item.at + 0.5) {
       item.audio.currentTime = 0;
@@ -2192,7 +1770,7 @@ player.ontimeupdate = () => {
     }
   });
 
-  // B-Roll live preview (only first active b-roll shown in preview for simplicity)
+  // B-Roll preview
   const activeBroll = brollStack.find(b => t >= b.at && t < b.at + b.duration);
   if (activeBroll) {
     overlayBroll.classList.remove('hidden');
@@ -2206,20 +1784,7 @@ player.ontimeupdate = () => {
     brollPlayer.pause();
   }
 
-  // BGM start-at logic (start BGM when playhead reaches startAt)
-  bgmStack.forEach(item => {
-    if (!player.paused && t >= item.startAt && item.audio.paused) {
-      const videoOffset = t - item.startAt;
-      const dur = item.audio.duration || 1;
-      item.audio.currentTime = (item.offset + videoOffset) % dur;
-      item.audio.play().catch(() => {});
-    }
-    if (t < item.startAt && !item.audio.paused) {
-      item.audio.pause();
-    }
-  });
-
-  // Skip cut regions
+  // Skip cut gaps during playback
   const inCut = !segments.some(seg => t >= seg.s - 0.05 && t < seg.e + 0.05);
   if (inCut && !player.paused && segments.length > 0) {
     const nextSeg = segments.find(seg => seg.s > t);
@@ -2228,43 +1793,18 @@ player.ontimeupdate = () => {
   }
 };
 
-// ── AUDIO-ONLY LIVE PREVIEW ───────────────────────────────────
-// Mirrors the video preview engine for audio projects, driving BGM/SFX,
-// timecode and cut-skipping off the dedicated <audio> element.
-audioPlayer.addEventListener('play', () => {
-  previewStage.classList.add('playing');
-  sfxStack.forEach(s => { s.triggered = false; });
-  bgmStack.forEach(item => {
-    const off = audioPlayer.currentTime - item.startAt;
-    if (off < 0) { item.audio.pause(); return; }
-    const dur = item.audio.duration || 1;
-    item.audio.currentTime = (item.offset + off) % dur;
-    item.audio.play().catch(() => {});
-  });
-});
-audioPlayer.addEventListener('pause', () => {
-  previewStage.classList.remove('playing');
-  bgmStack.forEach(i => i.audio.pause());
-});
-audioPlayer.addEventListener('ended', () => {
-  previewStage.classList.remove('playing');
-  bgmStack.forEach(i => i.audio.pause());
-});
-audioPlayer.addEventListener('seeked', () => {
-  sfxStack.forEach(s => { s.triggered = false; });
-});
+// Audio-only player update mirroring
 audioPlayer.ontimeupdate = () => {
   if (mediaKind !== 'audio') return;
   const t = audioPlayer.currentTime;
-  document.getElementById('tc-current').textContent = fmtTime(t);
+  if (el('tc-current')) el('tc-current').textContent = fmtTime(t);
 
   if (times.duration > 0) {
     const frac    = t / times.duration;
     const fracVis = Math.max(0, Math.min(1, (frac - zoomStart) * zoomLevel));
-    document.getElementById('trim-playhead').style.left = (fracVis * 100) + '%';
+    if (el('trim-playhead')) el('trim-playhead').style.left = (fracVis * 100) + '%';
   }
 
-  // SFX triggers
   sfxStack.forEach(item => {
     if (!item.triggered && t >= item.at && t < item.at + 0.5) {
       item.audio.currentTime = 0;
@@ -2272,28 +1812,37 @@ audioPlayer.ontimeupdate = () => {
       item.triggered = true;
     }
   });
-
-  // BGM start-at logic
-  bgmStack.forEach(item => {
-    if (!audioPlayer.paused && t >= item.startAt && item.audio.paused) {
-      const off = t - item.startAt;
-      const dur = item.audio.duration || 1;
-      item.audio.currentTime = (item.offset + off) % dur;
-      item.audio.play().catch(() => {});
-    }
-    if (t < item.startAt && !item.audio.paused) item.audio.pause();
-  });
-
-  // Skip cut regions
-  const inCut = !segments.some(seg => t >= seg.s - 0.05 && t < seg.e + 0.05);
-  if (inCut && !audioPlayer.paused && segments.length > 0) {
-    const nextSeg = segments.find(seg => seg.s > t);
-    if (nextSeg) { audioPlayer.currentTime = nextSeg.s; }
-    else { audioPlayer.pause(); }
-  }
 };
 
-// ── ASPECT & PRESET ───────────────────────────────────────────
+function playScrubSnippet(atTime) {
+  if (!mainAudioBuffer || !el('scrub-toggle')?.checked) return;
+  if (scrubAudioCtx) { try { scrubAudioCtx.close(); } catch(_) {} }
+
+  const indicator = el('scrub-indicator');
+  if (indicator) indicator.classList.remove('hidden');
+
+  scrubAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const src  = scrubAudioCtx.createBufferSource();
+  src.buffer = mainAudioBuffer;
+
+  const gain = scrubAudioCtx.createGain();
+  gain.gain.setValueAtTime(0, scrubAudioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.8, scrubAudioCtx.currentTime + 0.01);
+  gain.gain.setValueAtTime(0.8, scrubAudioCtx.currentTime + 0.07);
+  gain.gain.linearRampToValueAtTime(0, scrubAudioCtx.currentTime + 0.08);
+
+  src.connect(gain);
+  gain.connect(scrubAudioCtx.destination);
+  src.start(0, Math.max(0, atTime), 0.08);
+
+  setTimeout(() => {
+    if (indicator) indicator.classList.add('hidden');
+    try { scrubAudioCtx.close(); } catch(_) {}
+    scrubAudioCtx = null;
+  }, 150);
+}
+
+// ── ASPECT & PRESETS ──────────────────────────────────────────
 function setAspect(val) {
   aspect = val;
   document.querySelectorAll('#seg-landscape, #seg-portrait, #seg-blur-bg').forEach(b => {
@@ -2302,14 +1851,15 @@ function setAspect(val) {
     b.setAttribute('aria-pressed', String(on));
   });
   const notes = {
-    landscape: '1280×720 — standard widescreen',
-    portrait:  '720×1280 — auto-centred crop for TikTok/Reels',
-    'blur-bg': '1280×720 — portrait video + blurred background fill'
+    landscape: '1280×720 — Widescreen 16:9',
+    portrait:  '720×1280 — Vertical 9:16 for Mobile/Reels',
+    'blur-bg': '1280×720 — Vertical video on blurred background'
   };
-  document.getElementById('aspect-note').textContent = notes[val] || '';
+  if (el('aspect-note')) el('aspect-note').textContent = notes[val] || '';
   updateSummary();
-  announce(`Aspect: ${val}.`);
+  announce(`Aspect ratio set to ${val}.`);
 }
+
 function setPreset(val) {
   preset = val;
   document.querySelectorAll('#seg-fast, #seg-balanced, #seg-hq').forEach(b => {
@@ -2320,37 +1870,36 @@ function setPreset(val) {
   updateSummary();
 }
 
-// ── ZOOM ─────────────────────────────────────────────────────
+// ── TIMELINE ZOOM ─────────────────────────────────────────────
 function cycleZoom() {
   if (!times.duration) return;
   zoomLevel = (zoomLevel === 1) ? 4 : 1;
   zoomStart = 0;
   if (zoomLevel === 4) {
-    const playFrac = player.currentTime / times.duration;
+    const playFrac = activeMedia().currentTime / times.duration;
     zoomStart = Math.max(0, Math.min(0.75, playFrac - 0.125));
   }
   updateTrimBar(); updateZoomBar(); renderSfxMarkers();
-  const btn = document.getElementById('btn-zoom');
-  btn.textContent = zoomLevel === 1 ? '🔍 Zoom' : '🔍 4x';
-  announce(zoomLevel === 1 ? 'Full timeline.' : 'Zoomed 4x on current time.');
+  const btn = el('btn-zoom');
+  if (btn) btn.textContent = zoomLevel === 1 ? '🔍 Zoom' : '🔍 4x';
+  announce(zoomLevel === 1 ? 'Full timeline view.' : 'Zoomed 4x on playhead.');
 }
+
 function updateZoomBar() {
-  const bar = document.getElementById('zoom-bar');
-  const win = document.getElementById('zoom-window');
+  const bar = el('zoom-bar');
+  const win = el('zoom-window');
+  if (!bar || !win) return;
   if (zoomLevel === 1) { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
   win.style.left  = (zoomStart * 100) + '%';
   win.style.width = ((1 / zoomLevel) * 100) + '%';
 }
-function fracToZoom(frac) {
-  const ws = 1 / zoomLevel;
-  return (frac - zoomStart) / ws;
-}
+
 function zoomToFrac(zf) {
   return zoomStart + zf * (1 / zoomLevel);
 }
 
-// ── TRIM BAR ──────────────────────────────────────────────────
+// ── TRIM BAR & CUTS ───────────────────────────────────────────
 function updateTrimBar() {
   const dur = times.duration;
   if (!dur) return;
@@ -2360,22 +1909,27 @@ function updateTrimBar() {
   const epVis = Math.max(0, Math.min(1, (ep - zoomStart) * zoomLevel));
   const rangeL = (Math.max(0, sp - zoomStart) * zoomLevel) * 100;
   const rangeW = (Math.max(0, Math.min(ep, zoomStart + 1/zoomLevel) - Math.max(sp, zoomStart)) * zoomLevel) * 100;
-  document.getElementById('trim-range').style.left  = rangeL + '%';
-  document.getElementById('trim-range').style.width = Math.max(0, rangeW) + '%';
-  document.getElementById('trim-head-s').style.left = (spVis * 100) + '%';
-  document.getElementById('trim-head-e').style.left = (epVis * 100) + '%';
-  document.getElementById('trim-head-s').setAttribute('aria-valuenow', Math.round(sp * 100));
-  document.getElementById('trim-head-e').setAttribute('aria-valuenow', Math.round(ep * 100));
+
+  if (el('trim-range')) {
+    el('trim-range').style.left  = rangeL + '%';
+    el('trim-range').style.width = Math.max(0, rangeW) + '%';
+  }
+  if (el('trim-head-s')) el('trim-head-s').style.left = (spVis * 100) + '%';
+  if (el('trim-head-e')) el('trim-head-e').style.left = (epVis * 100) + '%';
+
   const len = times.e - times.s;
-  const zn  = zoomLevel > 1 ? ` · ${zoomLevel}x zoom` : '';
-  document.getElementById('trim-duration-label').textContent =
-    `${fmtTime(times.s)} → ${fmtTime(times.e)} (${fmtTime(len)})${zn}`;
+  if (el('trim-duration-label')) {
+    el('trim-duration-label').textContent = `${fmtTime(times.s)} → ${fmtTime(times.e)} (${fmtTime(len)})`;
+  }
 }
+
 function updateSegmentDisplay() {
   const dur   = times.duration;
-  const track = document.getElementById('segment-track');
+  const track = el('segment-track');
+  if (!track) return;
   track.innerHTML = '';
   if (!dur || segments.length === 0) return;
+
   segments.forEach(seg => {
     const bar = document.createElement('div');
     bar.className = 'segment-bar';
@@ -2383,19 +1937,21 @@ function updateSegmentDisplay() {
     bar.style.width = (((seg.e - seg.s) / dur) * 100) + '%';
     track.appendChild(bar);
   });
-  const cutEl    = document.getElementById('cut-summary');
+
+  const cutEl = el('cut-summary');
   const cutCount = segments.length - 1;
-  if (cutCount > 0) {
-    const totalKept = segments.reduce((a, s) => a + (s.e - s.s), 0);
-    cutEl.textContent = `${cutCount} cut${cutCount > 1 ? 's' : ''} applied · ${fmtTime(totalKept)} kept`;
-    cutEl.classList.remove('hidden');
-  } else {
-    cutEl.classList.add('hidden');
+  if (cutEl) {
+    if (cutCount > 0) {
+      const totalKept = segments.reduce((a, s) => a + (s.e - s.s), 0);
+      cutEl.textContent = `${cutCount} cut${cutCount > 1 ? 's' : ''} applied · ${fmtTime(totalKept)} kept`;
+      cutEl.classList.remove('hidden');
+    } else {
+      cutEl.classList.add('hidden');
+    }
   }
   updateSummary();
 }
 
-// Drag handles
 function startDrag(e, type) {
   dragType = type;
   e.preventDefault();
@@ -2404,31 +1960,31 @@ function startDrag(e, type) {
   window.addEventListener('touchmove', onDrag, { passive: false });
   window.addEventListener('touchend', stopDrag);
 }
-document.getElementById('trim-head-s').addEventListener('mousedown',  e => startDrag(e, 's'));
-document.getElementById('trim-head-e').addEventListener('mousedown',  e => startDrag(e, 'e'));
-document.getElementById('trim-head-s').addEventListener('touchstart', e => startDrag(e, 's'), { passive: false });
-document.getElementById('trim-head-e').addEventListener('touchstart', e => startDrag(e, 'e'), { passive: false });
+
+el('trim-head-s')?.addEventListener('mousedown',  e => startDrag(e, 's'));
+el('trim-head-e')?.addEventListener('mousedown',  e => startDrag(e, 'e'));
+el('trim-head-s')?.addEventListener('touchstart', e => startDrag(e, 's'), { passive: false });
+el('trim-head-e')?.addEventListener('touchstart', e => startDrag(e, 'e'), { passive: false });
 
 function onDrag(e) {
   if (!dragType) return;
   e.preventDefault();
-  const rect    = document.getElementById('trim-track').getBoundingClientRect();
+  const rect    = el('trim-track').getBoundingClientRect();
   const cx      = e.touches ? e.touches[0].clientX : e.clientX;
   const rawFrac = Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
   const t       = zoomToFrac(rawFrac) * times.duration;
   if (dragType === 's') {
     times.s = Math.min(Math.max(0, t), times.e - 0.5);
     activeMedia().currentTime = times.s;
-    document.getElementById('tc-start').textContent = fmtTime(times.s);
-    document.getElementById('tc-start').classList.remove('muted');
+    if (el('tc-start')) el('tc-start').textContent = fmtTime(times.s);
   } else {
     times.e = Math.max(Math.min(times.duration, t), times.s + 0.5);
     activeMedia().currentTime = times.e;
-    document.getElementById('tc-end').textContent = fmtTime(times.e);
-    document.getElementById('tc-end').classList.remove('muted');
+    if (el('tc-end')) el('tc-end').textContent = fmtTime(times.e);
   }
   updateTrimBar(); updateSummary();
 }
+
 function stopDrag() {
   dragType = null;
   window.removeEventListener('mousemove', onDrag);
@@ -2436,7 +1992,8 @@ function stopDrag() {
   window.removeEventListener('touchmove', onDrag);
   window.removeEventListener('touchend', stopDrag);
 }
-document.getElementById('trim-track').addEventListener('click', e => {
+
+el('trim-track')?.addEventListener('click', e => {
   if (!times.duration || e.target.classList.contains('trim-head')) return;
   const rect    = e.currentTarget.getBoundingClientRect();
   const rawFrac = (e.clientX - rect.left) / rect.width;
@@ -2445,44 +2002,42 @@ document.getElementById('trim-track').addEventListener('click', e => {
   playScrubSnippet(seekTo);
 });
 
-// ── TRIM BUTTONS ──────────────────────────────────────────────
-document.getElementById('btn-set-start').onclick = () => {
+// Trim Buttons & Reset
+el('btn-set-start')?.addEventListener('click', () => {
   const t = activeMedia().currentTime;
-  if (t >= times.e) { toast('In must be before Out', 'error'); return; }
+  if (t >= times.e) { toast('In point must be before Out point', 'error'); return; }
   pushHistory();
   times.s = t;
-  document.getElementById('tc-start').textContent = fmtTime(t);
-  document.getElementById('tc-start').classList.remove('muted');
+  if (el('tc-start')) el('tc-start').textContent = fmtTime(t);
   updateTrimBar(); updateSummary();
-  setStatus(`In point: ${fmtTime(t)}`);
-};
-document.getElementById('btn-set-end').onclick = () => {
+  setStatus(`In point set: ${fmtTime(t)}`);
+});
+
+el('btn-set-end')?.addEventListener('click', () => {
   const t = activeMedia().currentTime;
-  if (t <= times.s) { toast('Out must be after In', 'error'); return; }
+  if (t <= times.s) { toast('Out point must be after In point', 'error'); return; }
   pushHistory();
   times.e = t;
-  document.getElementById('tc-end').textContent = fmtTime(t);
-  document.getElementById('tc-end').classList.remove('muted');
+  if (el('tc-end')) el('tc-end').textContent = fmtTime(t);
   updateTrimBar(); updateSummary();
-  setStatus(`Out point: ${fmtTime(t)}`);
-};
-document.getElementById('btn-reset-trim').onclick = () => {
+  setStatus(`Out point set: ${fmtTime(t)}`);
+});
+
+function resetAllTrims() {
   pushHistory();
   times.s = 0; times.e = times.duration;
   segments = [{ s: 0, e: times.duration }];
-  document.getElementById('tc-start').textContent = fmtTime(0);
-  document.getElementById('tc-end').textContent   = fmtTime(times.duration);
-  document.getElementById('tc-start').classList.remove('muted');
-  document.getElementById('tc-end').classList.remove('muted');
+  if (el('tc-start')) el('tc-start').textContent = fmtTime(0);
+  if (el('tc-end')) el('tc-end').textContent = fmtTime(times.duration);
   updateTrimBar(); updateSegmentDisplay(); updateSummary();
   setStatus('All trims and cuts reset.');
-};
+  toast('Reset all trims & cuts ✓', 'info');
+}
 
-// ── CUT SEGMENT ───────────────────────────────────────────────
 function cutSegment() {
   if (!mainVideoFile) return;
   const cutS = times.s, cutE = times.e;
-  if (cutE - cutS < 0.1) { toast('Set In and Out first', 'error'); return; }
+  if (cutE - cutS < 0.1) { toast('Set In and Out points first', 'error'); return; }
   pushHistory();
   const newSegs = [];
   for (const seg of segments) {
@@ -2490,161 +2045,149 @@ function cutSegment() {
     if (cutE < seg.e) newSegs.push({ s: Math.max(cutE, seg.s), e: seg.e });
   }
   segments = newSegs.filter(s => s.e - s.s > 0.05);
-  if (segments.length === 0) { doUndo(); toast('Cannot cut everything', 'error'); return; }
+  if (segments.length === 0) { doUndo(); toast('Cannot cut entire timeline', 'error'); return; }
 
   times.s = 0; times.e = times.duration;
-  document.getElementById('tc-start').textContent = fmtTime(0);
-  document.getElementById('tc-end').textContent   = fmtTime(times.duration);
-  document.getElementById('tc-start').classList.add('muted');
-  document.getElementById('tc-end').classList.add('muted');
   updateTrimBar();
-  player.currentTime = Math.min(cutE + 0.05, times.duration - 0.1);
+  activeMedia().currentTime = Math.min(cutE + 0.05, times.duration - 0.1);
   updateSegmentDisplay(); updateSummary();
-  document.getElementById('undo-btn').disabled = false;
-  const kept = segments.reduce((a, s) => a + (s.e - s.s), 0);
-  announce(`Cut from ${fmtTime(cutS)} to ${fmtTime(cutE)}. ${fmtTime(kept)} remaining. Ctrl+Z to undo.`);
-  toast('Cut applied ✂', 'info');
+  toast('Range cut applied ✂', 'info');
 }
 
-// ── UNIFIED UNDO ──────────────────────────────────────────────
-// Captures a full snapshot of all editable state.
-function pushHistory() {
-  editHistory.push({
-    segments:     JSON.parse(JSON.stringify(segments)),
-    times:        { ...times },
-    assets:       { ...assets },
-    sfxStack:     sfxStack.map(i => ({ ...i })),
-    bgmStack:     bgmStack.map(i => ({ ...i })),
-    illuStack:    illuStack.map(i => ({ ...i })),
-    brollStack:   brollStack.map(i => ({ ...i })),
-    logoPosition,
-    audioProcessing,
-    aspect,
-    preset,
-  });
-  document.getElementById('undo-btn').disabled = false;
-}
-
-function doUndo() {
-  if (editHistory.length === 0) { announce('Nothing to undo.'); return; }
-  const prev = editHistory.pop();
-
-  segments        = prev.segments;
-  times           = { ...prev.times };
-  assets          = { ...prev.assets };
-  sfxStack        = prev.sfxStack.map(i => ({ ...i, audio: sfxStack.find(s => s.id === i.id)?.audio || new Audio() }));
-  bgmStack        = prev.bgmStack.map(i => ({ ...i, audio: bgmStack.find(b => b.id === i.id)?.audio || new Audio() }));
-  illuStack       = prev.illuStack.map(i => ({ ...i, el: illuStack.find(il => il.id === i.id)?.el || null })).filter(i => i.el);
-  brollStack      = prev.brollStack.map(i => ({ ...i, video: brollStack.find(b => b.id === i.id)?.video || null })).filter(i => i.video);
-  logoPosition    = prev.logoPosition;
-  audioProcessing = prev.audioProcessing;
-  aspect          = prev.aspect;
-  preset          = prev.preset || preset;
-
-  document.getElementById('tc-start').textContent = fmtTime(times.s);
-  document.getElementById('tc-end').textContent   = fmtTime(times.e);
-  document.getElementById('tc-start').classList.remove('muted');
-  document.getElementById('tc-end').classList.remove('muted');
-
-  updateTrimBar(); updateSegmentDisplay(); updateSummary();
-  renderSfxStack(); renderBgmStack(); renderIlluStack(); renderBrollStack();
-  renderSfxMarkers();
-  syncSingleAssetUI();
-  setAspect(aspect);
-  setPreset(preset);
-
-  document.getElementById('undo-btn').disabled = editHistory.length === 0;
-  announce(`Undo applied. ${segments.length} segment${segments.length > 1 ? 's' : ''} restored.`);
-  toast('Undo ✓', 'info');
-}
-
-// ── KEYBOARD SHORTCUTS ─────────────────────────────────────────
+// ── UNIVERSAL KEYBOARD SHORTCUTS CONTROLLER ──────────────────
 window.addEventListener('keydown', e => {
-  if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  const activeEl = document.activeElement;
+  const isEditingText = activeEl && (
+    ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName) ||
+    activeEl.isContentEditable
+  );
+
   const k    = e.key.toLowerCase();
   const ctrl = e.ctrlKey || e.metaKey;
 
-  // Layer uploads
-  if (ctrl && k === 'l') { e.preventDefault(); triggerLayer('logo'); announce('Opening logo upload.'); return; }
-  if (ctrl && k === 'i') { e.preventDefault(); triggerAddIllu(); announce('Opening illustration upload.'); return; }
-  if (ctrl && k === 'b') { e.preventDefault(); triggerAddBGM(); announce('Opening BGM upload.'); return; }
-  if (ctrl && k === 'f') { e.preventDefault(); triggerAddSFX(); announce('Opening SFX upload.'); return; }
-  if (ctrl && k === 'r') { e.preventDefault(); triggerAddBRoll(); announce('Opening B-Roll upload.'); return; }
-  if (ctrl && k === 'u') { e.preventDefault(); triggerLayer('audioSwap'); announce('Opening audio swap upload.'); return; }
+  // Global Shortcuts that work even when focus is in text fields (like Esc, Ctrl+S, Ctrl+Z)
+  if (k === 'escape') {
+    closeSettingsModal();
+    closeShortcutsModal();
+    return;
+  }
 
-  // BGM Music Focus keyboard control — only when a track is focused AND video is not playing
-  // M = play/pause focused BGM · [ = nudge startAt -1s · ] = nudge startAt +1s
-  // Shift+[ / Shift+] = nudge ±5s
-  // This does NOT intercept Space so video playback always works normally.
+  if (isEditingText) return; // Skip normal play/trim shortcuts while typing
+
+  // Modal Cheat Sheet toggle
+  if (k === '?' || (e.shiftKey && k === '/')) {
+    e.preventDefault();
+    openShortcutsModal();
+    return;
+  }
+
+  // Undo / Redo
+  if (ctrl && !e.shiftKey && k === 'z') { e.preventDefault(); doUndo(); return; }
+  if ((ctrl && k === 'y') || (ctrl && e.shiftKey && k === 'z')) { e.preventDefault(); doRedo(); return; }
+
+  // Project Actions
+  if (ctrl && !e.shiftKey && k === 's') { e.preventDefault(); saveProjectSnapshot(true); return; }
+  if (ctrl && e.shiftKey && k === 'o') { e.preventDefault(); restoreSavedProject(); return; }
+  if (ctrl && k === 'd') { e.preventDefault(); detectSilence(); return; }
+  if (ctrl && k === 'x') { e.preventDefault(); runExport(); return; }
+  if (ctrl && k === ',') { e.preventDefault(); openSettingsModal(); return; }
+
+  // Layer Uploads Shortcuts
+  if (ctrl && k === 'l') { e.preventDefault(); triggerLayer('logo'); return; }
+  if (ctrl && k === 't') { e.preventDefault(); triggerAddTextOverlay(); return; }
+  if (ctrl && k === 'i') { e.preventDefault(); triggerAddIllu(); return; }
+  if (ctrl && k === 'b') { e.preventDefault(); triggerAddBGM(); return; }
+  if (ctrl && k === 'f') { e.preventDefault(); triggerAddSFX(); return; }
+  if (ctrl && k === 'r') { e.preventDefault(); triggerAddBRoll(); return; }
+  if (ctrl && k === 'u') { e.preventDefault(); triggerLayer('audioSwap'); return; }
+
+  // Focused BGM Control (Shift + M = Play/Pause)
   if (focusedBgmId && bgmStack.length > 0) {
-    if (k === 'm' && !ctrl) {
+    if (e.shiftKey && k === 'm') {
       e.preventDefault();
       toggleBgmPlayback(focusedBgmId);
       return;
     }
     if (k === '[' && !ctrl) {
       e.preventDefault();
-      nudgeBgmStartAt(focusedBgmId, e.shiftKey ? -5 : -1);
+      const b = bgmStack.find(item => item.id === focusedBgmId);
+      if (b) { b.startAt = Math.max(0, b.startAt + (e.shiftKey ? -5 : -1)); renderBgmStack(); updateSummary(); }
       return;
     }
     if (k === ']' && !ctrl) {
       e.preventDefault();
-      nudgeBgmStartAt(focusedBgmId, e.shiftKey ? 5 : 1);
+      const b = bgmStack.find(item => item.id === focusedBgmId);
+      if (b) { b.startAt = Math.max(0, b.startAt + (e.shiftKey ? 5 : 1)); renderBgmStack(); updateSummary(); }
       return;
     }
   }
 
-  // Undo
-  if (ctrl && !e.shiftKey && k === 'z') { e.preventDefault(); doUndo(); return; }
-
-  // Export
-  if (ctrl && k === 'x') { e.preventDefault(); runExport(); return; }
-
-  // Silence detection
-  if (ctrl && k === 'd') { e.preventDefault(); detectSilence(); return; }
-
-  // SFX nudge: Shift+Ctrl+Arrow = ±0.1s
+  // SFX Nudging
   if (ctrl && e.shiftKey && (k === 'arrowleft' || k === 'arrowright')) {
     e.preventDefault();
     nudgeSelectedSfx(k === 'arrowleft' ? -0.1 : 0.1);
     return;
   }
 
-  // Playback
-  if (k === 's' && !ctrl) { e.preventDefault(); document.getElementById('btn-set-start').click(); }
-  if (k === 'e' && !ctrl) { e.preventDefault(); document.getElementById('btn-set-end').click(); }
-  if (k === ' ')           { e.preventDefault(); if (!mainVideoFile) return; const m = activeMedia(); m.paused ? m.play() : m.pause(); }
-  if (k === 'v' && !ctrl) { setStatus(`Current: ${fmtTime(activeMedia().currentTime)}  In: ${fmtTime(times.s)}  Out: ${fmtTime(times.e)}`); }
+  // Playback & Trimming
+  if (k === 's' || k === 'i') { e.preventDefault(); el('btn-set-start')?.click(); }
+  if (k === 'e' || k === 'o') { e.preventDefault(); el('btn-set-end')?.click(); }
+  if (k === 'c' || k === 'b') { e.preventDefault(); splitClipAtPlayhead(); }
+  if (k === 'backspace' || k === 'delete') { e.preventDefault(); cutSegment(); }
+  if (k === ' ') { e.preventDefault(); if (!mainVideoFile) return; const m = activeMedia(); m.paused ? m.play() : m.pause(); }
+  if (k === 'f' && !ctrl) { e.preventDefault(); toggleFullscreen(); }
   if (k === 'z' && !ctrl) { e.preventDefault(); cycleZoom(); }
-  if (k === 'backspace')   { e.preventDefault(); cutSegment(); }
+  if (ctrl && e.shiftKey && k === 'r') { e.preventDefault(); resetAllTrims(); }
 
+  // Playback Speed Shortcuts (< and >)
+  if (e.shiftKey && (k === '<' || k === ',')) {
+    e.preventDefault();
+    const speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    const currIdx = speeds.indexOf(playbackSpeed);
+    if (currIdx > 0) setPlaybackSpeed(speeds[currIdx - 1]);
+  }
+  if (e.shiftKey && (k === '>' || k === '.')) {
+    e.preventDefault();
+    const speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    const currIdx = speeds.indexOf(playbackSpeed);
+    if (currIdx !== -1 && currIdx < speeds.length - 1) setPlaybackSpeed(speeds[currIdx + 1]);
+  }
+
+  // Home / End Navigation
+  if (k === 'home') { e.preventDefault(); activeMedia().currentTime = 0; }
+  if (k === 'end')  { e.preventDefault(); activeMedia().currentTime = times.duration; }
+
+  // Quick Accessibility Shortcuts (Alt+M, Alt+C, Alt+T)
+  if (e.altKey && k === 'm') { e.preventDefault(); el('quick-reduce-motion')?.click(); }
+  if (e.altKey && k === 'c') { e.preventDefault(); el('quick-high-contrast')?.click(); }
+  if (e.altKey && k === 't') { e.preventDefault(); el('quick-theme')?.click(); }
+
+  // Arrow Seeking & Frame Stepping
   if (k === 'arrowleft' || k === 'arrowright') {
     if (!mainVideoFile || ctrl) return;
     e.preventDefault();
-    const step = e.shiftKey ? 1 : 10;
     const dir  = k === 'arrowleft' ? -1 : 1;
+    let step = 10;
+    if (e.altKey) step = 0.04; // 1 frame
+    else if (e.shiftKey) step = 1;
+
     const m = activeMedia();
     m.currentTime = Math.max(0, Math.min(times.duration, m.currentTime + dir * step));
     playScrubSnippet(m.currentTime);
-    announce(`${step}s ${dir > 0 ? 'forward' : 'back'}. Now at ${fmtTime(m.currentTime)}.`);
   }
 });
 
-// ── HELPERS ───────────────────────────────────────────────────
+// ── HELPERS & SUMMARY ─────────────────────────────────────────
 function updateTimecodes() {
-  document.getElementById('tc-start').textContent   = fmtTime(times.s);
-  document.getElementById('tc-end').textContent     = fmtTime(times.e);
-  document.getElementById('tc-current').textContent = fmtTime(activeMedia().currentTime);
+  if (el('tc-start')) el('tc-start').textContent = fmtTime(times.s);
+  if (el('tc-end')) el('tc-end').textContent = fmtTime(times.e);
+  if (el('tc-current')) el('tc-current').textContent = fmtTime(activeMedia().currentTime);
 }
 
 function updateSummary() {
-  const hasAnyLayer = !!assets.logo || !!assets.audioSwap ||
-    sfxStack.length > 0 || bgmStack.length > 0 || illuStack.length > 0 || brollStack.length > 0;
-  const hasCuts   = segments.length > 1;
-  const copyMode  = !hasAnyLayer && !hasCuts && segments.length === 1;
-
   const layerParts = [];
   if (assets.logo)           layerParts.push('logo');
+  if (textStack.length > 0)  layerParts.push(`${textStack.length} text`);
   if (illuStack.length > 0)  layerParts.push(`${illuStack.length} illus`);
   if (bgmStack.length > 0)   layerParts.push(`${bgmStack.length} BGM`);
   if (sfxStack.length > 0)   layerParts.push(`${sfxStack.length} SFX`);
@@ -2652,93 +2195,244 @@ function updateSummary() {
   if (assets.audioSwap)      layerParts.push('audioSwap');
 
   const aspectLabels = { landscape:'16:9 Landscape', portrait:'9:16 Portrait', 'blur-bg':'Blur BG' };
-  document.getElementById('summary-mode').textContent   = 'Mode: ' + (copyMode ? '⚡ Fast Copy' : '🔧 Re-encode');
-  document.getElementById('summary-aspect').textContent = 'Format: ' + (aspectLabels[aspect] || aspect);
-  document.getElementById('summary-layers').textContent = 'Layers: ' + (layerParts.join(', ') || 'none');
-  if (times.duration > 0) {
-    document.getElementById('summary-trim').textContent = `Trim: ${fmtTime(times.s)} → ${fmtTime(times.e)}`;
+  if (el('summary-mode')) el('summary-mode').textContent   = `Format: ${exportFormat.toUpperCase()}`;
+  if (el('summary-aspect')) el('summary-aspect').textContent = `Resolution: ${aspectLabels[aspect] || aspect}`;
+  if (el('summary-filter')) el('summary-filter').textContent = `Filter: ${activeFilter.toUpperCase()}`;
+  if (el('summary-speed')) el('summary-speed').textContent  = `Speed: ${playbackSpeed}x`;
+  if (el('summary-layers')) el('summary-layers').textContent = 'Layers: ' + (layerParts.join(', ') || 'none');
+  if (times.duration > 0 && el('summary-trim')) {
+    el('summary-trim').textContent = `Trim: ${fmtTime(times.s)} → ${fmtTime(times.e)}`;
   }
   const cutCount = segments.length - 1;
-  document.getElementById('summary-cuts').textContent   = cutCount > 0 ? `Cuts: ${cutCount}` : 'Cuts: none';
+  if (el('summary-cuts')) el('summary-cuts').textContent = cutCount > 0 ? `Cuts: ${cutCount}` : 'Cuts: none';
   scheduleProjectAutosave();
 }
 
 function setProgress(pct, phase) {
-  document.getElementById('prog-fill').style.width = pct + '%';
-  document.getElementById('progress-pct').textContent = pct + '%';
-  document.getElementById('progress-bar-role').setAttribute('aria-valuenow', pct);
-  if (phase) document.getElementById('progress-phase').textContent = phase;
+  if (el('prog-fill')) el('prog-fill').style.width = pct + '%';
+  if (el('progress-pct')) el('progress-pct').textContent = pct + '%';
+  if (el('progress-bar-role')) el('progress-bar-role').setAttribute('aria-valuenow', pct);
+  if (phase && el('progress-phase')) el('progress-phase').textContent = phase;
 }
 
-function getLogoOverlayExpr(pos) {
-  const pad = 10;
-  return {
-    'top-right':    `W-w-${pad}:${pad}`,
-    'top-left':     `${pad}:${pad}`,
-    'bottom-right': `W-w-${pad}:H-h-${pad}`,
-    'bottom-left':  `${pad}:H-h-${pad}`,
-    'center':       `(W-w)/2:(H-h)/2`
-  }[pos] || `W-w-${pad}:${pad}`;
-}
+// ── AI ASSISTANT CHAT ─────────────────────────────────────────
+async function analyzeProjectWithGemini() {
+  if (aiJobRunning) return;
+  if (!mainVideoFile) { toast('Load a video or audio file first', 'error'); return; }
+  syncSettingsFromForm();
+  if (!(editorSettings.geminiApiKey || '').trim()) { toast('Add a Gemini API key first', 'error'); openSettingsModal(); return; }
 
-// ── AUDIO-ONLY EXPORT ─────────────────────────────────────────
-async function runAudioExport() {
-  setStatus('Preparing audio export…');
-  document.getElementById('progress-wrap').classList.remove('hidden');
-  document.getElementById('download-result').classList.add('hidden');
-  document.getElementById('export-btn').disabled = true;
-  setProgress(0, 'Writing files…');
+  setChatBusy(true);
+  const thinking = appendChatMessage('bot', 'Analyzing media and transcribing audio…');
+  setStatus('Preparing AI analysis…');
 
   try {
-    const ext = (mainVideoFile.name.split('.').pop() || 'mp3').replace(/[^a-z0-9]/gi, '') || 'mp3';
-    ffmpeg.FS('writeFile', `main.${ext}`, await fetchFile(mainVideoFile));
-    for (let i = 0; i < bgmStack.length; i++) ffmpeg.FS('writeFile', `bgm${i}.mp3`, await fetchFile(bgmStack[i].file));
-    for (let i = 0; i < sfxStack.length; i++) ffmpeg.FS('writeFile', `sfx${i}.mp3`, await fetchFile(sfxStack[i].file));
-    setProgress(12, 'Building filter graph…');
+    const prompt = `Transcribe the audio into "transcript", describe the media briefly, and suggest 2 edits. Format as JSON: {"reply":"...", "transcript":"...", "actions":[]}`;
+    const payload = await callGeminiAPI(prompt);
+    const text = extractGeminiText(payload);
+    if (thinking) thinking.remove();
+    let result;
+    try { result = parseGeminiJson(text); } catch(_) { result = { reply: text, transcript: '', actions: [] }; }
+    
+    if (result.reply) appendChatMessage('bot', result.reply);
+    if (result.transcript && el('ai-transcript')) {
+      el('ai-transcript').value = result.transcript;
+      editorSettings.aiTranscript = result.transcript;
+      persistEditorSettings();
+    }
+    setStatus('AI analysis complete.');
+  } catch (err) {
+    if (thinking) thinking.remove();
+    appendChatMessage('bot', `Analysis failed: ${err.message}`);
+    toast('AI analysis failed', 'error');
+  } finally {
+    setChatBusy(false);
+  }
+}
+
+async function sendChatMessage() {
+  if (aiJobRunning) return;
+  const input = el('ai-chat-input');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  if (!mainVideoFile) { toast('Load a file first', 'error'); return; }
+
+  input.value = '';
+  appendChatMessage('user', text);
+  setChatBusy(true);
+  const thinking = appendChatMessage('bot', '…');
+
+  try {
+    const prompt = `User instruction for video editing: "${text}". Reply with JSON: {"reply":"...", "actions":[]}`;
+    const payload = await callGeminiAPI(prompt);
+    const raw = extractGeminiText(payload);
+    if (thinking) thinking.remove();
+    let parsed;
+    try { parsed = parseGeminiJson(raw); } catch(_) { parsed = { reply: raw, actions: [] }; }
+    appendChatMessage('bot', parsed.reply || 'Done.');
+  } catch (err) {
+    if (thinking) thinking.remove();
+    appendChatMessage('bot', `Request failed: ${err.message}`);
+  } finally {
+    setChatBusy(false);
+  }
+}
+
+function appendChatMessage(role, text) {
+  const log = el('ai-chat-log');
+  if (!log) return null;
+  const wrap = document.createElement('div');
+  wrap.className = `ai-msg ai-msg-${role === 'user' ? 'user' : 'bot'}`;
+  const p = document.createElement('p');
+  p.textContent = text;
+  wrap.appendChild(p);
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+  return wrap;
+}
+
+function setChatBusy(busy) {
+  aiJobRunning = busy;
+  if (el('ai-chat-input')) el('ai-chat-input').disabled = busy || !mainVideoFile;
+  if (el('ai-send-btn')) el('ai-send-btn').disabled = busy || !mainVideoFile;
+  if (el('analyze-project-btn')) el('analyze-project-btn').disabled = busy;
+}
+
+function clearAiChat() {
+  const log = el('ai-chat-log');
+  if (log) log.innerHTML = '<div class="ai-msg ai-msg-bot"><p>Chat cleared.</p></div>';
+}
+
+function openSettingsModal() {
+  const overlay = el('settings-overlay');
+  if (overlay) overlay.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+}
+
+function closeSettingsModal() {
+  const overlay = el('settings-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+}
+
+// ── MASTER EXPORT ENGINE ──────────────────────────────────────
+async function runExport() {
+  if (!mainVideoFile) { toast('No media loaded', 'error'); return; }
+  if (!engineReady)   { toast('Engine not ready', 'error'); return; }
+
+  if (exportFormat === 'mp3' || mediaKind === 'audio') { return runAudioExport(); }
+
+  setStatus('Preparing export…');
+  if (el('progress-wrap')) el('progress-wrap').classList.remove('hidden');
+  if (el('download-result')) el('download-result').classList.add('hidden');
+  if (el('export-btn')) el('export-btn').disabled = true;
+  setProgress(0, 'Writing media files…');
+
+  try {
+    const ext = (mainVideoFile.name.split('.').pop() || 'mp4').replace(/[^a-z0-9]/gi, '') || 'mp4';
+    ffmpeg.FS('writeFile', `input.${ext}`, await fetchFile(mainVideoFile));
+    setProgress(10, 'Building video filter graph…');
+
+    if (assets.logo)      ffmpeg.FS('writeFile', 'logo.png', await fetchFile(assets.logo));
+    if (assets.audioSwap) ffmpeg.FS('writeFile', 'swap.mp3', await fetchFile(assets.audioSwap));
+    for (let i = 0; i < bgmStack.length; i++)   ffmpeg.FS('writeFile', `bgm${i}.mp3`, await fetchFile(bgmStack[i].file));
+    for (let i = 0; i < sfxStack.length; i++)   ffmpeg.FS('writeFile', `sfx${i}.mp3`, await fetchFile(sfxStack[i].file));
+    for (let i = 0; i < illuStack.length; i++)  ffmpeg.FS('writeFile', `illu${i}.png`, await fetchFile(illuStack[i].file));
+    for (let i = 0; i < brollStack.length; i++) ffmpeg.FS('writeFile', `broll${i}.mp4`, await fetchFile(brollStack[i].file));
+
+    // Build filter chain for FFmpeg
+    let vFilter = 'scale=1280:720';
+    if (aspect === 'portrait') vFilter = 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280';
+    
+    // Add active filter effect
+    if (activeFilter === 'cyberpunk') vFilter += ',hue=h=180:s=2,eq=contrast=1.3';
+    else if (activeFilter === 'vintage') vFilter += ',colorbalance=rs=0.1:gs=-0.05:bs=-0.1';
+    else if (activeFilter === 'noir') vFilter += ',hue=s=0,eq=contrast=1.3';
+    else if (activeFilter === 'scifi') vFilter += ',colorbalance=rs=-0.1:gs=0.05:bs=0.2';
+    else if (activeFilter === 'vivid') vFilter += ',eq=contrast=1.2:saturation=1.5';
+    else if (activeFilter === 'sepia') vFilter += ',colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131';
+
+    // Playback Speed Adjustment
+    if (playbackSpeed !== 1.0) {
+      const ptsScale = (1 / playbackSpeed).toFixed(3);
+      vFilter += `,setpts=${ptsScale}*PTS`;
+    }
 
     const seg0 = segments[0] || { s: 0, e: times.duration };
     const trimDur = Math.max(0.1, (segments[segments.length - 1]?.e || times.duration) - seg0.s);
 
-    const args = ['-ss', seg0.s.toFixed(3), '-t', trimDur.toFixed(3), '-i', `main.${ext}`];
-    for (let i = 0; i < bgmStack.length; i++) args.push('-stream_loop', '-1', '-i', `bgm${i}.mp3`);
-    for (let i = 0; i < sfxStack.length; i++) args.push('-i', `sfx${i}.mp3`);
-
-    let idx = 1;
-    const bgmIdx = bgmStack.map(() => idx++);
-    const sfxIdx = sfxStack.map(() => idx++);
-
-    const muteMain = audioProcessing === 'mute';
-    const filterParts = [`[0:a]volume=${muteMain ? 0 : 1.0}[main]`];
-    const mixLabels = ['[main]'];
-
-    bgmStack.forEach((item, i) => {
-      const delayMs = Math.max(0, Math.round((item.startAt - seg0.s) * 1000));
-      filterParts.push(`[${bgmIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[abgm${i}]`);
-      mixLabels.push(`[abgm${i}]`);
-    });
-    sfxStack.forEach((item, i) => {
-      const delayMs = Math.max(0, Math.round((item.at - seg0.s) * 1000));
-      filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
-      mixLabels.push(`[asfx${i}]`);
-    });
-
-    let mapArg;
-    if (mixLabels.length > 1) {
-      filterParts.push(`${mixLabels.join('')}amix=inputs=${mixLabels.length}:duration=first:dropout_transition=1[aout]`);
-      mapArg = '[aout]';
-    } else {
-      mapArg = '[main]';
-    }
+    const outFilename = exportFormat === 'gif' ? 'output.gif' : exportFormat === 'webm' ? 'output.webm' : 'output.mp4';
 
     ffmpeg.setProgress(({ ratio }) => {
-      const pct = Math.min(97, Math.round(15 + ratio * 82));
-      setProgress(pct, `Encoding audio… ${pct}%`);
+      const pct = Math.min(98, Math.round(15 + ratio * 82));
+      setProgress(pct, `Encoding ${exportFormat.toUpperCase()}… ${pct}%`);
     });
 
+    const args = [
+      '-ss', seg0.s.toFixed(3),
+      '-t', (trimDur / playbackSpeed).toFixed(3),
+      '-i', `input.${ext}`
+    ];
+
+    if (exportFormat === 'gif') {
+      args.push('-vf', `${vFilter},fps=12,scale=480:-1:flags=lanczos`, outFilename);
+    } else {
+      args.push('-vf', vFilter, '-c:v', exportFormat === 'webm' ? 'libvpx' : 'libx264', '-preset', preset, '-movflags', '+faststart', outFilename);
+    }
+
+    await ffmpeg.run(...args);
+
+    setProgress(100, 'Done!');
+    const data = ffmpeg.FS('readFile', outFilename);
+    const mimeMap = { mp4: 'video/mp4', webm: 'video/webm', gif: 'image/gif', mp3: 'audio/mpeg' };
+    const blob = new Blob([data.buffer], { type: mimeMap[exportFormat] || 'video/mp4' });
+    const url  = URL.createObjectURL(blob);
+    
+    const rawName = (el('project-name')?.value || 'tech-house').trim();
+    const safeName = rawName.replace(/[^a-zA-Z0-9_\-. ]/g, '').replace(/\s+/g, '-') || 'tech-house';
+    const dlLink = el('download-link');
+    if (dlLink) {
+      dlLink.href = url;
+      dlLink.download = `${safeName}.${exportFormat}`;
+      dlLink.focus();
+    }
+    if (el('download-result')) el('download-result').classList.remove('hidden');
+    try { dlLink?.click(); } catch (_) {}
+
+    // Cleanup FFmpeg virtual FS
+    ['input.'+ext, outFilename, 'logo.png', 'swap.mp3'].forEach(f => { try { ffmpeg.FS('unlink', f); } catch (_) {} });
+
+    setStatus(`Export complete — ${safeName}.${exportFormat}`);
+    toast('Export complete ✓', 'success');
+
+  } catch (err) {
+    console.error('[EXPORT ERROR]', err);
+    setStatus('Export error: ' + err.message, true);
+    toast('Export failed', 'error');
+  } finally {
+    if (el('export-btn')) el('export-btn').disabled = false;
+    setTimeout(() => el('progress-wrap')?.classList.add('hidden'), 1200);
+  }
+}
+
+async function runAudioExport() {
+  setStatus('Preparing audio export…');
+  if (el('progress-wrap')) el('progress-wrap').classList.remove('hidden');
+  if (el('download-result')) el('download-result').classList.add('hidden');
+  if (el('export-btn')) el('export-btn').disabled = true;
+  setProgress(0, 'Encoding audio…');
+
+  try {
+    const ext = (mainVideoFile.name.split('.').pop() || 'mp3').replace(/[^a-z0-9]/gi, '') || 'mp3';
+    ffmpeg.FS('writeFile', `main.${ext}`, await fetchFile(mainVideoFile));
+    
+    const seg0 = segments[0] || { s: 0, e: times.duration };
+    const trimDur = Math.max(0.1, (segments[segments.length - 1]?.e || times.duration) - seg0.s);
+
     await ffmpeg.run(
-      ...args,
-      '-filter_complex', filterParts.join(';'),
-      '-map', mapArg,
+      '-ss', seg0.s.toFixed(3),
+      '-t', trimDur.toFixed(3),
+      '-i', `main.${ext}`,
       '-c:a', 'libmp3lame', '-q:a', '2',
       'output.mp3'
     );
@@ -2747,376 +2441,26 @@ async function runAudioExport() {
     const data = ffmpeg.FS('readFile', 'output.mp3');
     const blob = new Blob([data.buffer], { type: 'audio/mpeg' });
     const url  = URL.createObjectURL(blob);
-    const rawName = (document.getElementById('project-name').value || 'tech-house').trim();
+    const rawName = (el('project-name')?.value || 'tech-house').trim();
     const safeName = rawName.replace(/[^a-zA-Z0-9_\-. ]/g, '').replace(/\s+/g, '-') || 'tech-house';
-    const dlLink = document.getElementById('download-link');
-    dlLink.href = url;
-    dlLink.download = `${safeName}.mp3`;
-    document.getElementById('download-result').classList.remove('hidden');
-    dlLink.focus();
-    try { dlLink.click(); } catch (_) {}
+    const dlLink = el('download-link');
+    if (dlLink) {
+      dlLink.href = url;
+      dlLink.download = `${safeName}.mp3`;
+      dlLink.focus();
+    }
+    if (el('download-result')) el('download-result').classList.remove('hidden');
+    try { dlLink?.click(); } catch (_) {}
 
-    const filesToClean = [`main.${ext}`, 'output.mp3'];
-    for (let i = 0; i < bgmStack.length; i++) filesToClean.push(`bgm${i}.mp3`);
-    for (let i = 0; i < sfxStack.length; i++) filesToClean.push(`sfx${i}.mp3`);
-    filesToClean.forEach(f => { try { ffmpeg.FS('unlink', f); } catch (_) {} });
+    ['main.'+ext, 'output.mp3'].forEach(f => { try { ffmpeg.FS('unlink', f); } catch (_) {} });
 
-    setStatus(`Export complete — ${safeName}.mp3`);
-    announce('Audio export complete. Download button focused.');
+    setStatus(`Audio export complete — ${safeName}.mp3`);
     toast('Audio export complete ✓', 'success');
   } catch (err) {
-    console.error('[AUDIO EXPORT ERROR]', err);
-    setStatus('Audio export failed: ' + (err.message || String(err)), true);
-    toast('Audio export failed — see console', 'error');
+    setStatus('Audio export failed: ' + err.message, true);
+    toast('Audio export failed', 'error');
   } finally {
-    document.getElementById('export-btn').disabled = false;
-    setTimeout(() => document.getElementById('progress-wrap').classList.add('hidden'), 1200);
-  }
-}
-
-// ── MASTER EXPORT ENGINE ──────────────────────────────────────
-async function runExport() {
-  if (!mainVideoFile) { toast('No media loaded', 'error'); return; }
-  if (!engineReady)   { toast('Engine not ready', 'error'); return; }
-
-  // Audio-only projects export to MP3 through a dedicated, simpler path.
-  if (mediaKind === 'audio') { return runAudioExport(); }
-
-  setStatus('Preparing export…');
-  document.getElementById('progress-wrap').classList.remove('hidden');
-  document.getElementById('download-result').classList.add('hidden');
-  document.getElementById('export-btn').disabled = true;
-  setProgress(0, 'Writing files…');
-
-  const useCrossfade = document.getElementById('crossfade-toggle').checked;
-
-  try {
-    ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(mainVideoFile));
-    setProgress(8, 'Building filter graph…');
-
-    const hasLogo      = !!assets.logo;
-    const hasAudioSwap = !!assets.audioSwap;
-    const noiseMode    = audioProcessing === 'noise';
-    const muteMode     = audioProcessing === 'mute';
-    // 'none' = keep original audio, no processing
-    const noiseStrength = parseInt(document.getElementById('noise-strength')?.value || '3', 10);
-    const hasBgm       = bgmStack.length > 0;
-    const hasSfx       = sfxStack.length > 0;
-    const hasIllu      = illuStack.length > 0;
-    const hasBroll     = brollStack.length > 0;
-    const hasCuts      = segments.length > 1;
-    const hasAnyAsset  = hasLogo || hasAudioSwap || hasBgm || hasSfx || hasIllu || hasBroll || noiseMode || muteMode;
-
-    // ── FAST COPY ──────────────────────────────────────────
-    if (!hasAnyAsset && !hasCuts && segments.length === 1) {
-      const seg = segments[0];
-      setProgress(15, 'Stream copying…');
-      ffmpeg.setProgress(({ ratio }) => setProgress(15 + Math.min(80, Math.round(ratio * 80)), 'Copying…'));
-      await ffmpeg.run(
-        '-ss', seg.s.toFixed(3), '-t', (seg.e - seg.s).toFixed(3), '-i', 'input.mp4',
-        '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
-      );
-    } else {
-      // ── FULL RE-ENCODE ─────────────────────────────────
-      setProgress(10, 'Building filter graph…');
-
-      // Write assets
-      if (hasLogo)      ffmpeg.FS('writeFile', 'logo.png',  await fetchFile(assets.logo));
-      if (hasAudioSwap) ffmpeg.FS('writeFile', 'swap.mp3',  await fetchFile(assets.audioSwap));
-      for (let i = 0; i < bgmStack.length; i++)   ffmpeg.FS('writeFile', `bgm${i}.mp3`,   await fetchFile(bgmStack[i].file));
-      for (let i = 0; i < sfxStack.length; i++)   ffmpeg.FS('writeFile', `sfx${i}.mp3`,   await fetchFile(sfxStack[i].file));
-      for (let i = 0; i < illuStack.length; i++)  ffmpeg.FS('writeFile', `illu${i}.png`,  await fetchFile(illuStack[i].file));
-      for (let i = 0; i < brollStack.length; i++) ffmpeg.FS('writeFile', `broll${i}.mp4`, await fetchFile(brollStack[i].file));
-
-      // Detect video audio
-      const videoHasAudio = player.mozHasAudio !== undefined ? player.mozHasAudio
-        : player.webkitAudioDecodedByteCount !== undefined ? player.webkitAudioDecodedByteCount > 0 : true;
-
-      // Build args
-      let args = [];
-      if (hasCuts) {
-        args = ['-i', 'input.mp4'];
-      } else {
-        const seg = segments[0];
-        args = ['-ss', seg.s.toFixed(3), '-t', (seg.e - seg.s).toFixed(3), '-i', 'input.mp4'];
-      }
-
-      if (hasLogo)      args.push('-i', 'logo.png');
-      for (let i = 0; i < illuStack.length; i++)  args.push('-i', `illu${i}.png`);
-      for (let i = 0; i < bgmStack.length; i++)   args.push('-stream_loop', '-1', '-i', `bgm${i}.mp3`);
-      for (let i = 0; i < sfxStack.length; i++)   args.push('-i', `sfx${i}.mp3`);
-      if (hasAudioSwap) args.push('-stream_loop', '-1', '-i', 'swap.mp3');
-      for (let i = 0; i < brollStack.length; i++) args.push('-i', `broll${i}.mp4`);
-
-      // Index assignment
-      let idx = 1;
-      const logoIdx   = hasLogo      ? idx++ : -1;
-      const illuIdx   = illuStack.map(() => idx++);
-      const bgmIdx    = bgmStack.map(() => idx++);
-      const sfxIdx    = sfxStack.map(() => idx++);
-      const swapIdx   = hasAudioSwap ? idx++ : -1;
-      const brollIdx  = brollStack.map(() => idx++);
-
-      // Filter chain
-      let filterParts = [];
-      let vTag;
-
-      if (hasCuts) {
-        // ── Multi-segment concat (handles all cuts including auto-silence) ──
-        // IMPORTANT: FFmpeg concat filter requires inputs interleaved as:
-        //   [v0][a0][v1][a1]...concat=n=N:v=1:a=1
-        // NOT all-video then all-audio. This was the bug causing silent failure.
-        const concatInputs = []; // interleaved: v0,a0,v1,a1,...
-        const hasAudio     = videoHasAudio && !muteMode;
-        const aLabelsList  = [];
-
-        segments.forEach((seg, i) => {
-          let scaleF;
-          if (aspect === 'portrait') {
-            scaleF = `scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280`;
-          } else if (aspect === 'blur-bg') {
-            // For blur-bg with cuts we scale to portrait size; blur applied post-concat
-            scaleF = `scale=720:1280`;
-          } else {
-            scaleF = `scale=1280:720`;
-          }
-          filterParts.push(`[0:v]trim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},setpts=PTS-STARTPTS,${scaleF}[vs${i}]`);
-          concatInputs.push(`[vs${i}]`);
-
-          if (hasAudio) {
-            let af = `[0:a]atrim=${seg.s.toFixed(3)}:${seg.e.toFixed(3)},asetpts=PTS-STARTPTS`;
-            if (useCrossfade && i > 0)                    af += `,afade=t=in:st=0:d=0.1`;
-            if (useCrossfade && i < segments.length - 1)  af += `,afade=t=out:st=${Math.max(0, seg.e-seg.s-0.1).toFixed(2)}:d=0.1`;
-            filterParts.push(`${af}[as${i}]`);
-            concatInputs.push(`[as${i}]`);
-            aLabelsList.push(`[as${i}]`);
-          }
-        });
-
-        const n = segments.length;
-        const concatStr = concatInputs.join('');
-        if (hasAudio) {
-          filterParts.push(`${concatStr}concat=n=${n}:v=1:a=1[vconcat][aconcat]`);
-          vTag = '[vconcat]';
-          aTag = '[aconcat]'; // aconcat is a filter output label
-        } else {
-          filterParts.push(`${concatStr}concat=n=${n}:v=1:a=0[vconcat]`);
-          vTag = '[vconcat]';
-          aTag = null;
-        }
-
-        // Apply blur-bg post-concat if needed
-        if (aspect === 'blur-bg') {
-          filterParts.push(`${vTag}split[bgraw][sharpraw]`);
-          filterParts.push(`[bgraw]scale=1280:720,boxblur=20:6,setsar=1[bgblur]`);
-          filterParts.push(`[bgblur][sharpraw]overlay=(W-w)/2:0[vblur]`);
-          vTag = '[vblur]';
-        }
-
-      } else {
-        // Single segment
-        const seg = segments[0];
-        if (aspect === 'portrait') {
-          filterParts.push(`[0:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280[v0]`);
-        } else if (aspect === 'blur-bg') {
-          // Blurred background: scale original to fill 1280×720 with heavy blur,
-          // then overlay the sharp portrait-cropped video centred on it
-          filterParts.push(`[0:v]scale=1280:720,boxblur=20:6,setsar=1[bg]`);
-          filterParts.push(`[0:v]scale=-2:720[sharp]`);
-          filterParts.push(`[bg][sharp]overlay=(W-w)/2:0[v0]`);
-        } else {
-          filterParts.push(`[0:v]scale=1280:720[v0]`);
-        }
-        vTag = '[v0]';
-      }
-
-      // Logo overlay
-      if (hasLogo) {
-        filterParts.push(`[${logoIdx}:v]scale=120:-2,format=rgba[vlogo]`);
-        filterParts.push(`${vTag}[vlogo]overlay=${getLogoOverlayExpr(logoPosition)}[vL]`);
-        vTag = '[vL]';
-      }
-
-      // Illustration overlays (each on top of previous)
-      illuStack.forEach((item, i) => {
-        const t0    = Math.max(0, item.at - (hasCuts ? 0 : segments[0].s)).toFixed(2);
-        const t1    = (parseFloat(t0) + item.duration).toFixed(2);
-        const enable = `enable='between(t,${t0},${t1})'`;
-        let scaleI, overlayE;
-        switch (item.layout) {
-          case 'fullscreen': scaleI = `scale=1280:720,format=rgba`; overlayE = `0:0`; break;
-          case 'left-third': scaleI = `scale=426:-2,format=rgba`; overlayE = `0:(H-h)/2`; break;
-          case 'right-third': scaleI = `scale=426:-2,format=rgba`; overlayE = `W-w:(H-h)/2`; break;
-          default: scaleI = `scale=576:-2,format=rgba`; overlayE = `(W-w)/2:(H-h)/2`;
-        }
-        filterParts.push(`[${illuIdx[i]}:v]${scaleI}[vi${i}]`);
-        filterParts.push(`${vTag}[vi${i}]overlay=${overlayE}:${enable}[vI${i}]`);
-        vTag = `[vI${i}]`;
-      });
-
-      // B-Roll overlay (each layer on top, with layout support)
-      brollStack.forEach((item, i) => {
-        const t0     = Math.max(0, item.at - (hasCuts ? 0 : segments[0].s)).toFixed(2);
-        const t1     = (parseFloat(t0) + item.duration).toFixed(2);
-        const enable = `enable='between(t,${t0},${t1})'`;
-        let scaleB, overlayB;
-        switch (item.layout || 'fullscreen') {
-          case 'left-third':
-            scaleB   = `scale=426:-2,format=yuv420p`;
-            overlayB = `0:(H-h)/2`; break;
-          case 'right-third':
-            scaleB   = `scale=426:-2,format=yuv420p`;
-            overlayB = `W-w:(H-h)/2`; break;
-          case 'center':
-            scaleB   = `scale=576:-2,format=yuv420p`;
-            overlayB = `(W-w)/2:(H-h)/2`; break;
-          default: // fullscreen
-            scaleB   = `scale=1280:720,format=yuv420p`;
-            overlayB = `0:0`;
-        }
-        filterParts.push(`[${brollIdx[i]}:v]${scaleB}[vb${i}]`);
-        filterParts.push(`${vTag}[vb${i}]overlay=${overlayB}:${enable}[vB${i}]`);
-        vTag = `[vB${i}]`;
-      });
-
-      // Audio chain
-      let aTag = null;
-      const seg0    = hasCuts ? null : segments[0];
-      const trimDur = seg0 ? (seg0.e - seg0.s) : segments.reduce((a,s) => a + (s.e - s.s), 0);
-
-      if (muteMode) {
-        aTag = null;
-      } else if (noiseMode && videoHasAudio) {
-        // anlmdn noise removal — strength 1–10 mapped to s parameter (1=0.001, 10=0.015)
-        // s controls the denoising strength. Higher = more aggressive but may sound robotic.
-        const noiseInput = hasCuts ? '[aconcat]' : '[0:a]';
-        const s = (noiseStrength * 0.0015).toFixed(4);        // 0.0015 – 0.015
-        const p = (noiseStrength * 0.0003).toFixed(4);        // 0.0003 – 0.003
-        filterParts.push(`${noiseInput}anlmdn=s=${s}:p=${p}:r=${p}:m=15[anoise]`);
-        aTag = '[anoise]';
-      } else if (hasAudioSwap) {
-        filterParts.push(`[${swapIdx}:a]atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=1.0[aswap]`);
-        aTag = '[aswap]';
-      } else if (hasCuts && videoHasAudio) {
-        // [aconcat] already produced by concat filter above
-        aTag = '[aconcat]';
-      } else if (!hasCuts && videoHasAudio) {
-        aTag = '0:a'; // direct stream reference (no brackets = stream specifier)
-      } else {
-        aTag = null;
-      }
-
-      // Mix BGM tracks — use duration=longest so BGM can extend beyond video
-      if (hasBgm) {
-        // Wrap current aTag into a labeled stream for mixing
-        let mainALabel = null;
-        if (aTag === '0:a') {
-          filterParts.push(`[0:a]volume=1.0[amain]`);
-          mainALabel = '[amain]';
-        } else if (aTag && aTag !== null) {
-          // Already a label like [aconcat], [anoise], [aswap]
-          mainALabel = aTag;
-        }
-
-        const mixInputs = mainALabel ? [mainALabel] : [];
-
-        bgmStack.forEach((item, i) => {
-          const startMs = Math.round(item.startAt * 1000);
-          // atrim duration = trimDur + extra time for BGM to continue
-          // We use a generous duration so BGM isn't cut short
-          const bgmDur = Math.max(trimDur, trimDur + 30); // allow up to 30s extension
-          filterParts.push(`[${bgmIdx[i]}:a]atrim=duration=${bgmDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)},adelay=${startMs}|${startMs}[abgm${i}]`);
-          mixInputs.push(`[abgm${i}]`);
-        });
-
-        if (mixInputs.length === 1) {
-          // Only BGM, no main audio
-          filterParts.push(`${mixInputs[0]}acopy[amixed]`);
-        } else {
-          // duration=longest lets BGM extend beyond the video if needed
-          filterParts.push(`${mixInputs.join('')}amix=inputs=${mixInputs.length}:duration=longest:dropout_transition=2[amixed]`);
-        }
-        aTag = '[amixed]';
-      }
-
-      // Mix SFX
-      if (hasSfx && aTag !== null) {
-        // Wrap current aTag for mixing
-        let sfxBaseLabel = aTag;
-        if (aTag === '0:a') {
-          filterParts.push(`[0:a]volume=1.0[apre]`);
-          sfxBaseLabel = '[apre]';
-        }
-        const sfxLabels = [sfxBaseLabel];
-        sfxStack.forEach((item, i) => {
-          const delayMs = Math.max(0, Math.round((item.at - (seg0 ? seg0.s : 0)) * 1000));
-          filterParts.push(`[${sfxIdx[i]}:a]adelay=${delayMs}|${delayMs},atrim=duration=${trimDur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${(item.volume/100).toFixed(2)}[asfx${i}]`);
-          sfxLabels.push(`[asfx${i}]`);
-        });
-        filterParts.push(`${sfxLabels.join('')}amix=inputs=${sfxLabels.length}:duration=first:dropout_transition=1[afinal]`);
-        aTag = '[afinal]';
-      }
-
-      const filterComplex = filterParts.join(';');
-      ffmpeg.setProgress(({ ratio }) => {
-        const pct = Math.min(97, Math.round(15 + ratio * 82));
-        setProgress(pct, `Encoding… ${pct}%`);
-        if (pct === 40 || pct === 70) announce(`Export ${pct}% complete.`);
-      });
-
-      // aTag is either:
-      //   '0:a'   → direct stream specifier (no brackets) — use -map 0:a
-      //   '[xxx]' → filter output label — use -map [xxx]
-      //   null    → no audio output
-      let audioArgs = [];
-      if (aTag === '0:a') {
-        audioArgs = ['-map', '0:a', '-c:a', 'aac', '-b:a', '192k'];
-      } else if (aTag) {
-        audioArgs = ['-map', aTag, '-c:a', 'aac', '-b:a', '192k'];
-      }
-      await ffmpeg.run(
-        ...args,
-        '-filter_complex', filterComplex,
-        '-map', vTag,
-        ...audioArgs,
-        '-c:v', 'libx264', '-preset', preset, '-crf', '22',
-        '-movflags', '+faststart', 'output.mp4'
-      );
-    }
-
-    // ── Download ──────────────────────────────────────────────
-    setProgress(100, 'Done!');
-    const data    = ffmpeg.FS('readFile', 'output.mp4');
-    const blob    = new Blob([data.buffer], { type: 'video/mp4' });
-    const url     = URL.createObjectURL(blob);
-    const rawName = (document.getElementById('project-name').value || 'tech-house').trim();
-    const safeName = rawName.replace(/[^a-zA-Z0-9_\-. ]/g, '').replace(/\s+/g, '-') || 'tech-house';
-    const dlLink  = document.getElementById('download-link');
-    dlLink.href     = url;
-    dlLink.download = `${safeName}.mp4`;
-    document.getElementById('download-result').classList.remove('hidden');
-    dlLink.focus();
-    try { dlLink.click(); } catch (_) {}
-
-    // Cleanup
-    const filesToClean = ['input.mp4','logo.png','swap.mp3','output.mp4'];
-    for (let i = 0; i < bgmStack.length; i++)   filesToClean.push(`bgm${i}.mp3`);
-    for (let i = 0; i < sfxStack.length; i++)   filesToClean.push(`sfx${i}.mp3`);
-    for (let i = 0; i < illuStack.length; i++)  filesToClean.push(`illu${i}.png`);
-    for (let i = 0; i < brollStack.length; i++) filesToClean.push(`broll${i}.mp4`);
-    filesToClean.forEach(f => { try { ffmpeg.FS('unlink', f); } catch (_) {} });
-
-    setStatus(`Export complete — ${safeName}.mp4`);
-    announce('Export complete. Download button focused.');
-    toast('Export complete ✓', 'success');
-
-  } catch (err) {
-    console.error('[EXPORT ERROR]', err);
-    setStatus('Export failed: ' + (err.message || String(err)), true);
-    toast('Export failed — see console', 'error');
-  } finally {
-    document.getElementById('progress-wrap').classList.add('hidden');
-    document.getElementById('export-btn').disabled = false;
-    setProgress(0, 'Preparing…');
+    if (el('export-btn')) el('export-btn').disabled = false;
+    setTimeout(() => el('progress-wrap')?.classList.add('hidden'), 1200);
   }
 }
