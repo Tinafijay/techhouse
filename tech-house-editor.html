@@ -156,6 +156,11 @@
         <video id="broll-player" muted playsinline></video>
       </div>
 
+      <!-- Subtitles live preview overlay -->
+      <div class="overlay-subtitles hidden" id="overlay-subtitles" aria-live="polite" aria-atomic="true">
+        <span class="overlay-subtitles-text" id="overlay-subtitles-text"></span>
+      </div>
+
       <div class="preview-badge" id="preview-badge" aria-hidden="true">LIVE PREVIEW</div>
     </div>
 
@@ -298,6 +303,37 @@
           </div>
           <div id="broll-stack" class="asset-stack" aria-label="B-Roll video clips"></div>
           <p class="stack-hint">B-Roll overlays the main video at the time you choose. Mute its audio to keep main audio.</p>
+        </div>
+
+        <!-- ─ Subtitles & Captions ─ -->
+        <div class="stack-section" id="section-subtitles">
+          <div class="stack-section-header">
+            <span class="stack-title">💬 Subtitles &amp; Captions</span>
+            <div style="display:flex; gap:5px;">
+              <button class="btn btn-sm" id="btn-add-subtitle" onclick="addManualSubtitle()"
+                      aria-label="Add subtitle cue at current time">+ Cue</button>
+              <button class="btn btn-sm btn-primary" id="btn-ai-subtitles" onclick="generateSubtitlesWithAi()"
+                      aria-label="Auto-generate subtitles with AI">✨ AI Subtitles</button>
+            </div>
+          </div>
+          <div class="subtitle-tools-row">
+            <label class="toggle-row" style="margin-bottom:0;" aria-label="Show subtitles in preview">
+              <input type="checkbox" id="subtitle-preview-toggle" checked onchange="toggleSubtitlePreview(this.checked)">
+              <span class="toggle-label" style="font-size:0.75rem;">Live Preview</span>
+            </label>
+            <label class="toggle-row" style="margin-bottom:0;" aria-label="Burn subtitles on export">
+              <input type="checkbox" id="subtitle-burn-toggle" checked>
+              <span class="toggle-label" style="font-size:0.75rem;">Burn into Video</span>
+            </label>
+          </div>
+          <div class="subtitle-actions-row">
+            <button class="btn btn-xs btn-ghost" onclick="document.getElementById('subtitle-file-uploader').click()" title="Import .SRT or .VTT file">📥 Import .SRT/.VTT</button>
+            <button class="btn btn-xs btn-ghost" onclick="exportSrtFile()" title="Download .SRT file">📤 Download .SRT</button>
+            <button class="btn btn-xs btn-ghost" onclick="exportVttFile()" title="Download .VTT file">📤 Download .VTT</button>
+            <button class="btn btn-xs btn-ghost btn-danger" onclick="clearAllSubtitles()" title="Clear all subtitles">🗑 Clear</button>
+          </div>
+          <input type="file" id="subtitle-file-uploader" class="visually-hidden-input" accept=".srt,.vtt,text/plain,text/vtt" aria-label="Upload subtitle file">
+          <div id="subtitle-stack" class="asset-stack" aria-label="Subtitle cue list"></div>
         </div>
 
         <!-- ─ Audio Swap ─ -->
@@ -549,6 +585,10 @@
         </div>
         <label class="sub-label" for="gemini-model">Gemini Model</label>
         <select id="gemini-model" class="text-input" aria-label="Gemini model">
+          <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recommended)</option>
+          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
           <option value="gemini-3-flash-preview">Gemini 3 Flash (Preview)</option>
         </select>
       </section>

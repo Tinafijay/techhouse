@@ -1200,4 +1200,120 @@ body.modal-open { overflow: hidden; }
   .modal { max-width: none; border-radius: var(--radius); }
 }
 
+/* ── SUBTITLES OVERLAY & CUE LIST ────────────────────────────── */
+.overlay-subtitles {
+  position: absolute;
+  bottom: 24px;
+  left: 4%;
+  right: 4%;
+  text-align: center;
+  pointer-events: none;
+  z-index: 12;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: opacity 0.15s ease;
+}
+.overlay-subtitles.hidden {
+  opacity: 0;
+  display: none;
+}
+.overlay-subtitles-text {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.82);
+  color: #ffffff;
+  font-family: var(--head);
+  font-weight: 600;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  padding: 5px 12px;
+  border-radius: 6px;
+  max-width: 92%;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 2px #000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.subtitle-tools-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.subtitle-actions-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.btn-xs {
+  font-size: 0.65rem;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.subtitle-cue-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.subtitle-cue-item.active-cue {
+  border-color: var(--amber);
+  background: rgba(245, 158, 11, 0.08);
+}
+.subtitle-cue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.subtitle-cue-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+.subtitle-cue-time input {
+  width: 54px;
+  padding: 2px 4px;
+  font-size: 0.68rem;
+  font-family: var(--mono);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-align: center;
+}
+.subtitle-cue-time input:focus {
+  border-color: var(--amber);
+  outline: none;
+}
+.subtitle-cue-text {
+  width: 100%;
+  font-size: 0.78rem;
+  font-family: var(--body);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 5px 8px;
+  resize: vertical;
+  min-height: 28px;
+  box-sizing: border-box;
+}
+.subtitle-cue-text:focus {
+  border-color: var(--amber);
+  outline: none;
+}
+
+
 
