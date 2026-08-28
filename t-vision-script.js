@@ -891,9 +891,10 @@ async function runVisionOnce() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 action: "oneshot",
-                prompt: "You are T Vision, an AI mobility assistant for a blind user. Analyze this camera frame and respond in 2 short sentences. 1) Immediate hazards first (steps, holes, vehicles, obstacles). 2) Brief description of surroundings and people. " + buildContextString(),
-                image: frame,
-                mimeType: "image/jpeg"
+                userPrompt: "Analyze this camera frame and respond in 2 short sentences. 1) Immediate hazards first (steps, holes, vehicles, obstacles). 2) Brief description of surroundings and people.",
+                imageBase64: frame,
+                mimeType: "image/jpeg",
+                localContext: buildContextString()
             })
         });
         if (!resp.ok) {
@@ -901,7 +902,7 @@ async function runVisionOnce() {
             throw new Error(data.error || `HTTP ${resp.status}`);
         }
         const data = await resp.json().catch(() => ({}));
-        finishOnce(data.text || "I could not interpret the scene.");
+        finishOnce(data.text || data.description || "I could not interpret the scene.");
     } catch (err) {
         finishOnce("System error: " + (err && err.message ? err.message : "request failed"));
     }
