@@ -2,36 +2,270 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
+    <meta name="description" content="T Vision: real-time AI mobility assistant with obstacle detection, facial recognition, live conversational mode, and an Ask & Chat vision helper.">
     <title>T Vision | Mobility AI</title>
     <link rel="stylesheet" href="t-vision-styles.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs",
+            "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@2.17.2/dist/transformers.min.js"
+        }
+    }
+    </script>
 </head>
 <body>
-    <header class="tvision-header">
+    <a href="#ai-text" class="tvision-skip-link">Skip to main content</a>
+
+    <header class="tvision-header" role="banner">
         <h1>👁️ T VISION</h1>
-        <p>Independence through Intelligence</p>
+        <p class="tvision-tagline">Independence through Intelligence</p>
+        <div id="mode-indicator" class="tvision-mode-badge" data-mode="navigation" aria-live="polite">
+            <span class="tvision-mode-dot" aria-hidden="true"></span>
+            <span class="tvision-mode-label">Navigation Mode (Muted)</span>
+        </div>
     </header>
 
-    <main class="tvision-main">
-        <div class="tvision-viewfinder">
-            <video id="webcam" autoplay playsinline></video>
-            <canvas id="hidden-canvas" hidden></canvas>
-            <div id="scanner" class="tvision-scanner" hidden></div>
-        </div>
+    <nav class="tvision-tabs" role="tablist" aria-label="T Vision sections">
+        <button class="tvision-tab is-active" role="tab" aria-selected="true" aria-controls="tab-home" id="tab-btn-home" data-tab="home" type="button">
+            <span class="tvision-tab-icon" aria-hidden="true">🏠</span>
+            <span class="tvision-tab-label">Home</span>
+        </button>
+        <button class="tvision-tab" role="tab" aria-selected="false" aria-controls="tab-ask" id="tab-btn-ask" data-tab="ask" type="button">
+            <span class="tvision-tab-icon" aria-hidden="true">💬</span>
+            <span class="tvision-tab-label">Ask &amp; Chat</span>
+        </button>
+        <button class="tvision-tab" role="tab" aria-selected="false" aria-controls="tab-settings" id="tab-btn-settings" data-tab="settings" type="button">
+            <span class="tvision-tab-icon" aria-hidden="true">⚙️</span>
+            <span class="tvision-tab-label">Settings</span>
+        </button>
+    </nav>
 
-        <div class="tvision-controls">
-            <div id="ai-text" class="tvision-output">
-                Ready to assist. Tap the button below to scan your surroundings.
+    <main class="tvision-main" role="main">
+
+        <!-- Home (was Navigation) tab -->
+        <section class="tvision-panel is-active" id="tab-home" role="tabpanel" aria-labelledby="tab-btn-home">
+            <div class="tvision-viewfinder" aria-label="Camera viewfinder">
+                <video id="webcam" autoplay playsinline muted aria-hidden="true"></video>
+                <canvas id="depth-canvas" class="tvision-depth-canvas" aria-hidden="true"></canvas>
+                <div id="zone-overlay" class="tvision-zone-overlay" aria-hidden="true">
+                    <div class="tvision-zone" data-zone="left"><span>LEFT</span></div>
+                    <div class="tvision-zone" data-zone="center"><span>CENTER</span></div>
+                    <div class="tvision-zone" data-zone="right"><span>RIGHT</span></div>
+                </div>
+                <div id="scanner" class="tvision-scanner" hidden></div>
+                <div id="obstacle-banner" class="tvision-obstacle-banner" hidden role="alert" aria-live="assertive"></div>
             </div>
 
-            <button id="scan-btn" class="tvision-scan-btn" type="button">
-                SCAN ENVIRONMENT 🗣️
-            </button>
+            <div class="tvision-output-section" aria-label="AI assistant output">
+                <div id="ai-text" class="tvision-output" tabindex="-1" aria-live="polite" aria-atomic="true">
+                    Initializing T Vision. Hold on while local models load. Press Spacebar at any time to toggle microphone.
+                </div>
 
-            <p id="status-msg" class="tvision-status" role="status" aria-live="polite"></p>
-        </div>
+                <div class="tvision-button-row">
+                    <button id="scan-btn" class="tvision-scan-btn" type="button" aria-label="Scan environment once (one-shot vision)">
+                        <span class="tvision-btn-icon" aria-hidden="true">🗣️</span>
+                        <span class="tvision-btn-label">SCAN ONCE</span>
+                    </button>
+                    <button id="live-btn" class="tvision-live-btn" type="button" aria-label="Start live session with Gemini">
+                        <span class="tvision-btn-icon" aria-hidden="true">🎙️</span>
+                        <span class="tvision-btn-label">GO LIVE</span>
+                    </button>
+                </div>
+
+                <button id="mute-btn" class="tvision-mute-btn" type="button" aria-pressed="true" aria-label="Toggle microphone (Spacebar)">
+                    <span class="tvision-mute-icon" aria-hidden="true">🔇</span>
+                    <span class="tvision-mute-label">Unmute Mic (Space)</span>
+                </button>
+
+                <p id="status-msg" class="tvision-status" role="status" aria-live="polite"></p>
+            </div>
+        </section>
+
+        <!-- Ask & Chat tab -->
+        <section class="tvision-panel" id="tab-ask" role="tabpanel" aria-labelledby="tab-btn-ask" hidden>
+            <div class="tvision-card">
+                <h2 class="tvision-card-title">Ask &amp; Chat about a Photo</h2>
+                <p class="tvision-card-sub">Use the live camera or upload an image. Gemini will describe it. Then ask quick follow-up questions.</p>
+
+                <div class="tvision-source-group" role="group" aria-label="Choose photo source for Ask">
+                    <label class="tvision-source-option is-active">
+                        <input type="radio" name="ask-source" value="live" checked>
+                        <span class="tvision-source-icon" aria-hidden="true">📷</span>
+                        <span class="tvision-source-label">Use live camera</span>
+                    </label>
+                    <label class="tvision-source-option">
+                        <input type="radio" name="ask-source" value="file">
+                        <span class="tvision-source-icon" aria-hidden="true">📁</span>
+                        <span class="tvision-source-label">Upload a photo</span>
+                    </label>
+                </div>
+
+                <div class="tvision-source-panel" data-asksource="live">
+                    <p class="tvision-hint">When you press <strong>Describe</strong>, T Vision uses the live camera as the source.</p>
+                </div>
+
+                <div class="tvision-source-panel" data-asksource="file" hidden>
+                    <label for="ask-file" class="tvision-label">Choose an image</label>
+                    <input type="file" id="ask-file" accept="image/*">
+                    <div class="tvision-preview-wrap">
+                        <img id="ask-file-preview" alt="Selected photo preview" hidden>
+                    </div>
+                </div>
+
+                <div class="tvision-ask-preview">
+                    <h3 class="tvision-sub-title">Current Image</h3>
+                    <img id="ask-current" alt="Photo ready for Gemini" hidden>
+                </div>
+
+                <label for="ask-question" class="tvision-label">Quick question (optional)</label>
+                <div class="tvision-ask-row">
+                    <input type="text" id="ask-question" placeholder="e.g. What does the sign say?" maxlength="300" autocomplete="off">
+                    <button id="ask-btn" type="button" class="tvision-primary-btn">Describe</button>
+                </div>
+
+                <div id="ask-status" class="tvision-status" role="status" aria-live="polite"></div>
+                <div id="ask-result" class="tvision-ask-result" tabindex="-1" aria-live="polite"></div>
+
+                <h3 class="tvision-sub-title">Follow-up</h3>
+                <div class="tvision-ask-row">
+                    <input type="text" id="ask-followup" placeholder="Ask a follow-up about this image..." maxlength="300" autocomplete="off">
+                    <button id="ask-followup-btn" type="button" class="tvision-secondary-btn">Ask</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings tab (now also houses Enroll Face) -->
+        <section class="tvision-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
+            <div class="tvision-card">
+                <h2 class="tvision-card-title">Settings</h2>
+                <p class="tvision-card-sub">All T Vision preferences in one place. Saved on this device.</p>
+
+                <fieldset class="tvision-fieldset">
+                    <legend>Enroll a New Face</legend>
+
+                    <label for="enroll-name" class="tvision-label">Person's name</label>
+                    <div class="tvision-source-group" role="group" aria-label="Choose photo source for enrollment">
+                        <label class="tvision-source-option is-active">
+                            <input type="radio" name="enroll-source" value="live" checked>
+                            <span class="tvision-source-icon" aria-hidden="true">📷</span>
+                            <span class="tvision-source-label">Live camera</span>
+                        </label>
+                        <label class="tvision-source-option">
+                            <input type="radio" name="enroll-source" value="file">
+                            <span class="tvision-source-icon" aria-hidden="true">📁</span>
+                            <span class="tvision-source-label">Upload a photo</span>
+                        </label>
+                    </div>
+
+                    <div class="tvision-source-panel" data-source="file" hidden>
+                        <label for="enroll-file" class="tvision-label">Choose an image of the person</label>
+                        <input type="file" id="enroll-file" accept="image/*">
+                        <div class="tvision-preview-wrap">
+                            <img id="enroll-file-preview" alt="Selected photo preview" hidden>
+                        </div>
+                    </div>
+
+                    <input type="text" id="enroll-name" placeholder="Person's name (e.g. Mom)" autocomplete="off" maxlength="40" aria-describedby="enroll-status">
+
+                    <div class="tvision-button-row">
+                        <button id="enroll-btn" type="button" class="tvision-primary-btn">Save Face</button>
+                        <button id="enroll-clear-btn" type="button" class="tvision-secondary-btn">Clear</button>
+                    </div>
+
+                    <p id="enroll-status" class="tvision-enroll-status" role="status" aria-live="polite"></p>
+
+                    <h3 class="tvision-sub-title">Saved Faces</h3>
+                    <ul id="enrolled-list" class="tvision-enrolled-list" aria-label="Enrolled faces"></ul>
+                </fieldset>
+
+                <fieldset class="tvision-fieldset">
+                    <legend>Voice &amp; Audio</legend>
+
+                    <label class="tvision-toggle">
+                        <input type="checkbox" id="setting-voice" checked>
+                        <span>Speak results out loud</span>
+                    </label>
+
+                    <label class="tvision-toggle">
+                        <input type="checkbox" id="setting-tones" checked>
+                        <span>Play warning tones for obstacles</span>
+                    </label>
+
+                    <label class="tvision-toggle">
+                        <input type="checkbox" id="setting-vibrate" checked>
+                        <span>Vibrate for hazards (mobile)</span>
+                    </label>
+
+                    <div class="tvision-setting-row">
+                        <label for="setting-rate">Speech rate</label>
+                        <input type="range" id="setting-rate" min="0.7" max="1.6" step="0.05" value="1.1">
+                        <span class="tvision-setting-value" id="setting-rate-value">1.10x</span>
+                    </div>
+
+                    <div class="tvision-setting-row">
+                        <label for="setting-pitch">Speech pitch</label>
+                        <input type="range" id="setting-pitch" min="0.6" max="1.4" step="0.05" value="1.0">
+                        <span class="tvision-setting-value" id="setting-pitch-value">1.00x</span>
+                    </div>
+                </fieldset>
+
+                <fieldset class="tvision-fieldset">
+                    <legend>Vision Sensitivity</legend>
+
+                    <div class="tvision-setting-row">
+                        <label for="setting-depth">Depth threshold</label>
+                        <input type="range" id="setting-depth" min="0.3" max="0.85" step="0.01" value="0.55">
+                        <span class="tvision-setting-value" id="setting-depth-value">0.55</span>
+                    </div>
+
+                    <div class="tvision-setting-row">
+                        <label for="setting-match">Face match confidence</label>
+                        <input type="range" id="setting-match" min="0.5" max="0.95" step="0.01" value="0.82">
+                        <span class="tvision-setting-value" id="setting-match-value">0.82</span>
+                    </div>
+
+                    <div class="tvision-setting-row">
+                        <label for="setting-frame">Frame interval (ms)</label>
+                        <input type="range" id="setting-frame" min="500" max="3000" step="100" value="1000">
+                        <span class="tvision-setting-value" id="setting-frame-value">1000ms</span>
+                    </div>
+                </fieldset>
+
+                <fieldset class="tvision-fieldset">
+                    <legend>Ask &amp; Chat</legend>
+
+                    <label class="tvision-toggle">
+                        <input type="checkbox" id="setting-ask-speak" checked>
+                        <span>Read Gemini answers aloud</span>
+                    </label>
+
+                    <label class="tvision-toggle">
+                        <input type="checkbox" id="setting-ask-remember" checked>
+                        <span>Include the last image in follow-ups</span>
+                    </label>
+                </fieldset>
+
+                <fieldset class="tvision-fieldset">
+                    <legend>Data</legend>
+
+                    <div class="tvision-button-row">
+                        <button id="setting-export" type="button" class="tvision-secondary-btn">Export faces (JSON)</button>
+                        <button id="setting-import" type="button" class="tvision-secondary-btn">Import faces</button>
+                        <input type="file" id="setting-import-file" accept="application/json" hidden>
+                        <button id="setting-clear-faces" type="button" class="tvision-danger-btn">Clear all enrolled faces</button>
+                    </div>
+                    <p class="tvision-hint">Faces and settings live only in this browser. Clearing them is permanent.</p>
+                </fieldset>
+
+                <p id="settings-status" class="tvision-status" role="status" aria-live="polite"></p>
+            </div>
+        </section>
+
     </main>
 
-    <script src="t-vision-script.js"></script>
+    <script type="module" src="t-vision-script.js"></script>
 </body>
 </html>
