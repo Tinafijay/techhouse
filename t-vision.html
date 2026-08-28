@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T Vision | Mobility AI</title>
+    <link rel="stylesheet" href="t-vision-styles.css">
+</head>
+<body>
+    <header class="tvision-header">
+        <h1>👁️ T VISION</h1>
+        <p>Independence through Intelligence</p>
+    </header>
+
+    <main class="tvision-main">
+        <div class="tvision-viewfinder">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="hidden-canvas" hidden></canvas>
+            <div id="scanner" class="tvision-scanner" hidden></div>
+        </div>
+
+        <div class="tvision-controls">
+            <div id="ai-text" class="tvision-output">
+                Ready to assist. Tap the button below to scan your surroundings.
+            </div>
+
+            <button id="scan-btn" class="tvision-scan-btn" type="button">
+                SCAN ENVIRONMENT 🗣️
+            </button>
+
+            <p id="status-msg" class="tvision-status" role="status" aria-live="polite"></p>
+        </div>
+    </main>
+
+    <script src="t-vision-script.js"></script>
+</body>
+</html>

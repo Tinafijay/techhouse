@@ -1,4 +1,5 @@
 const { jsPDF } = window.jspdf;
+const API_ENDPOINT = "https://techhouse-2mte.vercel.app/api/gemini";
 let deferredPrompt, lastCoords = { lat: 0, lng: 0 };
 
 // 1. SYSTEM INIT & ONBOARDING
@@ -6,11 +7,10 @@ window.onload = () => {
     const theme = localStorage.getItem('th_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
     document.getElementById('theme-select').value = theme;
-    document.getElementById('api-key').value = localStorage.getItem('th_key') || "";
     document.getElementById('toggle-vibe').checked = localStorage.getItem('th_vibe') !== 'false';
-    
-    initCam(); 
-    loadHistory(); 
+
+    initCam();
+    loadHistory();
     startGPS();
     checkOnboarding();
 };
@@ -21,7 +21,7 @@ const tourSteps = [
     { title: "Welcome!", text: "Welcome to the Tech House Poisoning Detector. Let's take a quick tour." },
     { title: "📷 Scan Food", text: "Point your camera at any food item and click SCAN FOOD to analyze it for health and safety risks." },
     { title: "📜 History Log", text: "All your scans are saved offline securely. You can review them anytime or export them as PDFs." },
-    { title: "⚙️ Setup Required", text: "Crucial Step: Go to SETTINGS and paste your Gemini API Key. The app needs this to think!" }
+    { title: "🤖 AI Ready", text: "No setup needed. The detector connects to the secure Tech House AI endpoint automatically." }
 ];
 
 function checkOnboarding() {
@@ -67,47 +67,41 @@ async function installApp() {
 
 // 3. BRAINS (API)
 async function processScan() {
-    const key = document.getElementById('api-key').value.trim();
-    if (!key) return alert("Please configure your system key in settings!");
-
     const video = document.getElementById('cam-feed');
     if (!video.srcObject) return alert("Camera is offline. Check permissions.");
 
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth; 
+    canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
-    
-    const fullImageData = canvas.toDataURL('image/jpeg', 0.5); 
-    const base64 = fullImageData.split(',')[1];
+
+    const fullImageData = canvas.toDataURL('image/jpeg', 0.5);
 
     if(document.getElementById('toggle-vibe').checked && navigator.vibrate) navigator.vibrate(50);
     document.getElementById('status-text').innerText = "SYSTEM ANALYZING...";
-    document.getElementById('analysis-out').innerText = "Connecting to Gemini 3 Flash Preview...";
+    document.getElementById('analysis-out').innerText = "Connecting to Tech House AI...";
 
     try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
+        const res = await fetch(API_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                contents: [{ 
-                    parts: [
-                        { text: "Quickly identify any food poisoning or safety risks in this image. Keep it brief. British English." }, 
-                        { inline_data: { mime_type: "image/jpeg", data: base64 } }
-                    ] 
-                }] 
+            body: JSON.stringify({
+                prompt: "Quickly identify any food poisoning or safety risks in this image. Keep it brief. British English.",
+                image: fullImageData,
+                mimeType: "image/jpeg"
             })
         });
 
         const data = await res.json();
-        if (data.error) throw new Error(data.error.message);
+        if (data && data.error) throw new Error(data.error.message || "API error");
+        if (!res.ok) throw new Error("HTTP " + res.status);
 
-        const result = data.candidates[0].content.parts[0].text;
-        
-        document.getElementById('analysis-out').innerText = result;
+        const result = (data && (data.text || data.response)) || (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.map((p) => p.text || "").join(" ")) || "No analysis returned.";
+
+        document.getElementById('analysis-out').innerText = result.trim();
         document.getElementById('status-text').innerText = "SCAN VERIFIED";
-        
-        saveReport(result, fullImageData);
+
+        saveReport(result.trim(), fullImageData);
 
     } catch (e) {
         document.getElementById('status-text').innerText = "SYSTEM OFFLINE";
@@ -125,7 +119,6 @@ function saveAllSettings() {
     const theme = document.getElementById('theme-select').value;
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('th_theme', theme);
-    localStorage.setItem('th_key', document.getElementById('api-key').value);
     localStorage.setItem('th_vibe', document.getElementById('toggle-vibe').checked);
     alert("System Settings Updated, Boss.");
 }

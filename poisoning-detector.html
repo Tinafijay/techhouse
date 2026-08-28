@@ -45,12 +45,11 @@
                     <button class="main-btn" style="background:#0051a8" onclick="installApp()">INSTALL PWA</button>
                 </div>
                 <button class="main-btn" style="background:#475569; margin-bottom:15px;" onclick="testConnection()">TEST SYSTEM LINK</button>
-                
-                <label>Gemini Access Key</label>
-                <input type="password" id="api-key" class="input-field" placeholder="Paste API Key Here">
-                
+
+                <p style="font-size:0.85rem; opacity:0.7; margin:10px 0;">Analysis runs through the Tech House secure endpoint. No API key required.</p>
+
                 <div class="toggle-row"><span>Haptic Engine (Vibrations)</span><input type="checkbox" id="toggle-vibe"></div>
-                
+
                 <label>Visual Interface</label>
                 <select id="theme-select" class="input-field">
                     <option value="dark">Classic Dark</option>
@@ -83,12 +82,5 @@
     </div>
 
     <script src="poisoning-detector-script.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js')
-                .then(() => console.log("Tech House SW Online"))
-                .catch(err => console.log("SW Registration failed", err));
-        }
-    </script>
 </body>
 </html>
