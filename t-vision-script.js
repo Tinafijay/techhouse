@@ -400,29 +400,86 @@ function landmarksToDescriptor(landmarks) {
     return vec;
 }
 
+function isLowMemoryDevice() {
+    const ua = (navigator.userAgent || "").toLowerCase();
+    const isiPhoneOld = /\(iphone; cpu iphone os (?:9_|10_|11_|12_|13_|14_|15_)/.test(ua) || /iphone.*os\s*[789]\b/.test(ua);
+    const lowDeviceData = (navigator.deviceMemory && navigator.deviceMemory <= 2);
+    return isiPhoneOld || !!lowDeviceData;
+}
+
 async function initFaceLandmarker() {
+    const fileset = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+    const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
+    const modelUrl = fileset;
+
+    setStatus("Face model: checking cache...");
+    let cached = "unknown";
     try {
+        if (navigator.storage && navigator.storage.estimate) {
+            cached = "checking";
+        }
+        if (caches && caches.keys) {
+            const keys = await caches.keys();
+            cached = keys.length > 0 ? `${keys.length} cache(s) ready` : "no cache yet";
+        }
+    } catch (_) {}
+    setStatus(`Face model: downloading (~5 MB)... [${cached}]`);
+
+    const startedAt = performance.now();
+    const progressTimer = setInterval(() => {
+        if (state.faceLandmarker) { clearInterval(progressTimer); return; }
+        const secs = Math.round((performance.now() - startedAt) / 1000);
+        setStatus(`Face model: still loading (${secs}s). Tap Save Face to retry when ready.`);
+    }, 4000);
+
+    const tryCreate = async (delegate) => {
         const vision = await import("@mediapipe/tasks-vision");
-        const fileset = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-        const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
-        state.faceLandmarker = await vision.FaceLandmarker.createFromOptions(
+        return vision.FaceLandmarker.createFromOptions(
             vision.FilesetResolver.forVisionTasks(wasmBase),
             {
-                baseOptions: { modelAssetPath: fileset, delegate: "GPU" },
+                baseOptions: { modelAssetPath: modelUrl, delegate },
                 runningMode: "VIDEO",
                 numFaces: 3,
                 outputFaceBlendshapes: true,
                 outputFacialTransformationMatrixes: false
             }
         );
-        setStatus("Face recognition ready");
-    } catch (e) {
-        console.warn("FaceLandmarker init failed", e);
-        setStatus("Face recognition unavailable");
+    };
+
+    const delegates = ["GPU", "CPU"];
+    let lastErr = null;
+    for (const delegate of delegates) {
+        try {
+            setStatus(`Face model: initializing (${delegate})...`);
+            state.faceLandmarker = await tryCreate(delegate);
+            clearInterval(progressTimer);
+            setStatus(`Face recognition ready (${delegate})`);
+            return;
+        } catch (e) {
+            lastErr = e;
+            console.warn(`FaceLandmarker (${delegate}) failed`, e);
+            setStatus(`Face model: ${delegate} failed, trying fallback...`);
+        }
     }
+    clearInterval(progressTimer);
+    console.warn("FaceLandmarker init failed", lastErr);
+    setStatus("Face recognition unavailable. Tap Save Face to retry.");
 }
 
 async function initDepthEstimator() {
+    if (isLowMemoryDevice()) {
+        console.warn("Skipping depth-anything on low-memory device");
+        setStatus("Depth disabled (low-memory device). Face + Live still available.");
+        return;
+    }
+    setStatus("Depth model: downloading (~50 MB)...");
+    const startedAt = performance.now();
+    const progressTimer = setInterval(() => {
+        if (state.depthEstimator) { clearInterval(progressTimer); return; }
+        const secs = Math.round((performance.now() - startedAt) / 1000);
+        setStatus(`Depth model: downloading... ${secs}s elapsed`);
+    }, 5000);
+
     try {
         const transformers = await import("@huggingface/transformers");
         const { pipeline, env } = transformers;
@@ -436,14 +493,16 @@ async function initDepthEstimator() {
             try {
                 state.depthEstimator = await pipeline("depth-estimation", "Xenova/depth-anything-small-hf", { device });
                 state.depthDevice = device;
+                clearInterval(progressTimer);
                 setStatus(`Depth ready (${device})`);
                 return;
             } catch (e) { lastErr = e; }
         }
         throw lastErr || new Error("No depth backend");
     } catch (e) {
+        clearInterval(progressTimer);
         console.warn("Depth estimator init failed", e);
-        setStatus("Depth unavailable");
+        setStatus("Depth unavailable. Face + Live still work.");
     }
 }
 
@@ -785,7 +844,9 @@ function handleLiveMessage(msg) {
 
 function playPcmChunk(b64) {
     if (!audioPlaybackCtx) return;
-    if (audioPlaybackCtx.state === "suspended") audioPlaybackCtx.resume();
+    if (audioPlaybackCtx.state === "suspended") {
+        audioPlaybackCtx.resume().catch(() => {});
+    }
     const bytes = b64ToUint8(b64);
     const buf = pcm16ToAudioBuffer(bytes, audioPlaybackCtx, AUDIO_SAMPLE_RATE);
     if (!buf) return;
@@ -1322,7 +1383,8 @@ function bindSettingsEvents() {
 
 function bindEvents() {
     scanBtn.addEventListener("click", runVisionOnce);
-    liveBtn.addEventListener("click", () => {
+    liveBtn.addEventListener("click", async () => {
+        try { await unlockAudioPlayback(); } catch (_) {}
         if (state.isLive) disconnectLive();
         else connectLive();
     });
@@ -1337,6 +1399,15 @@ function bindEvents() {
         }
         if (e.key === "Escape" && state.isLive) disconnectLive();
     });
+}
+
+async function unlockAudioPlayback() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!audioPlaybackCtx) audioPlaybackCtx = new Ctx();
+    if (audioPlaybackCtx.state === "suspended") {
+        try { await audioPlaybackCtx.resume(); } catch (_) {}
+    }
 }
 
 async function init() {
