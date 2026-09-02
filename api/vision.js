@@ -1,11 +1,16 @@
 const ONESHOT_MODEL = "gemini-2.5-flash";
-const LIVE_MODEL_DEFAULT = "gemini-3.1-flash-live-preview";
+
+const LIVE_MODEL_DEFAULT = "gemini-2.5-flash-native-audio-preview-12-2025";
 const LIVE_FALLBACK_MODELS = [
-    "gemini-2.5-flash-native-audio-preview-12-2025",
-    "gemini-2.0-flash-live-preview-04-09"
+    "gemini-2.0-flash-live-preview-04-09",
+    "gemini-live-2.5-flash-preview"
 ];
-const LIVE_WS_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
+
+const LIVE_WS_ENDPOINT =
+    "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
+
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const TOKEN_TTL_MINUTES = 30;
 
 function setCors(res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -131,22 +136,18 @@ async function runOneshot(apiKey, body) {
     return { text, description: text, model: ONESHOT_MODEL };
 }
 
-async function issueEphemeralToken(apiKey, model, systemInstruction) {
+async function issueEphemeralToken(apiKey, model) {
     const tokenUrl = `https://generativelanguage.googleapis.com/v1beta/auth_tokens?key=${apiKey}`;
+    const now = Date.now();
     const resp = await fetch(tokenUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             uses: 1,
-            expireTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-            newSessionExpireTime: new Date(Date.now() + 60 * 1000).toISOString(),
+            expireTime: new Date(now + TOKEN_TTL_MINUTES * 60 * 1000).toISOString(),
+            newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
             bidiGenerateContentSetup: {
-                model: `models/${model}`,
-                generationConfig: {
-                    responseModalities: ["AUDIO"]
-                },
-                systemInstruction: { parts: [{ text: systemInstruction || "You are T-Vision, a helpful real-time visual assistant." }] },
-                realtimeInputConfig: { turnCoverage: "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO" }
+                model: `models/${model}`
             }
         })
     });
@@ -200,12 +201,11 @@ module.exports = async function handler(req, res) {
     }
 
     const requestedModel = (body && body.model) || LIVE_MODEL_DEFAULT;
-    const systemInstruction = (body && body.systemInstruction) || "";
     const candidates = [requestedModel, ...LIVE_FALLBACK_MODELS.filter((m) => m !== requestedModel)];
     const errors = [];
     for (const model of candidates) {
         try {
-            const token = await issueEphemeralToken(apiKey, model, systemInstruction);
+            const token = await issueEphemeralToken(apiKey, model);
             if (token) {
                 return res.status(200).json({
                     ok: true,
@@ -213,7 +213,6 @@ module.exports = async function handler(req, res) {
                     model,
                     wsEndpoint: LIVE_WS_ENDPOINT,
                     config: {
-                        systemInstruction,
                         generationConfig: {
                             responseModalities: ["AUDIO"]
                         },

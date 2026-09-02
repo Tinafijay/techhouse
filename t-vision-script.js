@@ -824,20 +824,37 @@ async function connectLive() {
     }
     const url = `${tokenInfo.wsEndpoint}?access_token=${encodeURIComponent(tokenInfo.token)}`;
     state.intentionalClose = false;
-    try { ws = new WebSocket(url); }
+    let socket;
+    try { socket = new WebSocket(url); }
     catch (e) {
         setStatus("Live socket error: " + e.message);
         liveBtn.disabled = false;
         return;
     }
+    ws = socket;
 
-    ws.onopen = () => {
+    socket.onopen = () => {
         state.isLive = true;
         state.reconnectAttempts = 0;
         liveBtn.classList.add("is-active");
         liveBtn.querySelector(".tvision-btn-label").textContent = "END LIVE";
         setStatus(`Live · ${tokenInfo.model}`);
         speak("Live assistant ready.");
+
+        const setupMsg = {
+            setup: {
+                model: `models/${tokenInfo.model}`,
+                generationConfig: (tokenInfo.config && tokenInfo.config.generationConfig) || { responseModalities: ["AUDIO"] },
+                realtimeInputConfig: (tokenInfo.config && tokenInfo.config.realtimeInputConfig) || { turnCoverage: "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO" }
+            }
+        };
+        try { socket.send(JSON.stringify(setupMsg)); }
+        catch (e) {
+            console.warn("Failed to send setup frame", e);
+            try { socket.close(1011, "setup-send-failed"); } catch (_) {}
+            return;
+        }
+
         if (state.frameTimer) clearInterval(state.frameTimer);
         state.frameTimer = setInterval(sendVideoFrame, FRAME_INTERVAL_MS);
         if (!state.isMuted) {
@@ -846,9 +863,13 @@ async function connectLive() {
         requestWakeLock();
         liveBtn.disabled = false;
     };
-    ws.onmessage = (ev) => handleLiveMessage(ev);
-    ws.onerror = () => { console.warn("Live socket error event"); setStatus("Live socket error"); };
-    ws.onclose = (ev) => {
+    socket.onmessage = (ev) => handleLiveMessage(ev);
+    socket.onerror = (ev) => {
+        console.warn("Live socket error event", ev && (ev.message || ev.type));
+        setStatus("Live socket error");
+    };
+    socket.onclose = (ev) => {
+        if (ws === socket) ws = null;
         const wasLive = state.isLive;
         state.isLive = false;
         liveBtn.classList.remove("is-active");
