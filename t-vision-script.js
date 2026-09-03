@@ -21,6 +21,7 @@ let DEPTH_NEAR_THRESHOLD = DEFAULT_SETTINGS.depthThreshold;
 let FRAME_INTERVAL_MS = DEFAULT_SETTINGS.frameInterval;
 
 const AUDIO_SAMPLE_RATE = 16000;
+const AUDIO_PLAYBACK_RATE = 24000;
 const NEAR_FT_ESTIMATE = 3;
 const WS_RECONNECT_BACKOFF_MS = [1000, 2500, 5000, 10000];
 const RECONNECT_KEY = "tvision_ws_reconnect_arm";
@@ -115,6 +116,7 @@ const state = {
     lastFrameJpeg: null,
     localLoopTimer: null,
     wakeLock: null,
+    liveWatchdogTimer: null,
     reconnectAttempts: 0,
     intentionalClose: false,
     activeTab: "home",
@@ -129,6 +131,9 @@ const state = {
 let ws = null;
 let audioPlaybackCtx = null;
 let nextPlaybackTime = 0;
+let liveFrameCount = 0;
+let liveAudioChunkCount = 0;
+let liveLastFrameAt = 0;
 
 function setText(message) { textBox.textContent = message; }
 function setStatus(message) { statusMsg.textContent = message; }
@@ -824,13 +829,31 @@ function updateLiveStreaming() {
 function handleLiveMessage(msg) {
     let data;
     try { data = JSON.parse(msg.data); } catch (e) { return; }
+    liveFrameCount++;
+    liveLastFrameAt = Date.now();
+    const keys = Object.keys(data || {});
+    if (keys.length || liveFrameCount <= 3 || liveFrameCount % 20 === 0) {
+        console.log("[T-Vision] live frame #" + liveFrameCount + " keys=" + JSON.stringify(keys), data);
+    }
+    if (data.setupComplete) {
+        console.log("[T-Vision] setupComplete", data.setupComplete);
+        setStatus("Live ready · receiving");
+    }
+    if (data.goAway) {
+        console.warn("[T-Vision] goAway", data.goAway);
+    }
     try {
         if (data.serverContent && data.serverContent.modelTurn) {
             const parts = (data.serverContent.modelTurn.parts) || [];
             for (const part of parts) {
                 if (part.inlineData && part.inlineData.data) {
                     const mime = part.inlineData.mimeType || "audio/pcm";
-                    if (mime.startsWith("audio")) playPcmChunk(part.inlineData.data);
+                    if (mime.startsWith("audio")) {
+                        liveAudioChunkCount++;
+                        playPcmChunk(part.inlineData.data, mime);
+                    } else {
+                        console.log("[T-Vision] non-audio inline data mime=" + mime + " bytes=" + (part.inlineData.data || "").length);
+                    }
                 } else if (part.text) {
                     if (part.text.trim()) setText(part.text);
                 }
@@ -842,14 +865,20 @@ function handleLiveMessage(msg) {
     } catch (e) { console.warn("Live message handling error", e); }
 }
 
-function playPcmChunk(b64) {
-    if (!audioPlaybackCtx) return;
+function playPcmChunk(b64, mime) {
+    if (!audioPlaybackCtx) {
+        console.warn("[T-Vision] playPcmChunk: no audioPlaybackCtx");
+        return;
+    }
     if (audioPlaybackCtx.state === "suspended") {
         audioPlaybackCtx.resume().catch(() => {});
     }
     const bytes = b64ToUint8(b64);
-    const buf = pcm16ToAudioBuffer(bytes, audioPlaybackCtx, AUDIO_SAMPLE_RATE);
-    if (!buf) return;
+    const buf = pcm16ToAudioBuffer(bytes, audioPlaybackCtx, AUDIO_PLAYBACK_RATE);
+    if (!buf) {
+        console.warn("[T-Vision] playPcmChunk: empty buffer (b64 len=" + (b64 || "").length + ")");
+        return;
+    }
     const src = audioPlaybackCtx.createBufferSource();
     src.buffer = buf;
     src.connect(audioPlaybackCtx.destination);
@@ -897,6 +926,9 @@ async function connectLive() {
     socket.onopen = () => {
         state.isLive = true;
         state.reconnectAttempts = 0;
+        liveFrameCount = 0;
+        liveAudioChunkCount = 0;
+        liveLastFrameAt = Date.now();
         liveBtn.classList.add("is-active");
         liveBtn.querySelector(".tvision-btn-label").textContent = "END LIVE";
         setStatus(`Live · ${tokenInfo.model}`);
@@ -904,11 +936,11 @@ async function connectLive() {
 
         const setupMsg = {
             setup: {
-                model: `models/${tokenInfo.model}`,
                 generationConfig: (tokenInfo.config && tokenInfo.config.generationConfig) || { responseModalities: ["AUDIO"] },
                 realtimeInputConfig: (tokenInfo.config && tokenInfo.config.realtimeInputConfig) || { turnCoverage: "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO" }
             }
         };
+        console.log("[T-Vision] sending setup frame", setupMsg);
         try { socket.send(JSON.stringify(setupMsg)); }
         catch (e) {
             console.warn("Failed to send setup frame", e);
@@ -923,6 +955,16 @@ async function connectLive() {
         }
         requestWakeLock();
         liveBtn.disabled = false;
+
+        if (state.liveWatchdogTimer) clearInterval(state.liveWatchdogTimer);
+        state.liveWatchdogTimer = setInterval(() => {
+            if (!state.isLive) return;
+            const silenceMs = Date.now() - liveLastFrameAt;
+            if (silenceMs > 10000) {
+                console.warn("[T-Vision] no live frames for " + silenceMs + "ms (frames=" + liveFrameCount + ", audio=" + liveAudioChunkCount + ")");
+                setStatus("Live · no response (frames=" + liveFrameCount + ", audio=" + liveAudioChunkCount + ")");
+            }
+        }, 5000);
     };
     socket.onmessage = (ev) => handleLiveMessage(ev);
     socket.onerror = (ev) => {
@@ -933,6 +975,7 @@ async function connectLive() {
         if (ws === socket) ws = null;
         const wasLive = state.isLive;
         state.isLive = false;
+        if (state.liveWatchdogTimer) { clearInterval(state.liveWatchdogTimer); state.liveWatchdogTimer = null; }
         liveBtn.classList.remove("is-active");
         liveBtn.querySelector(".tvision-btn-label").textContent = "GO LIVE";
         if (state.frameTimer) { clearInterval(state.frameTimer); state.frameTimer = null; }

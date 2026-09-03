@@ -159,7 +159,15 @@ async function issueEphemeralToken(apiKey, model) {
         err.details = data;
         throw err;
     }
-    return data && data.name ? data.name : null;
+    const token = (data && (data.token || data.name)) || null;
+    if (!token) {
+        const err = new Error("Token endpoint returned no token field");
+        err.status = 502;
+        err.details = data;
+        throw err;
+    }
+    console.log("[vision] issued ephemeral token for model=" + model + " len=" + token.length);
+    return token;
 }
 
 module.exports = async function handler(req, res) {
