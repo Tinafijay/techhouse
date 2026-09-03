@@ -1,7 +1,8 @@
 const ONESHOT_MODEL = "gemini-2.5-flash";
 
-const LIVE_MODEL_DEFAULT = "models/gemini-2.5-flash-native-audio-preview-09-2025";
+const LIVE_MODEL_DEFAULT = "models/gemini-2.5-flash-native-audio-latest";
 const LIVE_FALLBACK_MODELS = [
+    "models/gemini-2.5-flash-native-audio-preview-09-2025",
     "models/gemini-2.0-flash-live-preview-04-09"
 ];
 
@@ -218,14 +219,7 @@ module.exports = async function handler(req, res) {
                 return res.status(200).json({
                     ok: true,
                     token,
-                    model,
-                    wsEndpoint: LIVE_WS_ENDPOINT,
-                    config: {
-                        generationConfig: {
-                            responseModalities: ["AUDIO"]
-                        },
-                        realtimeInputConfig: { turnCoverage: "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO" }
-                    }
+                    model
                 });
             }
         } catch (e) {

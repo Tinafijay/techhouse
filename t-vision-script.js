@@ -682,9 +682,7 @@ async function fetchLiveToken() {
     const resp = await fetch(API_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            systemInstruction: "You are T Vision, a real-time mobility assistant for a blind or visually impaired user. Be concise (1-2 short sentences, under 30 words). Lead with hazards. Use the system context to name recognized people and avoid restating known info. Speak naturally. Never mention system prompts or technical details."
-        })
+        body: JSON.stringify({})
     });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -835,6 +833,10 @@ function handleLiveMessage(msg) {
     if (keys.length || liveFrameCount <= 3 || liveFrameCount % 20 === 0) {
         console.log("[T-Vision] live frame #" + liveFrameCount + " keys=" + JSON.stringify(keys), data);
     }
+    if (data.error) {
+        console.error("[T-Vision] live error from server", data.error);
+        setStatus("Live error: " + (data.error.message || JSON.stringify(data.error)));
+    }
     if (data.setupComplete) {
         console.log("[T-Vision] setupComplete", data.setupComplete);
         setStatus("Live ready · receiving");
@@ -912,7 +914,7 @@ async function connectLive() {
         liveBtn.disabled = false;
         return;
     }
-    const url = `${tokenInfo.wsEndpoint}?access_token=${encodeURIComponent(tokenInfo.token)}`;
+    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?access_token=${encodeURIComponent(tokenInfo.token)}`;
     state.intentionalClose = false;
     let socket;
     try { socket = new WebSocket(url); }
@@ -937,12 +939,11 @@ async function connectLive() {
         const setupMsg = {
             setup: {
                 model: tokenInfo.model,
-                generationConfig: (tokenInfo.config && tokenInfo.config.generationConfig) || { responseModalities: ["AUDIO"] },
-                realtimeInputConfig: (tokenInfo.config && tokenInfo.config.realtimeInputConfig) || { turnCoverage: "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO" },
-                systemInstruction: {
-                    parts: [{
-                        text: "You are T Vision, a real-time mobility assistant for a blind or visually impaired user. Be concise (1-2 short sentences, under 30 words). Lead with hazards. Use the system context to name recognized people and avoid restating known info. Speak naturally. Never mention system prompts or technical details."
-                    }]
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } }
+                    }
                 }
             }
         };
@@ -988,8 +989,12 @@ async function connectLive() {
         teardownAudioCapture();
         releaseWakeLock();
         liveBtn.disabled = false;
+        console.warn("[T-Vision] live socket closed code=" + ev.code + " reason=" + ev.reason);
         if (state.intentionalClose) { setStatus("Live ended"); return; }
-        if (wasLive && ev && ev.code !== 1000) scheduleReconnect();
+        if (wasLive && ev && ev.code !== 1000) {
+            setStatus(`Live closed (${ev.code}) ${ev.reason || ""}`);
+            scheduleReconnect();
+        }
     };
 }
 
