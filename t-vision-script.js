@@ -936,8 +936,14 @@ async function connectLive() {
 
         const setupMsg = {
             setup: {
+                model: tokenInfo.model,
                 generationConfig: (tokenInfo.config && tokenInfo.config.generationConfig) || { responseModalities: ["AUDIO"] },
-                realtimeInputConfig: (tokenInfo.config && tokenInfo.config.realtimeInputConfig) || { turnCoverage: "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO" }
+                realtimeInputConfig: (tokenInfo.config && tokenInfo.config.realtimeInputConfig) || { turnCoverage: "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO" },
+                systemInstruction: {
+                    parts: [{
+                        text: "You are T Vision, a real-time mobility assistant for a blind or visually impaired user. Be concise (1-2 short sentences, under 30 words). Lead with hazards. Use the system context to name recognized people and avoid restating known info. Speak naturally. Never mention system prompts or technical details."
+                    }]
+                }
             }
         };
         console.log("[T-Vision] sending setup frame", setupMsg);

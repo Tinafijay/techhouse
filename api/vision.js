@@ -1,13 +1,12 @@
 const ONESHOT_MODEL = "gemini-2.5-flash";
 
-const LIVE_MODEL_DEFAULT = "gemini-2.5-flash-native-audio-preview-12-2025";
+const LIVE_MODEL_DEFAULT = "models/gemini-2.5-flash-native-audio-preview-09-2025";
 const LIVE_FALLBACK_MODELS = [
-    "gemini-2.0-flash-live-preview-04-09",
-    "gemini-live-2.5-flash-preview"
+    "models/gemini-2.0-flash-live-preview-04-09"
 ];
 
 const LIVE_WS_ENDPOINT =
-    "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
+    "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const TOKEN_TTL_MINUTES = 30;
@@ -147,7 +146,7 @@ async function issueEphemeralToken(apiKey, model) {
             expireTime: new Date(now + TOKEN_TTL_MINUTES * 60 * 1000).toISOString(),
             newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
             bidiGenerateContentSetup: {
-                model: `models/${model}`
+                model: typeof model === "string" && model.startsWith("models/") ? model : `models/${model}`
             }
         })
     });
@@ -209,7 +208,8 @@ module.exports = async function handler(req, res) {
     }
 
     const requestedModel = (body && body.model) || LIVE_MODEL_DEFAULT;
-    const candidates = [requestedModel, ...LIVE_FALLBACK_MODELS.filter((m) => m !== requestedModel)];
+    const normalizeModel = (m) => (typeof m === "string" && m.startsWith("models/") ? m : `models/${m}`);
+    const candidates = [requestedModel, ...LIVE_FALLBACK_MODELS.filter((m) => m !== requestedModel)].map(normalizeModel);
     const errors = [];
     for (const model of candidates) {
         try {
